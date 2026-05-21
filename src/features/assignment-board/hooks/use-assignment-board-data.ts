@@ -210,6 +210,61 @@ export function useAssignmentBoardData() {
     });
   };
 
+  type RestoreKey = "assignments" | "statuses" | "employees" | "stations" | "shifts" | "workAreas";
+
+  const employeeWriteChainsRef = useRef<Map<string, Promise<void>>>(new Map());
+  const pendingWriteCountRef = useRef<number>(0);
+  const pendingRestoresRef = useRef<Map<RestoreKey, string>>(new Map());
+
+  const runRestore = (key: RestoreKey, context: string): Promise<void> => {
+    switch (key) {
+      case "assignments": return restoreAssignmentsFromDb(context);
+      case "statuses": return restoreStatusesFromDb(context);
+      case "employees": return restoreEmployeesFromDb(context);
+      case "stations": return restoreStationsFromDb(context);
+      case "shifts": return restoreShiftsFromDb(context);
+      case "workAreas": return restoreWorkAreasFromDb(context);
+    }
+  };
+
+  const drainPendingRestores = () => {
+    if (pendingWriteCountRef.current !== 0) return;
+    if (pendingRestoresRef.current.size === 0) return;
+    const entries = Array.from(pendingRestoresRef.current.entries());
+    pendingRestoresRef.current.clear();
+    for (const [key, context] of entries) {
+      void runRestore(key, context);
+    }
+  };
+
+  const gatedRestore = (key: RestoreKey, context: string) => {
+    if (pendingWriteCountRef.current === 0) {
+      void runRestore(key, context);
+      return;
+    }
+    pendingRestoresRef.current.set(key, context);
+  };
+
+  const enqueueEmployeeWrite = (employeeId: string, task: () => Promise<void>): Promise<void> => {
+    const previous = employeeWriteChainsRef.current.get(employeeId) ?? Promise.resolve();
+    pendingWriteCountRef.current += 1;
+    const next: Promise<void> = previous
+      .catch(() => {})
+      .then(() => task())
+      .catch(() => {})
+      .finally(() => {
+        pendingWriteCountRef.current -= 1;
+        if (employeeWriteChainsRef.current.get(employeeId) === next) {
+          employeeWriteChainsRef.current.delete(employeeId);
+        }
+        if (pendingWriteCountRef.current === 0) {
+          drainPendingRestores();
+        }
+      });
+    employeeWriteChainsRef.current.set(employeeId, next);
+    return next;
+  };
+
   const unavailableCodes = getUnavailableStatusCodes(statusConfigs);
   const disabledIds = new Set(
     Object.entries(statuses)
@@ -338,12 +393,16 @@ export function useAssignmentBoardData() {
       return { ...e, qualifiedDepartmentIds: nextQualificationIds };
     }));
 
-    void replaceEmployeeQualifiedWorkAreas({
-      employeeId,
-      workAreaIds: nextQualificationIds,
-    }).catch((error) => {
-      reportSaveError("Failed to replace employee qualifications", error);
-      void restoreEmployeesFromDb("handleSetQualifiedWorkAreas");
+    void enqueueEmployeeWrite(employeeId, async () => {
+      try {
+        await replaceEmployeeQualifiedWorkAreas({
+          employeeId,
+          workAreaIds: nextQualificationIds,
+        });
+      } catch (error) {
+        reportSaveError("Failed to replace employee qualifications", error);
+        gatedRestore("employees", "handleSetQualifiedWorkAreas");
+      }
     });
   };
   const handleStatusChange = (id: string, status: EmployeeStatus) => {
@@ -354,17 +413,23 @@ export function useAssignmentBoardData() {
       setAssignments((prev) => prev.filter((a) => a.employee_id !== id));
     }
 
-    void persistStatusForEmployee(id, status, "handleStatusChange").catch((error) => {
-      reportSaveError("Failed to persist employee daily status", error);
-      void restoreStatusesFromDb("handleStatusChange");
+    void enqueueEmployeeWrite(id, async () => {
+      try {
+        await persistStatusForEmployee(id, status, "handleStatusChange");
+      } catch (error) {
+        reportSaveError("Failed to persist employee daily status", error);
+        gatedRestore("statuses", "handleStatusChange");
+      }
     });
 
     if (isUnavailable) {
-      void deleteAssignmentsForEmployee({
-        employeeId: id,
-      }).catch((error) => {
-        reportSaveError("Failed to clear assignments for unavailable employee", error);
-        void restoreAssignmentsFromDb("handleStatusChange");
+      void enqueueEmployeeWrite(id, async () => {
+        try {
+          await deleteAssignmentsForEmployee({ employeeId: id });
+        } catch (error) {
+          reportSaveError("Failed to clear assignments for unavailable employee", error);
+          gatedRestore("assignments", "handleStatusChange");
+        }
       });
     }
   };
@@ -389,16 +454,20 @@ export function useAssignmentBoardData() {
       newAssignment,
     ]);
 
-    void writeRealStationAssignment({
-      id: newAssignment.id,
-      employeeId,
-      stationId,
-      workAreaId,
-      shiftCode,
-      modeCode,
-    }).catch((error) => {
-      reportSaveError("Failed to persist real station assignment", error);
-      void restoreAssignmentsFromDb("handleAssign");
+    void enqueueEmployeeWrite(employeeId, async () => {
+      try {
+        await writeRealStationAssignment({
+          id: newAssignment.id,
+          employeeId,
+          stationId,
+          workAreaId,
+          shiftCode,
+          modeCode,
+        });
+      } catch (error) {
+        reportSaveError("Failed to persist real station assignment", error);
+        gatedRestore("assignments", "handleAssign");
+      }
     });
   };
 
@@ -407,14 +476,18 @@ export function useAssignmentBoardData() {
       (a) => !(a.employee_id === employeeId && a.station_id === stationId && a.shift_code === shiftCode && a.mode_code === modeCode),
     ));
 
-    void deleteRealStationAssignment({
-      employeeId,
-      stationId,
-      shiftCode,
-      modeCode,
-    }).catch((error) => {
-      reportSaveError("Failed to delete real station assignment", error);
-      void restoreAssignmentsFromDb("handleUnassign");
+    void enqueueEmployeeWrite(employeeId, async () => {
+      try {
+        await deleteRealStationAssignment({
+          employeeId,
+          stationId,
+          shiftCode,
+          modeCode,
+        });
+      } catch (error) {
+        reportSaveError("Failed to delete real station assignment", error);
+        gatedRestore("assignments", "handleUnassign");
+      }
     });
   };
 
@@ -422,17 +495,23 @@ export function useAssignmentBoardData() {
     setAssignments((prev) => prev.filter((a) => a.employee_id !== employeeId));
     if (resetStatus) setStatuses((prev) => ({ ...prev, [employeeId]: STATUS_CODE_AVAILABLE }));
 
-    void deleteAssignmentsForEmployee({
-      employeeId,
-    }).catch((error) => {
-      reportSaveError("Failed to delete all assignments for employee", error);
-      void restoreAssignmentsFromDb("handleUnassignAll");
+    void enqueueEmployeeWrite(employeeId, async () => {
+      try {
+        await deleteAssignmentsForEmployee({ employeeId });
+      } catch (error) {
+        reportSaveError("Failed to delete all assignments for employee", error);
+        gatedRestore("assignments", "handleUnassignAll");
+      }
     });
 
     if (resetStatus) {
-      void persistStatusForEmployee(employeeId, STATUS_CODE_AVAILABLE, "handleUnassignAll").catch((error) => {
-        reportSaveError("Failed to persist available status", error);
-        void restoreStatusesFromDb("handleUnassignAll");
+      void enqueueEmployeeWrite(employeeId, async () => {
+        try {
+          await persistStatusForEmployee(employeeId, STATUS_CODE_AVAILABLE, "handleUnassignAll");
+        } catch (error) {
+          reportSaveError("Failed to persist available status", error);
+          gatedRestore("statuses", "handleUnassignAll");
+        }
       });
     }
   };
@@ -477,15 +556,19 @@ export function useAssignmentBoardData() {
 
     setAssignments((prev) => [...prev, newAssignment]);
 
-    void writeDeptOnlyAssignment({
-      id: newAssignment.id,
-      employeeId,
-      workAreaId,
-      shiftCode: resolvedShift,
-      modeCode: resolvedMode,
-    }).catch((error) => {
-      reportSaveError("Failed to persist dept-only assignment", error);
-      void restoreAssignmentsFromDb("handleAssignToDepartment");
+    void enqueueEmployeeWrite(employeeId, async () => {
+      try {
+        await writeDeptOnlyAssignment({
+          id: newAssignment.id,
+          employeeId,
+          workAreaId,
+          shiftCode: resolvedShift,
+          modeCode: resolvedMode,
+        });
+      } catch (error) {
+        reportSaveError("Failed to persist dept-only assignment", error);
+        gatedRestore("assignments", "handleAssignToDepartment");
+      }
     });
   };
 
@@ -494,12 +577,13 @@ export function useAssignmentBoardData() {
       prev.filter((a) => !(a.employee_id === employeeId && a.station_id === null && a.work_area_id === workAreaId)),
     );
 
-    void deleteDeptOnlyAssignment({
-      employeeId,
-      workAreaId,
-    }).catch((error) => {
-      reportSaveError("Failed to delete dept-only assignment", error);
-      void restoreAssignmentsFromDb("handleUnassignFromDepartment");
+    void enqueueEmployeeWrite(employeeId, async () => {
+      try {
+        await deleteDeptOnlyAssignment({ employeeId, workAreaId });
+      } catch (error) {
+        reportSaveError("Failed to delete dept-only assignment", error);
+        gatedRestore("assignments", "handleUnassignFromDepartment");
+      }
     });
   };
 

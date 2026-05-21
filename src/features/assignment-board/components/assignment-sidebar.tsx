@@ -140,34 +140,33 @@ export function AssignmentSidebar({
                         return (
                           <div
                             key={emp.id}
-                            className="group flex items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50"
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.effectAllowed = "move";
+                              e.dataTransfer.setData("application/json", JSON.stringify({
+                                employeeId: emp.id,
+                                fromStationId: null,
+                                fromShiftCode: null,
+                                fromModeCode: null,
+                              }));
+                              const ghost = document.createElement("div");
+                              ghost.textContent = emp.full_name;
+                              Object.assign(ghost.style, {
+                                position: "fixed", top: "-200px", left: "0",
+                                padding: "4px 10px", borderRadius: "6px",
+                                background: wa.color_hex ?? "#64748b", color: "#fff",
+                                fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",
+                                boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+                              });
+                              document.body.appendChild(ghost);
+                              e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+                              setTimeout(() => document.body.removeChild(ghost), 0);
+                            }}
+                            onDoubleClick={() => onOpenRoster(emp.full_name)}
+                            title="Drag to assign station · Double-click to look up"
+                            className="group flex cursor-grab items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50 active:cursor-grabbing"
                           >
-                              <p
-                                draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.effectAllowed = "move";
-                                  e.dataTransfer.setData("application/json", JSON.stringify({
-                                    employeeId: emp.id,
-                                    fromStationId: null,
-                                    fromShiftCode: null,
-                                    fromModeCode: null,
-                                  }));
-                                  const ghost = document.createElement("div");
-                                  ghost.textContent = emp.full_name;
-                                  Object.assign(ghost.style, {
-                                    position: "fixed", top: "-200px", left: "0",
-                                    padding: "4px 10px", borderRadius: "6px",
-                                    background: wa.color_hex ?? "#64748b", color: "#fff",
-                                    fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",
-                                    boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
-                                  });
-                                  document.body.appendChild(ghost);
-                                  e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
-                                  setTimeout(() => document.body.removeChild(ghost), 0);
-                                }}
-                                className="min-w-0 cursor-grab truncate text-sm font-medium text-slate-800 active:cursor-grabbing"
-                                title="Drag to assign station · Double-click to look up"
-                                onDoubleClick={() => onOpenRoster(emp.full_name)}>
+                              <p className="min-w-0 truncate text-sm font-medium text-slate-800">
                                 {emp.full_name}
                               </p>
                             {emp.temporary && (
@@ -201,22 +200,23 @@ export function AssignmentSidebar({
                     </div>
                     {unassignedEmps.map((emp) => {
                       return (
-                        <div key={emp.id} className="group flex items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50">
-                          <p
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.effectAllowed = "move";
-                              e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
-                              const ghost = document.createElement("div");
-                              ghost.textContent = emp.full_name;
-                              Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: "#94a3b8", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
-                              document.body.appendChild(ghost);
-                              e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
-                              setTimeout(() => document.body.removeChild(ghost), 0);
-                            }}
-                            className="min-w-0 cursor-grab truncate text-sm font-medium text-slate-800 active:cursor-grabbing"
-                            onDoubleClick={() => onOpenRoster(emp.full_name)}
-                          >{emp.full_name}</p>
+                        <div
+                          key={emp.id}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
+                            const ghost = document.createElement("div");
+                            ghost.textContent = emp.full_name;
+                            Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: "#94a3b8", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
+                            document.body.appendChild(ghost);
+                            e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+                            setTimeout(() => document.body.removeChild(ghost), 0);
+                          }}
+                          onDoubleClick={() => onOpenRoster(emp.full_name)}
+                          className="group flex cursor-grab items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50 active:cursor-grabbing"
+                        >
+                          <p className="min-w-0 truncate text-sm font-medium text-slate-800">{emp.full_name}</p>
                           {emp.temporary && (
                             <span className="shrink-0 rounded bg-violet-50 px-1 py-px text-[9px] text-violet-500 border border-violet-100">TEMP</span>
                           )}
@@ -281,22 +281,23 @@ export function AssignmentSidebar({
                       {assignedEmps.map((emp) => {
                         const empStations = [...new Set(assignments.filter((a) => a.employee_id === emp.id).map((a) => stations.find((s) => s.id === a.station_id)?.name).filter(Boolean))];
                         return (
-                          <div key={emp.id} className="flex items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50">
-                            <p
-                              draggable
-                              onDragStart={(e) => {
-                                e.dataTransfer.effectAllowed = "move";
-                                e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
-                                const ghost = document.createElement("div");
-                                ghost.textContent = emp.full_name;
-                                Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: wa.color_hex ?? "#64748b", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
-                                document.body.appendChild(ghost);
-                                e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
-                                setTimeout(() => document.body.removeChild(ghost), 0);
-                              }}
-                              className="min-w-0 cursor-grab truncate text-sm font-medium text-slate-600 active:cursor-grabbing"
-                              onDoubleClick={() => onOpenRoster(emp.full_name)}
-                            >{emp.full_name}</p>
+                          <div
+                            key={emp.id}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.effectAllowed = "move";
+                              e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
+                              const ghost = document.createElement("div");
+                              ghost.textContent = emp.full_name;
+                              Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: wa.color_hex ?? "#64748b", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
+                              document.body.appendChild(ghost);
+                              e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+                              setTimeout(() => document.body.removeChild(ghost), 0);
+                            }}
+                            onDoubleClick={() => onOpenRoster(emp.full_name)}
+                            className="flex cursor-grab items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50 active:cursor-grabbing"
+                          >
+                            <p className="min-w-0 truncate text-sm font-medium text-slate-600">{emp.full_name}</p>
                             {emp.temporary && (
                               <span className="shrink-0 rounded bg-violet-50 px-1 py-px text-[9px] text-violet-500 border border-violet-100">TEMP</span>
                             )}
@@ -316,21 +317,23 @@ export function AssignmentSidebar({
                     </div>
                     {noDept.map((emp) => {
                       return (
-                        <div key={emp.id} className="group flex items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50">
-                          <p
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.effectAllowed = "move";
-                              e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
-                              const ghost = document.createElement("div");
-                              ghost.textContent = emp.full_name;
-                              Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: "#64748b", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
-                              document.body.appendChild(ghost);
-                              e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
-                              setTimeout(() => document.body.removeChild(ghost), 0);
-                            }}
-                            className="flex-1 cursor-grab truncate text-sm font-medium text-slate-800 active:cursor-grabbing"
-                            onDoubleClick={() => onOpenRoster(emp.full_name)}>
+                        <div
+                          key={emp.id}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
+                            const ghost = document.createElement("div");
+                            ghost.textContent = emp.full_name;
+                            Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: "#64748b", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
+                            document.body.appendChild(ghost);
+                            e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+                            setTimeout(() => document.body.removeChild(ghost), 0);
+                          }}
+                          onDoubleClick={() => onOpenRoster(emp.full_name)}
+                          className="group flex cursor-grab items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50 active:cursor-grabbing"
+                        >
+                          <p className="flex-1 truncate text-sm font-medium text-slate-800">
                             {emp.full_name}
                           </p>
                           <div className="ml-auto flex shrink-0 items-center gap-2">
