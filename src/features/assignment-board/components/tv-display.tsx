@@ -342,14 +342,14 @@ export function TVDisplay({
                 )}
                 {(loanedInByWaId[wa.id]?.length > 0 || loanedOutByWaId[wa.id]?.length > 0) && (
                   <div className="flex h-5 items-center justify-center gap-3">
-                    {loanedOutByWaId[wa.id]?.length > 0 && (
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
-                        ↑ {loanedOutByWaId[wa.id].length} LOANED OUT
-                      </span>
-                    )}
                     {loanedInByWaId[wa.id]?.length > 0 && (
                       <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400/80">
                         ↓ {loanedInByWaId[wa.id].length} SUPPORT IN
+                      </span>
+                    )}
+                    {loanedOutByWaId[wa.id]?.length > 0 && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                        ↑ {loanedOutByWaId[wa.id].length} LOANED OUT
                       </span>
                     )}
                   </div>

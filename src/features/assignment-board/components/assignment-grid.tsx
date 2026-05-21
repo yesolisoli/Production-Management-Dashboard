@@ -549,6 +549,10 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
               return workAreaStations.map((station) => {
                 const showGroupHeader = station.group !== undefined && station.group !== prevGroup;
                 prevGroup = station.group;
+                const defaultEmployee = station.defaultEmployeeId ? employees.find((e) => e.id === station.defaultEmployeeId) : null;
+                const defaultAssigned = defaultEmployee
+                  ? assignments.some((a) => a.station_id === station.id && a.employee_id === defaultEmployee.id)
+                  : false;
                 return (
                   <React.Fragment key={station.id}>
                     {showGroupHeader && (
@@ -605,7 +609,7 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
                 {/* Station name */}
                 <td className="group/stnname sticky left-0 z-20 border-t border-r border-slate-200 bg-white px-5 py-4 align-top group-hover:bg-slate-50" style={{ borderTopColor: "#e2e8f0", width: "10.5rem", minWidth: "10.5rem", maxWidth: "10.5rem" }}>
                   {station.protected ? (
-                    <div className="flex flex-col gap-0.5">
+                    <div className="flex min-w-0 flex-col gap-0.5">
                       <span
                         className="cursor-pointer text-sm font-semibold text-slate-800 hover:text-slate-600"
                         onDoubleClick={() => setEditingStationId(station.id)}
@@ -614,6 +618,14 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
                       {station.gender_restriction && (
                         <span className={`self-start rounded px-1.5 py-0.5 text-[10px] font-bold ${station.gender_restriction === "M" ? "bg-sky-100 text-sky-600" : "bg-rose-100 text-rose-500"}`}>
                           {station.gender_restriction === "M" ? "M only" : "F only"}
+                        </span>
+                      )}
+                      {defaultEmployee && (
+                        <span
+                          className="max-w-full truncate text-[10px] text-slate-400"
+                          title={defaultAssigned ? `Default: ${defaultEmployee.full_name}` : `Default: ${defaultEmployee.full_name} (not currently assigned)`}
+                        >
+                          {!defaultAssigned && <span className="text-red-500">⚠ </span>}{defaultEmployee.full_name}
                         </span>
                       )}
                     </div>
@@ -628,6 +640,14 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
                         {station.gender_restriction && (
                           <span className={`self-start rounded px-1.5 py-0.5 text-[10px] font-bold ${station.gender_restriction === "M" ? "bg-sky-100 text-sky-600" : "bg-rose-100 text-rose-500"}`}>
                             {station.gender_restriction === "M" ? "M only" : "F only"}
+                          </span>
+                        )}
+                        {defaultEmployee && (
+                          <span
+                            className="max-w-full truncate text-[10px] text-slate-400"
+                            title={defaultAssigned ? `Default: ${defaultEmployee.full_name}` : `Default: ${defaultEmployee.full_name} (not currently assigned)`}
+                          >
+                            {!defaultAssigned && <span className="text-red-500">⚠ </span>}{defaultEmployee.full_name}
                           </span>
                         )}
                       </div>
