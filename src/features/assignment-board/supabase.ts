@@ -1013,10 +1013,6 @@ export async function fetchAssignmentBoardSnapshot(): Promise<AssignmentBoardSna
       (modeViewsResult.data ?? []) as WorkAreaModeViewRow[],
     );
 
-    if (workAreas.length === 0) {
-      throw new Error("No work areas returned from Supabase");
-    }
-
     return {
       workAreas,
       workAreaShifts: buildWorkAreaShifts(workAreas, (shiftsResult.data ?? []) as WorkAreaShiftRow[]),
