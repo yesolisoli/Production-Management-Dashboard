@@ -11,6 +11,20 @@ import type {
 /** Sentinel shift code used for dept-level assignments when no real shift is configured. */
 export const DEPT_ONLY_SHIFT_CODE: ShiftCode = "_dept";
 
+/**
+ * ISO date (YYYY-MM-DD) for "today" in the local timezone. Used only to stamp
+ * locally-constructed StationAssignment objects so they round-trip with rows
+ * the DB has auto-defaulted via `work_date DEFAULT current_date`. The live
+ * board itself never filters or branches on this value.
+ */
+export function todayDateString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export function hasNullStationAssignment(
   employeeId: string,
   workAreaId: string,

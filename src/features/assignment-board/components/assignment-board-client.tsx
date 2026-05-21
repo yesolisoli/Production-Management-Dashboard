@@ -18,7 +18,6 @@ export function AssignmentBoardClient() {
     handleDeleteStatusConfig,
     handleAddStatusConfig,
     handleReorderStatusConfig,
-    currentWorkDate,
     announcement,
     handleAnnouncementChange,
     employees,
@@ -30,6 +29,8 @@ export function AssignmentBoardClient() {
     selectedWorkAreaId,
     isHydrating,
     loadError,
+    saveError,
+    clearSaveError,
     disabledIds,
     defaultShiftTemplate,
     handleDeleteShift,
@@ -64,7 +65,6 @@ export function AssignmentBoardClient() {
 
   useSnapshotCapture({
     enabled: SUPABASE_ENABLED && !isHydrating,
-    workDate: currentWorkDate,
     snapshot: {
       employees,
       statuses,
@@ -126,6 +126,28 @@ export function AssignmentBoardClient() {
 
   return (
     <>
+      {saveError && (
+        <div
+          role="alert"
+          className="fixed top-3 left-1/2 z-50 flex max-w-md -translate-x-1/2 items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 shadow-md"
+        >
+          <div className="flex flex-col">
+            <span className="font-semibold">Last save didn&apos;t go through</span>
+            <span className="mt-0.5 text-xs text-amber-800">
+              {saveError.context}: {saveError.message}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={clearSaveError}
+            aria-label="Dismiss"
+            className="ml-2 -mr-1 rounded px-1 text-base leading-none text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {showTV && (
         <TVDisplay
           employees={employees}

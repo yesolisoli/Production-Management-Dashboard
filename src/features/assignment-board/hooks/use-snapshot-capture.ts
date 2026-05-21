@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { AssignmentBoardSnapshot } from "../supabase";
 import { saveAssignmentBoardSnapshot, snapshotExistsForDate } from "../supabase";
-import { parseTimeMin } from "../utils";
+import { parseTimeMin, todayDateString } from "../utils";
 import type { WorkAreaShiftMap } from "../types";
 
 const GRACE_MIN = 30;
@@ -26,11 +26,10 @@ function getLatestShiftEndMin(workAreaShifts: WorkAreaShiftMap): number | null {
 
 export function useSnapshotCapture(params: {
   enabled: boolean;
-  workDate: string;
   snapshot: AssignmentBoardSnapshot;
   workAreaShifts: WorkAreaShiftMap;
 }) {
-  const { enabled, workDate, snapshot, workAreaShifts } = params;
+  const { enabled, snapshot, workAreaShifts } = params;
 
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
@@ -46,6 +45,8 @@ export function useSnapshotCapture(params: {
 
     const tick = async () => {
       if (cancelled || inFlightRef.current) return;
+
+      const workDate = todayDateString();
       if (attemptedForDateRef.current === workDate) return;
 
       const latestEnd = getLatestShiftEndMin(shiftsRef.current);
@@ -81,5 +82,5 @@ export function useSnapshotCapture(params: {
       cancelled = true;
       clearInterval(id);
     };
-  }, [enabled, workDate]);
+  }, [enabled]);
 }

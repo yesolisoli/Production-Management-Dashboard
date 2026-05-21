@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 
 import { DEFAULT_STATUS_CONFIGS, STATUS_CODE_ASSIGNED, type StatusConfig } from "./components/status-select";
 import { DEFAULT_MODE_CODE, type Employee, type EmployeeStatus, type ModeCode, type ShiftCode, type ShiftInfo, type Station, type StationAssignment, type WorkArea, type WorkAreaModeView, type WorkAreaShiftMap } from "./types";
-import { DEPT_ONLY_SHIFT_CODE } from "./utils";
+import { DEPT_ONLY_SHIFT_CODE, todayDateString } from "./utils";
 
 type WorkAreaRow = {
   id: string;
@@ -92,11 +92,7 @@ export type AssignmentBoardSnapshot = {
   statusConfigs: StatusConfig[];
 };
 
-type AssignmentWriteBase = {
-  workDate: string;
-};
-
-type RealAssignmentWrite = AssignmentWriteBase & {
+type RealAssignmentWrite = {
   id: string;
   employeeId: string;
   stationId: string;
@@ -105,7 +101,7 @@ type RealAssignmentWrite = AssignmentWriteBase & {
   modeCode: string;
 };
 
-type DeptOnlyAssignmentWrite = AssignmentWriteBase & {
+type DeptOnlyAssignmentWrite = {
   id: string;
   employeeId: string;
   workAreaId: string;
@@ -317,23 +313,21 @@ async function fetchEmployeesAndQualifications(): Promise<Employee[]> {
   );
 }
 
-async function fetchStatusesForDate(workDate: string): Promise<Record<string, EmployeeStatus>> {
+async function fetchLiveStatuses(): Promise<Record<string, EmployeeStatus>> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("employee_daily_statuses")
-    .select("employee_id, status_code")
-    .eq("work_date", workDate);
+    .select("employee_id, status_code");
 
   if (error) throw new Error(error.message);
   return buildStatuses((data ?? []) as EmployeeDailyStatusRow[]);
 }
 
-async function fetchAssignmentsForDate(workDate: string): Promise<StationAssignment[]> {
+async function fetchLiveAssignments(): Promise<StationAssignment[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("station_assignments")
-    .select("id, employee_id, station_id, work_area_id, work_date, shift_code, mode_code")
-    .eq("work_date", workDate);
+    .select("id, employee_id, station_id, work_area_id, work_date, shift_code, mode_code");
 
   if (error) throw new Error(error.message);
   return buildAssignments((data ?? []) as StationAssignmentRow[]);
@@ -364,12 +358,12 @@ async function fetchStationsSnapshot(localOverlayStations: Station[] = []): Prom
   return buildStations((data ?? []) as StationRow[], localOverlayStations);
 }
 
-export async function refetchAssignmentSnapshot(workDate: string): Promise<StationAssignment[]> {
-  return fetchAssignmentsForDate(workDate);
+export async function refetchAssignmentSnapshot(): Promise<StationAssignment[]> {
+  return fetchLiveAssignments();
 }
 
-export async function refetchStatusSnapshot(workDate: string): Promise<Record<string, EmployeeStatus>> {
-  return fetchStatusesForDate(workDate);
+export async function refetchStatusSnapshot(): Promise<Record<string, EmployeeStatus>> {
+  return fetchLiveStatuses();
 }
 
 export async function refetchStatusConfigsSnapshot(): Promise<StatusConfig[]> {
@@ -724,29 +718,37 @@ export async function replaceStationOrder(stations: Station[]): Promise<void> {
 
 export async function writeEmployeeDailyStatus(params: {
   employeeId: string;
-  workDate: string;
   statusCode: string;
 }): Promise<void> {
   const supabase = createClient();
-  const deterministicId = `status_${params.workDate}_${params.employeeId}`;
+  const today = todayDateString();
 
-  const { error } = await supabase
+  // Insert-then-update-on-conflict pattern. Avoids `.upsert(onConflict: …)`
+  // because the matching unique constraint changes during the work_date
+  // removal migration; insert + 23505 fallback works on both old and new
+  // schemas.
+  const { error: insertError } = await supabase
     .from("employee_daily_statuses")
-    .upsert(
-      {
-        id: deterministicId,
-        employee_id: params.employeeId,
-        work_date: params.workDate,
-        status_code: params.statusCode,
-        reason: null,
-      },
-      {
-        onConflict: "employee_id,work_date",
-        ignoreDuplicates: false,
-      },
-    );
+    .insert({
+      id: `status_${params.employeeId}`,
+      employee_id: params.employeeId,
+      work_date: today,
+      status_code: params.statusCode,
+      reason: null,
+    });
 
-  if (error) throw new Error(error.message);
+  if (!insertError) return;
+
+  if ((insertError as { code?: string }).code !== "23505") {
+    throw new Error(insertError.message);
+  }
+
+  const { error: updateError } = await supabase
+    .from("employee_daily_statuses")
+    .update({ status_code: params.statusCode, work_date: today })
+    .eq("employee_id", params.employeeId);
+
+  if (updateError) throw new Error(updateError.message);
 }
 
 export async function insertStatusConfig(params: {
@@ -840,7 +842,6 @@ export async function writeRealStationAssignment(params: RealAssignmentWrite): P
     .delete()
     .eq("employee_id", params.employeeId)
     .eq("work_area_id", params.workAreaId)
-    .eq("work_date", params.workDate)
     .is("station_id", null);
 
   if (deleteError) throw new Error(deleteError.message);
@@ -852,7 +853,7 @@ export async function writeRealStationAssignment(params: RealAssignmentWrite): P
       employee_id: params.employeeId,
       station_id: params.stationId,
       work_area_id: null,
-      work_date: params.workDate,
+      work_date: todayDateString(),
       shift_code: toDbShiftCode(params.shiftCode),
       mode_code: params.modeCode,
     });
@@ -870,7 +871,7 @@ export async function writeDeptOnlyAssignment(params: DeptOnlyAssignmentWrite): 
       employee_id: params.employeeId,
       station_id: null,
       work_area_id: params.workAreaId,
-      work_date: params.workDate,
+      work_date: todayDateString(),
       shift_code: toDbShiftCode(params.shiftCode),
       mode_code: params.modeCode,
     });
@@ -883,7 +884,6 @@ export async function deleteRealStationAssignment(params: {
   stationId: string;
   shiftCode: ShiftCode;
   modeCode: string;
-  workDate: string;
 }): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase
@@ -891,7 +891,6 @@ export async function deleteRealStationAssignment(params: {
     .delete()
     .eq("employee_id", params.employeeId)
     .eq("station_id", params.stationId)
-    .eq("work_date", params.workDate)
     .eq("shift_code", toDbShiftCode(params.shiftCode))
     .eq("mode_code", params.modeCode);
 
@@ -900,14 +899,12 @@ export async function deleteRealStationAssignment(params: {
 
 export async function deleteAssignmentsForEmployee(params: {
   employeeId: string;
-  workDate: string;
 }): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase
     .from("station_assignments")
     .delete()
-    .eq("employee_id", params.employeeId)
-    .eq("work_date", params.workDate);
+    .eq("employee_id", params.employeeId);
 
   if (error) throw new Error(error.message);
 }
@@ -915,7 +912,6 @@ export async function deleteAssignmentsForEmployee(params: {
 export async function deleteDeptOnlyAssignment(params: {
   employeeId: string;
   workAreaId: string;
-  workDate: string;
 }): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase
@@ -923,7 +919,6 @@ export async function deleteDeptOnlyAssignment(params: {
     .delete()
     .eq("employee_id", params.employeeId)
     .eq("work_area_id", params.workAreaId)
-    .eq("work_date", params.workDate)
     .is("station_id", null);
 
   if (error) throw new Error(error.message);
@@ -941,9 +936,7 @@ export async function deleteAssignmentsByIds(ids: string[]): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-export async function fetchAssignmentBoardSnapshot(
-  workDate: string,
-): Promise<AssignmentBoardSnapshot> {
+export async function fetchAssignmentBoardSnapshot(): Promise<AssignmentBoardSnapshot> {
   const supabase = createClient();
 
   try {
@@ -993,12 +986,10 @@ export async function fetchAssignmentBoardSnapshot(
         .order("display_order", { ascending: true }),
       supabase
         .from("employee_daily_statuses")
-        .select("employee_id, status_code")
-        .eq("work_date", workDate),
+        .select("employee_id, status_code"),
       supabase
         .from("station_assignments")
-        .select("id, employee_id, station_id, work_area_id, work_date, shift_code, mode_code")
-        .eq("work_date", workDate),
+        .select("id, employee_id, station_id, work_area_id, work_date, shift_code, mode_code"),
     ]);
 
     const errors = [

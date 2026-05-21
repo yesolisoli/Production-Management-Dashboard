@@ -3,6 +3,3 @@ export const AUTH_ENABLED =
 
 export const SUPABASE_ENABLED =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-// Hardcoded for prototype. To be replaced with a plant-timezone helper later.
-export const INITIAL_WORK_DATE = "2026-04-16";

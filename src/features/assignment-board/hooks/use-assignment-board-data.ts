@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { DEFAULT_MODE_CODE } from "../types";
 import type { Employee, EmployeeStatus, ModeCode, ShiftCode, ShiftInfo, Station, StationAssignment, WorkArea, WorkAreaModeView, WorkAreaShiftMap } from "../types";
 import { getUnavailableStatusCodes, STATUS_CODE_AVAILABLE } from "../components/status-select";
-import { getAssignmentWorkAreaId, getEmployeeActiveDepartmentIds, hasNullStationAssignment, DEPT_ONLY_SHIFT_CODE } from "../utils";
+import { getAssignmentWorkAreaId, getEmployeeActiveDepartmentIds, hasNullStationAssignment, todayDateString, DEPT_ONLY_SHIFT_CODE } from "../utils";
 import {
   deleteEmployee,
   deleteAssignmentsByIds,
@@ -37,7 +37,7 @@ import {
   writeRealStationAssignment,
 } from "../supabase";
 import { useStatusConfigs } from "./use-status-configs";
-import { INITIAL_WORK_DATE, SUPABASE_ENABLED } from "@/lib/config";
+import { SUPABASE_ENABLED } from "@/lib/config";
 
 export function useAssignmentBoardData() {
   const {
@@ -49,12 +49,26 @@ export function useAssignmentBoardData() {
     handleReorderConfig: handleReorderStatusConfig,
   } = useStatusConfigs([]);
 
-  const [currentWorkDate] = useState<string>(INITIAL_WORK_DATE);
   const [announcement, setAnnouncement] = useState("Please clean your work area and report any equipment issues.");
   const [isHydrating, setIsHydrating] = useState<boolean>(SUPABASE_ENABLED);
   const [loadError, setLoadError] = useState<string | null>(
     SUPABASE_ENABLED ? null : "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
   );
+  const [saveError, setSaveError] = useState<{ message: string; context: string } | null>(null);
+
+  const reportSaveError = (context: string, error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[assignment-board] ${context}:`, message);
+    setSaveError({ message, context });
+  };
+
+  const clearSaveError = () => setSaveError(null);
+
+  useEffect(() => {
+    if (!saveError) return;
+    const timeoutId = window.setTimeout(() => setSaveError(null), 6000);
+    return () => window.clearTimeout(timeoutId);
+  }, [saveError]);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [statuses, setStatuses] = useState<Record<string, EmployeeStatus>>({});
@@ -76,7 +90,7 @@ export function useAssignmentBoardData() {
 
     async function loadFromSupabase() {
       try {
-        const snapshot = await fetchAssignmentBoardSnapshot(currentWorkDate);
+        const snapshot = await fetchAssignmentBoardSnapshot();
         if (isCancelled) return;
 
         setEmployees(snapshot.employees);
@@ -108,7 +122,7 @@ export function useAssignmentBoardData() {
     return () => {
       isCancelled = true;
     };
-  }, [currentWorkDate, setStatusConfigs]);
+  }, [setStatusConfigs]);
 
   const setAssignments = (updater: StationAssignment[] | ((prev: StationAssignment[]) => StationAssignment[])) => {
     setAssignmentsState((prev) => typeof updater === "function" ? updater(prev) : updater);
@@ -116,7 +130,7 @@ export function useAssignmentBoardData() {
 
   const restoreAssignmentsFromDb = async (context: string) => {
     try {
-      const dbAssignments = await refetchAssignmentSnapshot(currentWorkDate);
+      const dbAssignments = await refetchAssignmentSnapshot();
       setAssignmentsState(dbAssignments);
     } catch (error) {
       console.error(`[assignment-board] Failed to refetch assignments after ${context}:`, error);
@@ -125,7 +139,7 @@ export function useAssignmentBoardData() {
 
   const restoreStatusesFromDb = async (context: string) => {
     try {
-      const dbStatuses = await refetchStatusSnapshot(currentWorkDate);
+      const dbStatuses = await refetchStatusSnapshot();
       setStatuses(dbStatuses);
     } catch (error) {
       console.error(`[assignment-board] Failed to refetch statuses after ${context}:`, error);
@@ -192,7 +206,6 @@ export function useAssignmentBoardData() {
 
     await writeEmployeeDailyStatus({
       employeeId,
-      workDate: currentWorkDate,
       statusCode,
     });
   };
@@ -242,7 +255,7 @@ export function useAssignmentBoardData() {
         persistedEmployeeIdsRef.current.add(normalizedEmployee.id);
       })
       .catch((error) => {
-        console.error("[assignment-board] Failed to persist new employee:", error);
+        reportSaveError("Failed to persist new employee", error);
         persistedEmployeeIdsRef.current.delete(normalizedEmployee.id);
         setEmployees((prev) => prev.filter((employee) => employee.id !== normalizedEmployee.id));
         setStatuses((prev) => {
@@ -267,7 +280,7 @@ export function useAssignmentBoardData() {
     pendingEmployeeInsertionsRef.current.delete(id);
 
     void deleteEmployee(id).catch((error) => {
-      console.error("[assignment-board] Failed to delete employee:", error);
+      reportSaveError("Failed to delete employee", error);
       void restoreEmployeesFromDb("handleRemoveEmployee");
     });
   };
@@ -309,7 +322,7 @@ export function useAssignmentBoardData() {
         });
       })
       .catch((error) => {
-        console.error("[assignment-board] Failed to update employee:", error);
+        reportSaveError("Failed to update employee", error);
         void restoreEmployeesFromDb("handleUpdate");
       });
   };
@@ -329,7 +342,7 @@ export function useAssignmentBoardData() {
       employeeId,
       workAreaIds: nextQualificationIds,
     }).catch((error) => {
-      console.error("[assignment-board] Failed to replace employee qualifications:", error);
+      reportSaveError("Failed to replace employee qualifications", error);
       void restoreEmployeesFromDb("handleSetQualifiedWorkAreas");
     });
   };
@@ -342,16 +355,15 @@ export function useAssignmentBoardData() {
     }
 
     void persistStatusForEmployee(id, status, "handleStatusChange").catch((error) => {
-      console.error("[assignment-board] Failed to persist employee daily status:", error);
+      reportSaveError("Failed to persist employee daily status", error);
       void restoreStatusesFromDb("handleStatusChange");
     });
 
     if (isUnavailable) {
       void deleteAssignmentsForEmployee({
         employeeId: id,
-        workDate: currentWorkDate,
       }).catch((error) => {
-        console.error("[assignment-board] Failed to clear assignments for unavailable employee:", error);
+        reportSaveError("Failed to clear assignments for unavailable employee", error);
         void restoreAssignmentsFromDb("handleStatusChange");
       });
     }
@@ -367,7 +379,7 @@ export function useAssignmentBoardData() {
       employee_id: employeeId,
       station_id: stationId,
       work_area_id: null,
-      work_date: currentWorkDate,
+      work_date: todayDateString(),
       shift_code: shiftCode,
       mode_code: modeCode,
     };
@@ -384,9 +396,8 @@ export function useAssignmentBoardData() {
       workAreaId,
       shiftCode,
       modeCode,
-      workDate: currentWorkDate,
     }).catch((error) => {
-      console.error("[assignment-board] Failed to persist real station assignment:", error);
+      reportSaveError("Failed to persist real station assignment", error);
       void restoreAssignmentsFromDb("handleAssign");
     });
   };
@@ -401,9 +412,8 @@ export function useAssignmentBoardData() {
       stationId,
       shiftCode,
       modeCode,
-      workDate: currentWorkDate,
     }).catch((error) => {
-      console.error("[assignment-board] Failed to delete real station assignment:", error);
+      reportSaveError("Failed to delete real station assignment", error);
       void restoreAssignmentsFromDb("handleUnassign");
     });
   };
@@ -414,15 +424,14 @@ export function useAssignmentBoardData() {
 
     void deleteAssignmentsForEmployee({
       employeeId,
-      workDate: currentWorkDate,
     }).catch((error) => {
-      console.error("[assignment-board] Failed to delete all assignments for employee:", error);
+      reportSaveError("Failed to delete all assignments for employee", error);
       void restoreAssignmentsFromDb("handleUnassignAll");
     });
 
     if (resetStatus) {
       void persistStatusForEmployee(employeeId, STATUS_CODE_AVAILABLE, "handleUnassignAll").catch((error) => {
-        console.error("[assignment-board] Failed to persist available status:", error);
+        reportSaveError("Failed to persist available status", error);
         void restoreStatusesFromDb("handleUnassignAll");
       });
     }
@@ -440,7 +449,7 @@ export function useAssignmentBoardData() {
     setAssignments((prev) => prev.filter((a) => getAssignmentWorkAreaId(a, stations) !== workAreaId));
 
     void deleteAssignmentsByIds(idsToDelete).catch((error) => {
-      console.error("[assignment-board] Failed to clear work area assignments:", error);
+      reportSaveError("Failed to clear work area assignments", error);
       void restoreAssignmentsFromDb("handleClearWorkArea");
     });
   };
@@ -461,7 +470,7 @@ export function useAssignmentBoardData() {
       employee_id: employeeId,
       station_id: null,
       work_area_id: workAreaId,
-      work_date: currentWorkDate,
+      work_date: todayDateString(),
       shift_code: resolvedShift,
       mode_code: resolvedMode,
     };
@@ -474,9 +483,8 @@ export function useAssignmentBoardData() {
       workAreaId,
       shiftCode: resolvedShift,
       modeCode: resolvedMode,
-      workDate: currentWorkDate,
     }).catch((error) => {
-      console.error("[assignment-board] Failed to persist dept-only assignment:", error);
+      reportSaveError("Failed to persist dept-only assignment", error);
       void restoreAssignmentsFromDb("handleAssignToDepartment");
     });
   };
@@ -489,9 +497,8 @@ export function useAssignmentBoardData() {
     void deleteDeptOnlyAssignment({
       employeeId,
       workAreaId,
-      workDate: currentWorkDate,
     }).catch((error) => {
-      console.error("[assignment-board] Failed to delete dept-only assignment:", error);
+      reportSaveError("Failed to delete dept-only assignment", error);
       void restoreAssignmentsFromDb("handleUnassignFromDepartment");
     });
   };
@@ -531,7 +538,7 @@ export function useAssignmentBoardData() {
         await deleteAssignmentsByIds(assignmentIdsToDelete);
         await deleteWorkAreaShiftRecord({ workAreaId, modeCode, code });
       } catch (error) {
-        console.error("[assignment-board] Failed to delete shift:", error);
+        reportSaveError("Failed to delete shift", error);
         void restoreShiftsFromDb("handleDeleteShift");
         void restoreAssignmentsFromDb("handleDeleteShift");
       }
@@ -558,7 +565,7 @@ export function useAssignmentBoardData() {
       label,
       timeRange,
     }).catch((error) => {
-      console.error("[assignment-board] Failed to update shift:", error);
+      reportSaveError("Failed to update shift", error);
       void restoreShiftsFromDb("handleUpdateShift");
     });
   };
@@ -585,7 +592,7 @@ export function useAssignmentBoardData() {
       timeRange,
       displayOrder,
     }).catch((error) => {
-      console.error("[assignment-board] Failed to add shift:", error);
+      reportSaveError("Failed to add shift", error);
       void restoreShiftsFromDb("handleAddShift");
     });
 
@@ -609,7 +616,7 @@ export function useAssignmentBoardData() {
     setWorkAreaShifts((prev) => { const next = { ...prev }; delete next[workAreaId]; return next; });
 
     void deleteWorkAreaRecord(workAreaId).catch((error: unknown) => {
-      console.error("[assignment-board] Failed to delete work area:", error);
+      reportSaveError("Failed to delete work area", error);
       void restoreWorkAreasFromDb("handleDeleteWorkArea");
       void restoreShiftsFromDb("handleDeleteWorkArea");
       void restoreStationsFromDb("handleDeleteWorkArea");
@@ -724,12 +731,11 @@ export function useAssignmentBoardData() {
               workAreaId: assignmentWorkAreaId,
               shiftCode: assignment.shift_code,
               modeCode: secondModeCode,
-              workDate: assignment.work_date,
             });
           }
         }
       } catch (error) {
-        console.error("[assignment-board] Failed to update work area:", error);
+        reportSaveError("Failed to update work area", error);
         void restoreWorkAreasFromDb("handleUpdateWorkArea");
         void restoreStationsFromDb("handleUpdateWorkArea");
         void restoreAssignmentsFromDb("handleUpdateWorkArea");
@@ -821,7 +827,7 @@ export function useAssignmentBoardData() {
           });
         }
       } catch (error) {
-        console.error("[assignment-board] Failed to add work area:", error);
+        reportSaveError("Failed to add work area", error);
         void restoreWorkAreasFromDb("handleAddWorkArea");
         void restoreShiftsFromDb("handleAddWorkArea");
         void restoreStationsFromDb("handleAddWorkArea");
@@ -858,7 +864,7 @@ export function useAssignmentBoardData() {
     if (!reorderedStations) return;
 
     void replaceStationOrder(reorderedStations).catch((error) => {
-      console.error("[assignment-board] Failed to reorder stations:", error);
+      reportSaveError("Failed to reorder stations", error);
       void restoreStationsFromDb("handleReorderStation");
     });
   };
@@ -868,7 +874,7 @@ export function useAssignmentBoardData() {
     setAssignments((prev) => prev.filter((a) => a.station_id !== stationId));
 
     void deleteStationRecord(stationId).catch((error) => {
-      console.error("[assignment-board] Failed to delete station:", error);
+      reportSaveError("Failed to delete station", error);
       void restoreStationsFromDb("handleDeleteStation");
       void restoreAssignmentsFromDb("handleDeleteStation");
     });
@@ -916,13 +922,13 @@ export function useAssignmentBoardData() {
       genderRestriction: params.genderRestriction ?? null,
       defaultEmployeeId: params.defaultEmployeeId ?? null,
     }).catch((error) => {
-      console.error("[assignment-board] Failed to update station:", error);
+      reportSaveError("Failed to update station", error);
       void restoreStationsFromDb("handleUpdateStation");
     });
 
     if (nextStations && station.group !== newGroup) {
       void replaceStationOrder(nextStations).catch((error) => {
-        console.error("[assignment-board] Failed to persist station order after update:", error);
+        reportSaveError("Failed to persist station order after update", error);
         void restoreStationsFromDb("handleUpdateStation");
       });
     }
@@ -937,7 +943,7 @@ export function useAssignmentBoardData() {
         employee_id: empId,
         station_id: stationId,
         work_area_id: null,
-        work_date: currentWorkDate,
+        work_date: todayDateString(),
         shift_code: shift.code,
         mode_code: modeCode,
       }));
@@ -960,11 +966,10 @@ export function useAssignmentBoardData() {
               workAreaId: station.work_area_id,
               shiftCode: assignment.shift_code,
               modeCode: assignment.mode_code,
-              workDate: assignment.work_date,
             });
           }
         } catch (error) {
-          console.error("[assignment-board] Failed to persist default employee assignments for station:", error);
+          reportSaveError("Failed to persist default employee assignments for station", error);
           void restoreAssignmentsFromDb("handleUpdateStation");
         }
       })();
@@ -1014,7 +1019,7 @@ export function useAssignmentBoardData() {
       defaultEmployeeId: params.defaultEmployeeId,
       group: params.group,
     }).catch((error) => {
-      console.error("[assignment-board] Failed to add station:", error);
+      reportSaveError("Failed to add station", error);
       void restoreStationsFromDb("handleAddStation");
     });
 
@@ -1043,8 +1048,6 @@ export function useAssignmentBoardData() {
     handleDeleteStatusConfig,
     handleAddStatusConfig,
     handleReorderStatusConfig,
-    // Work date
-    currentWorkDate,
     // Announcement
     announcement,
     handleAnnouncementChange,
@@ -1058,6 +1061,8 @@ export function useAssignmentBoardData() {
     selectedWorkAreaId,
     isHydrating,
     loadError,
+    saveError,
+    clearSaveError,
     disabledIds,
     defaultShiftTemplate,
     handleDeleteShift,
