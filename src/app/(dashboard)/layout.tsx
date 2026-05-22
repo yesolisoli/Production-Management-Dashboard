@@ -26,7 +26,7 @@ export default async function DashboardLayout({
   }
   
   return (
-    <div className="h-screen overflow-hidden bg-slate-100">
+    <div className="h-screen overflow-hidden bg-white">
       <div className="flex h-full">
         <AppSidebar />
         <DashboardUserProvider userEmail={userEmail}>

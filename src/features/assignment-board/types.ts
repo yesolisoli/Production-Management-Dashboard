@@ -8,6 +8,8 @@ export type ModeCode =
   | "lunch"
   | "break_2";
 
+export const DEFAULT_MODE_CODE: ModeCode = "normal";
+
 export type EmployeeStatus = string;
 
 export type ShiftInfo = {
@@ -15,6 +17,12 @@ export type ShiftInfo = {
   label: string;
   time_range: string;
 };
+
+/**
+ * Shifts are scoped by (work_area_id, mode_code). Work areas without modes
+ * store their shifts under DEFAULT_MODE_CODE ("normal").
+ */
+export type WorkAreaShiftMap = Record<string, Record<ModeCode, ShiftInfo[]>>;
 
 export type WorkAreaModeView = {
   mode_code: ModeCode;
@@ -30,8 +38,7 @@ export type Employee = {
   homeDepartmentId: string | null;
   /** All work area ids this employee is qualified for (includes homeDepartmentId) */
   qualifiedDepartmentIds: string[];
-  /** Manually designated active departments for today (e.g. loan destinations) */
-  activeDepartmentIds?: string[];
+
   active: boolean;
   gender?: "M" | "F";
   level?: 1 | 2 | 3;
@@ -72,15 +79,10 @@ export type EmployeeDailyStatus = {
 export type StationAssignment = {
   id: string;
   employee_id: string;
-  station_id: string;
-  work_date: string;
-  shift_code: ShiftCode;
-  mode_code: ModeCode;
-  /** Work area id where the employee is currently active */
-  activeDepartmentId: string;
-};
-
-export type AssignmentBoardFilters = {
+  /** null = active in department but not yet assigned to a real station */
+  station_id: string | null;
+  /** populated when station_id is null; identifies the work area for dept-only assignments */
+  work_area_id: string | null;
   work_date: string;
   shift_code: ShiftCode;
   mode_code: ModeCode;

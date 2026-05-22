@@ -1,17 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Employee, ModeCode, ShiftCode, StationAssignment, WorkArea } from "../types";
+import type { Employee, ModeCode, ShiftCode, Station, StationAssignment, WorkArea } from "../types";
+import { getAssignmentWorkAreaId, isEmployeeEligibleForWorkArea, abbrevDept } from "../utils";
+import { cfgBadge, STATUS_CODE_AVAILABLE, type StatusConfig } from "./status-select";
 import { EmployeeCard } from "./employee-card";
-
-const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  available:  { label: "Available",  className: "bg-green-100 text-green-700" },
-  sick:       { label: "Sick",       className: "bg-red-100 text-red-600" },
-  vacation:   { label: "Vacation",   className: "bg-yellow-100 text-yellow-600" },
-  injured:    { label: "Injured",    className: "bg-orange-100 text-orange-600" },
-  training:   { label: "Training",   className: "bg-purple-100 text-purple-600" },
-  off_shift:  { label: "Off Shift",  className: "bg-slate-100 text-slate-500" },
-};
 
 type PendingMove = {
   employeeId: string;
@@ -24,7 +17,7 @@ type PendingMove = {
 };
 
 export function AssignmentCell({
-  stationId, shiftCode, modeCode, color, assignments, allEmployees, statuses, disabledEmployeeIds, onAssign, onRemove, workAreaId, workAreas, genderRestriction,
+  stationId, shiftCode, modeCode, color, assignments, allEmployees, statuses, disabledEmployeeIds, onAssign, onRemove, workAreaId, workAreas, stations, genderRestriction, onEmployeeDoubleClick, statusConfigs,
 }: {
   stationId: string;
   shiftCode: ShiftCode;
@@ -38,7 +31,10 @@ export function AssignmentCell({
   onRemove: (employeeId: string, stationId: string, shiftCode: ShiftCode, modeCode: ModeCode) => void;
   workAreaId?: string;
   workAreas?: WorkArea[];
+  stations: Station[];
   genderRestriction?: "M" | "F";
+  onEmployeeDoubleClick?: (name: string) => void;
+  statusConfigs?: StatusConfig[];
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -75,20 +71,20 @@ export function AssignmentCell({
     .map((a) => ({ asgn: a, emp: allEmployees.find((e) => e.id === a.employee_id) }))
     .filter((x): x is { asgn: StationAssignment; emp: Employee } => !!x.emp && !disabledEmployeeIds?.has(x.emp.id));
 
-  const UNAVAILABLE = new Set(["sick", "vacation", "injured"]);
-  const deptEmployees = workAreaId
-    ? allEmployees.filter((e) => !e.homeDepartmentId || e.qualifiedDepartmentIds.includes(workAreaId))
-    : allEmployees;
-  const allPickable = deptEmployees.filter((e) => !assignedIds.has(e.id));
-  // "All" tab: only employees with a home dept (no unassigned), sorted loan→dept
+  const isEligible = (e: Employee): boolean => {
+    if (!workAreaId) return true;
+    if (isEmployeeEligibleForWorkArea(e, workAreaId)) return true;
+    return assignments.some((a) => a.employee_id === e.id && getAssignmentWorkAreaId(a, stations) === workAreaId);
+  };
+
+  const eligibleEmployees = workAreaId ? allEmployees.filter(isEligible) : allEmployees;
+  const allPickable = eligibleEmployees.filter((e) => !assignedIds.has(e.id) && !disabledEmployeeIds?.has(e.id));
+  // Department tab: all eligible employees for this work area (assigned elsewhere or not)
   const assignedDeptPickable = allPickable
-    .filter((e) => !!e.homeDepartmentId)
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
-  // "Unassigned" tab: no dept assigned, or unavailable
+  // Unassigned tab: eligible employees with zero assignments anywhere
   const unassignedPickable = allPickable
-    .filter((e) =>
-      !e.homeDepartmentId || !assignments.some((a) => a.employee_id === e.id) || UNAVAILABLE.has(statuses?.[e.id] ?? "available")
-    )
+    .filter((e) => !assignments.some((a) => a.employee_id === e.id))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
 
   const baseList = tab === "unassigned" ? unassignedPickable : assignedDeptPickable;
@@ -100,8 +96,6 @@ export function AssignmentCell({
   const isCrossDept = (emp: Employee) =>
     !!workAreaId && !!emp.homeDepartmentId && emp.homeDepartmentId !== workAreaId;
 
-  const abbrevWa = (name: string) =>
-    name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").join("");
 
   const openMoveModal = (
     emp: Employee,
@@ -156,6 +150,7 @@ export function AssignmentCell({
       const { employeeId, fromStationId, fromShiftCode, fromModeCode } = JSON.parse(e.dataTransfer.getData("application/json"));
       if (fromStationId === stationId && fromShiftCode === shiftCode && fromModeCode === modeCode) return;
       if (assignedIds.has(employeeId)) return;
+      if (disabledEmployeeIds?.has(employeeId)) return;
       const emp = allEmployees.find((e) => e.id === employeeId);
       if (!emp) return;
       if (isCrossDept(emp)) {
@@ -169,6 +164,7 @@ export function AssignmentCell({
 
   const confirmMove = () => {
     if (!pendingMove) return;
+    if (disabledEmployeeIds?.has(pendingMove.employeeId)) { setPendingMove(null); return; }
     if (pendingMove.fromStationId) onRemove(pendingMove.employeeId, pendingMove.fromStationId, pendingMove.fromShiftCode as ShiftCode, pendingMove.fromModeCode as ModeCode);
     onAssign(pendingMove.employeeId, stationId, shiftCode, modeCode);
     setPendingMove(null);
@@ -208,7 +204,7 @@ export function AssignmentCell({
 
       <div
         ref={ref}
-        className="relative h-full min-h-12 rounded-md transition-all"
+        className="group/cell relative h-full min-h-12 rounded-md transition-all"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -225,7 +221,8 @@ export function AssignmentCell({
               </div>
             )}
             {assignedWithInfo.map(({ asgn, emp }) => {
-              const isLoaned = asgn.activeDepartmentId !== emp.homeDepartmentId;
+              const activeWaId = getAssignmentWorkAreaId(asgn, stations);
+              const isLoaned = !!activeWaId && activeWaId !== emp.homeDepartmentId;
               const homeWaName = isLoaned ? workAreas?.find((w) => w.id === emp.homeDepartmentId)?.name : undefined;
               const genderViolation = genderRestriction && emp.gender && emp.gender !== genderRestriction;
               return (
@@ -238,6 +235,8 @@ export function AssignmentCell({
                       modeCode={modeCode}
                       onRemove={() => onRemove(emp.id, stationId, shiftCode, modeCode)}
                       loanInfo={{ isLoanedIn: isLoaned, homeWaName }}
+                      onDoubleClick={() => onEmployeeDoubleClick?.(emp.full_name)}
+                      statusCode={statuses?.[emp.id]}
                     />
                   </div>
                   {genderViolation && (
@@ -253,7 +252,7 @@ export function AssignmentCell({
             <button
               ref={btnRef}
               onClick={handleOpen}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-600"
+              className={`flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-slate-300 text-xs text-slate-400 transition-all hover:border-slate-500 hover:text-slate-600 group-hover/cell:opacity-100 ${isOpen ? "opacity-100" : "opacity-0"}`}
             >
               +
             </button>
@@ -278,7 +277,7 @@ export function AssignmentCell({
                     onClick={() => setTab("all")}
                     className={`flex-1 rounded-md py-1 text-xs font-medium transition-colors ${tab === "all" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100"}`}
                   >
-                    {workAreas?.find((w) => w.id === workAreaId)?.name ?? "All"} ({allPickable.length})
+                    {workAreas?.find((w) => w.id === workAreaId)?.name ?? "All"} ({assignedDeptPickable.length})
                   </button>
                   <button
                     onClick={() => setTab("unassigned")}
@@ -295,8 +294,8 @@ export function AssignmentCell({
                     </p>
                   )}
                   {filtered.map((emp) => {
-                    const status = statuses?.[emp.id] ?? "available";
-                    const badge = STATUS_BADGE[status] ?? STATUS_BADGE.available;
+                    const status = statuses?.[emp.id] ?? STATUS_CODE_AVAILABLE;
+                    const statusCfg = statusConfigs?.find((c) => c.code === status) ?? statusConfigs?.find((c) => c.code === STATUS_CODE_AVAILABLE);
                     const empAssignCount = assignments.filter((a) => a.employee_id === emp.id).length;
                     const crossDept = isCrossDept(emp);
                     return (
@@ -313,12 +312,12 @@ export function AssignmentCell({
                         </div>
                         <div className="ml-2 flex shrink-0 items-center gap-1.5">
                           {crossDept && (
-                            <span className="rounded px-1.5 py-0.5 text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200">
-                              {abbrevWa(workAreas?.find((w) => w.id === emp.homeDepartmentId)?.name ?? "")}
+                            <span className="rounded px-1.5 py-0.5 text-xs bg-blue-50 text-blue-600 border border-blue-200">
+                              {abbrevDept(workAreas?.find((w) => w.id === emp.homeDepartmentId)?.name ?? "")}
                             </span>
                           )}
                           {tab === "unassigned" ? (
-                            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${badge.className}`}>{badge.label}</span>
+                            <span className="rounded px-1.5 py-0.5 text-xs font-medium" style={statusCfg ? cfgBadge(statusCfg).sty : undefined}>{statusCfg?.label ?? status}</span>
                           ) : (
                             empAssignCount > 0 && (
                               <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-xs font-medium text-indigo-500">{empAssignCount}</span>

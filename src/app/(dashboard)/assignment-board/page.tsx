@@ -8,8 +8,8 @@ export default function AssignmentBoardPage() {
   return (
     <div className="flex h-full min-h-full flex-col">
       <AppHeader
-        eyebrow="Supervisor / Lead Hand"
-        title="Packaging Department Employee Assignment"
+        eyebrow="Daily Lineup"
+        title="Employee Assignment"
         actions={<AssignmentBoardHeaderActions />}
       />
 

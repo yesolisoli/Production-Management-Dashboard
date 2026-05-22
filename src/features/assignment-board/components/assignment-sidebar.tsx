@@ -1,783 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Settings } from "lucide-react";
+import { getAssignmentWorkAreaId, isEmployeeEligibleForWorkArea, getEmployeeQualifiedWorkAreaIds, hasNullStationAssignment, abbrevDept } from "../utils";
 import type { Employee, Station, StationAssignment, WorkArea } from "../types";
 import { StatCard } from "./stat-card";
-import { StatusSelect, DEFAULT_STATUS_CONFIGS, type StatusConfig, cfgBadge, COLOR_OPTIONS } from "./status-select";
-import { Modal } from "@/components/shared/modal";
-import { MultiFilterSelect } from "./multi-filter-select";
-import { DeptSelect } from "./dept-select";
-import { StationSelect } from "./station-select";
+import { StatusSelect, getUnavailableStatusCodes, STATUS_CODE_AVAILABLE } from "./status-select";
+import type { StatusConfig } from "./status-select";
+import { AssignmentModal } from "./modals/assignment-modal";
 
 type EmployeeStatus = string;
-
-// ─── ActiveDeptSelect (local) ─────────────────────────────────────────────────
-
-function ActiveDeptSelect({ activeDepartmentIds, workAreas, onChange }: {
-  activeDepartmentIds: string[];
-  workAreas: WorkArea[];
-  onChange: (ids: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const toggle = (id: string) => {
-    onChange(activeDepartmentIds.includes(id)
-      ? activeDepartmentIds.filter((x) => x !== id)
-      : [...activeDepartmentIds, id]);
-  };
-
-  const firstWa = workAreas.find((w) => w.id === activeDepartmentIds[0]);
-  const label = activeDepartmentIds.length === 0
-    ? "— None —"
-    : activeDepartmentIds.length === 1
-    ? (firstWa?.name ?? activeDepartmentIds[0])
-    : `${activeDepartmentIds.length} dept`;
-  const textColor = activeDepartmentIds.length > 0 ? (firstWa?.color_hex ?? "#475569") : "#94a3b8";
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1 rounded border border-transparent px-2 py-1 text-xs font-medium hover:border-slate-200 hover:bg-white"
-        style={{ color: textColor }}
-      >
-        <span className="truncate">{label}</span>
-        <svg className="h-3 w-3 shrink-0 opacity-50" viewBox="0 0 12 12" fill="currentColor"><path d="M2 4l4 4 4-4"/></svg>
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-50 mt-0.5 min-w-44 overflow-hidden rounded-lg border bg-white shadow-lg">
-          {workAreas.map((wa) => {
-            const selected = activeDepartmentIds.includes(wa.id);
-            const waColor = wa.color_hex ?? "#475569";
-            return (
-              <button
-                key={wa.id}
-                onClick={() => toggle(wa.id)}
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs hover:bg-slate-50"
-              >
-                <span
-                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors"
-                  style={selected
-                    ? { backgroundColor: waColor, borderColor: waColor }
-                    : { backgroundColor: "#fff", borderColor: "#cbd5e1" }}
-                >
-                  {selected && (
-                    <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M2 5l2.5 2.5L8 3" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </span>
-                <span className="font-medium" style={{ color: selected ? waColor : "#475569" }}>{wa.name}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── ManageStatusesModal (local) ──────────────────────────────────────────────
-
-function ManageStatusesModal({
-  configs,
-  onUpdate,
-  onDelete,
-  onAdd,
-  onReorder,
-  onClose,
-}: {
-  configs: StatusConfig[];
-  onUpdate: (code: string, updates: Partial<StatusConfig>) => void;
-  onDelete: (code: string) => void;
-  onAdd: (label: string, colorHex: string) => void;
-  onReorder: (newConfigs: StatusConfig[]) => void;
-  onClose: () => void;
-}) {
-  const [editingCode, setEditingCode] = useState<string | null>(null);
-  const [editingLabel, setEditingLabel] = useState("");
-  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
-  const [newLabel, setNewLabel] = useState("");
-  const [newColorHex, setNewColorHex] = useState("#312e81");
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-
-  const startEdit = (cfg: StatusConfig) => {
-    setEditingCode(cfg.code);
-    setEditingLabel(cfg.label);
-    setColorPickerFor(null);
-  };
-
-  const handleDragEnd = () => {
-    if (dragIndex !== null && dropIndex !== null && dragIndex !== dropIndex) {
-      const next = [...configs];
-      const [moved] = next.splice(dragIndex, 1);
-      next.splice(dropIndex, 0, moved);
-      onReorder(next);
-    }
-    setDragIndex(null);
-    setDropIndex(null);
-  };
-
-  return (
-    <Modal
-      title="Manage Statuses"
-      onClose={onClose}
-      width="w-[42rem] max-w-[calc(100vw-2rem)]"
-      footer={
-        <div className="flex items-center gap-2">
-          <label className="relative shrink-0 cursor-pointer" title="Pick color">
-            <span className="block h-8 w-8 rounded-full border-2 border-white shadow-md" style={{ backgroundColor: newColorHex }} />
-            <input type="color" value={newColorHex} onChange={(e) => setNewColorHex(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
-          </label>
-          <input
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && newLabel.trim()) { onAdd(newLabel.trim(), newColorHex); setNewLabel(""); } }}
-            placeholder="New status name..."
-            className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300"
-          />
-          <button
-            onClick={() => { if (newLabel.trim()) { onAdd(newLabel.trim(), newColorHex); setNewLabel(""); } }}
-            disabled={!newLabel.trim()}
-            className="shrink-0 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-slate-700 disabled:opacity-40"
-          >
-            + Add
-          </button>
-        </div>
-      }
-    >
-      {/* Status list */}
-      <div className="max-h-[28rem] space-y-1.5 overflow-y-auto">
-        {configs.map((cfg, idx) => (
-          <div
-            key={cfg.code}
-            className="group"
-            draggable
-            onDragStart={() => setDragIndex(idx)}
-            onDragEnter={() => setDropIndex(idx)}
-            onDragEnd={handleDragEnd}
-            onDragOver={(e) => e.preventDefault()}
-            style={{ opacity: dragIndex === idx ? 0.4 : 1 }}
-          >
-            <div className={`flex items-center gap-3 rounded-lg border border-slate-300 px-2 py-2 hover:bg-slate-50 ${dropIndex === idx && dragIndex !== idx ? "border-t-2 border-blue-400" : ""}`}>
-              {/* Drag handle */}
-              <span className="shrink-0 cursor-grab text-slate-400 active:cursor-grabbing">
-                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
-                  <circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>
-                  <circle cx="11" cy="4" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="11" cy="12" r="1.2"/>
-                </svg>
-              </span>
-              {/* Color badge */}
-              <button
-                onClick={() => {
-                  if (cfg.protected) return;
-                  setColorPickerFor(colorPickerFor === cfg.code ? null : cfg.code);
-                  setEditingCode(null);
-                }}
-                className={`shrink-0 transition-transform hover:scale-105 ${cfgBadge(cfg).cls} ${cfg.protected ? "cursor-default" : "cursor-pointer"}`}
-                style={cfgBadge(cfg).sty}
-                title={cfg.protected ? undefined : "Click to change color"}
-              >
-                {cfg.label}
-              </button>
-
-              {/* Label edit */}
-              {editingCode === cfg.code ? (
-                <input
-                  value={editingLabel}
-                  onChange={(e) => setEditingLabel(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && editingLabel.trim()) {
-                      onUpdate(cfg.code, { label: editingLabel.trim() });
-                      setEditingCode(null);
-                    }
-                    if (e.key === "Escape") setEditingCode(null);
-                  }}
-                  onBlur={() => {
-                    if (editingLabel.trim()) onUpdate(cfg.code, { label: editingLabel.trim() });
-                    setEditingCode(null);
-                  }}
-                  className="flex-1 rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
-                  autoFocus
-                />
-              ) : (
-                <span className="flex-1 text-sm text-slate-700">{cfg.label}</span>
-              )}
-
-              {/* Actions */}
-              <div className="flex shrink-0 items-center gap-1">
-                {!cfg.protected && editingCode !== cfg.code && (
-                  <button
-                    onClick={() => startEdit(cfg)}
-                    className="rounded p-1 text-slate-600 hover:bg-slate-700 hover:text-white"
-                    title="Edit label"
-                  >
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M11 2l3 3-9 9H2v-3L11 2z" />
-                    </svg>
-                  </button>
-                )}
-                {!cfg.protected && (
-                  <button
-                    onClick={() => { onDelete(cfg.code); setColorPickerFor(null); }}
-                    className="rounded p-1 text-slate-600 hover:bg-red-500 hover:text-white"
-                    title="Delete"
-                  >
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M3 4h10M6 4V2h4v2M5 4l1 9h4l1-9" />
-                    </svg>
-                  </button>
-                )}
-                {cfg.protected && <span className="w-6 shrink-0" />}
-              </div>
-            </div>
-
-            {/* Inline color picker */}
-            {colorPickerFor === cfg.code && (
-              <div className="mb-1 ml-2 flex flex-wrap gap-2 rounded-lg bg-slate-50 px-3 py-2">
-                {COLOR_OPTIONS.map((c) => (
-                  <button
-                    key={c.className}
-                    onClick={() => { onUpdate(cfg.code, { className: c.className }); setColorPickerFor(null); }}
-                    className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${c.className} ${cfg.className === c.className ? "border-slate-600 scale-110" : "border-transparent"}`}
-                    title={c.label}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-    </Modal>
-  );
-}
-
-// ─── AssignmentModal (local) ──────────────────────────────────────────────────
-
-function AssignmentModal({
-  employee, workAreas, stations, assignedStationIds, onSave, onClear, onClose,
-}: {
-  employee: Employee;
-  workAreas: WorkArea[];
-  stations: Station[];
-  assignedStationIds: Set<string>;
-  onSave: (waId: string, toAdd: string[], toRemove: string[]) => void;
-  onClear: () => void;
-  onClose: () => void;
-}) {
-  const [selectedWaId, setSelectedWaId] = useState<string | null>(() => {
-    if (assignedStationIds.size > 0) {
-      const firstStation = stations.find((s) => assignedStationIds.has(s.id));
-      if (firstStation) return firstStation.work_area_id;
-    }
-    return employee.homeDepartmentId ?? null;
-  });
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(assignedStationIds));
-
-  const waStations = stations.filter((s) => s.work_area_id === selectedWaId);
-  const selectedWa = workAreas.find((wa) => wa.id === selectedWaId);
-
-  const toggleStation = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const handleSave = () => {
-    if (!selectedWa) return;
-    const toAdd = waStations.filter((s) => selectedIds.has(s.id) && !assignedStationIds.has(s.id)).map((s) => s.id);
-    const toRemove = waStations.filter((s) => !selectedIds.has(s.id) && assignedStationIds.has(s.id)).map((s) => s.id);
-    onSave(selectedWa.id, toAdd, toRemove);
-  };
-
-  return (
-    <Modal
-      title="Assign Department & Station"
-      onClose={onClose}
-      footer={
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <button onClick={onClose} className="flex-1 rounded-md border px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
-            <button
-              onClick={handleSave}
-              disabled={!selectedWa}
-              className="flex-1 rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40"
-            >
-              Save
-            </button>
-          </div>
-          {employee.homeDepartmentId && (
-            <button onClick={() => { onClear(); onClose(); }} className="w-full rounded-md border border-red-200 py-2 text-sm font-medium text-red-500 hover:bg-red-50 hover:border-red-300 transition-colors">
-              Clear Department
-            </button>
-          )}
-        </div>
-      }
-    >
-      <div className="space-y-5">
-        <p className="text-base font-semibold text-slate-800">
-          {employee.full_name}
-          {employee.employee_code && <span className="ml-2 text-sm font-normal text-slate-400">{employee.employee_code}</span>}
-        </p>
-
-        {/* Department */}
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-700">Department</p>
-          <div className="flex flex-wrap gap-2">
-            {workAreas.map((wa) => (
-              <button
-                key={wa.id}
-                onClick={() => { setSelectedWaId(wa.id); setSelectedIds(new Set()); }}
-                className="rounded-md border px-3 py-1.5 text-sm transition-all"
-                style={selectedWaId === wa.id
-                  ? { backgroundColor: wa.color_hex ?? "#334155", color: "#fff", borderColor: "transparent" }
-                  : { backgroundColor: "#fff", color: "#475569", borderColor: "#e2e8f0" }}
-              >
-                {wa.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Station */}
-        {waStations.length > 0 && (
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
-              Station <span className="font-normal normal-case text-slate-400">(optional)</span>
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {waStations.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => toggleStation(s.id)}
-                  className="rounded-md border px-3 py-1.5 text-sm transition-all"
-                  style={selectedIds.has(s.id)
-                    ? { backgroundColor: selectedWa?.color_hex ?? "#334155", borderColor: "transparent", color: "#fff" }
-                    : { borderColor: "#e2e8f0", color: "#475569" }}
-                >
-                  {s.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </Modal>
-  );
-}
-
-// ─── RosterManageModal (local) ────────────────────────────────────────────────
-
-function RosterManageModal({
-  employees,
-  statuses,
-  assignments,
-  stations,
-  workAreas,
-  statusConfigs,
-  onAdd,
-  onRemove,
-  onUpdate,
-  onStatusChange,
-  onUnassignAll,
-  onAssignToStation,
-  onUnassignFromStation,
-  onClose,
-}: {
-  employees: Employee[];
-  statuses: Record<string, EmployeeStatus>;
-  assignments: StationAssignment[];
-  stations: Station[];
-  workAreas: WorkArea[];
-  statusConfigs: StatusConfig[];
-  onAdd: (emp: Employee) => void;
-  onRemove: (id: string) => void;
-  onUpdate: (id: string, updates: Partial<Employee>) => void;
-  onStatusChange: (id: string, status: EmployeeStatus) => void;
-  onUnassignAll: (empId: string) => void;
-  onAssignToStation: (empId: string, stationId: string) => void;
-  onUnassignFromStation: (empId: string, stationId: string) => void;
-  onClose: () => void;
-}) {
-  const [searchName, setSearchName] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [filterDept, setFilterDept] = useState<string[]>([]);
-  const [newName, setNewName] = useState("");
-  const [newTemporary, setNewTemporary] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState("");
-  const [confirmRemoveEmp, setConfirmRemoveEmp] = useState<Employee | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [sortKey, setSortKey] = useState<"name" | "code" | "dept" | "status" | "level" | "gender">("dept");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-  const handleSort = (key: typeof sortKey) => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir("asc"); }
-  };
-  const SortIcon = ({ col }: { col: typeof sortKey }) => (
-    <span className="ml-1 text-slate-400">
-      {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
-    </span>
-  );
-
-  const getStatus = (id: string): EmployeeStatus => statuses[id] ?? "available";
-  const getDisplayStatus = (emp: Employee): EmployeeStatus => {
-    const s = getStatus(emp.id);
-    if (s === "available" && emp.homeDepartmentId !== null) return "assigned";
-    return s;
-  };
-
-  const active = employees.filter((e) => e.active);
-
-  const hasNoStation = (emp: Employee) => {
-    const effectiveDepts = emp.activeDepartmentIds != null
-      ? emp.activeDepartmentIds
-      : (emp.homeDepartmentId ? [emp.homeDepartmentId] : []);
-    if (effectiveDepts.length === 0) return false;
-    return effectiveDepts.some((deptId) => {
-      const deptStationIds = new Set(stations.filter((s) => s.work_area_id === deptId).map((s) => s.id));
-      return !assignments.some((a) => a.employee_id === emp.id && deptStationIds.has(a.station_id));
-    });
-  };
-
-  const getGenderViolations = (emp: Employee) =>
-    assignments
-      .filter((a) => a.employee_id === emp.id)
-      .flatMap((a) => {
-        const station = stations.find((s) => s.id === a.station_id);
-        if (station?.gender_restriction && emp.gender && emp.gender !== station.gender_restriction) {
-          return [{ stationName: station.name, required: station.gender_restriction }];
-        }
-        return [];
-      });
-
-  const filtered = active
-    .filter((e) => {
-      if (searchName && !e.full_name.toLowerCase().includes(searchName.toLowerCase())) return false;
-      if (filterStatus.length > 0 && !filterStatus.includes(statuses[e.id] ?? "available")) return false;
-      if (filterDept.length > 0 && !filterDept.includes(e.homeDepartmentId ?? "") && !e.qualifiedDepartmentIds.some((id) => filterDept.includes(id))) return false;
-      return true;
-    })
-    .sort((a, b) => {
-      // Always float "dept set but no station" to top
-      const aAlert = hasNoStation(a) ? 0 : 1;
-      const bAlert = hasNoStation(b) ? 0 : 1;
-      if (aAlert !== bAlert) return aAlert - bAlert;
-      let cmp = 0;
-      if (sortKey === "name") cmp = a.full_name.localeCompare(b.full_name);
-      else if (sortKey === "code") cmp = (a.employee_code ?? "").localeCompare(b.employee_code ?? "");
-      else if (sortKey === "dept") {
-        const aOrder = workAreas.find((w) => w.id === a.homeDepartmentId)?.display_order ?? 999;
-        const bOrder = workAreas.find((w) => w.id === b.homeDepartmentId)?.display_order ?? 999;
-        cmp = aOrder - bOrder;
-      }
-      else if (sortKey === "status") cmp = getDisplayStatus(a).localeCompare(getDisplayStatus(b));
-      else if (sortKey === "level") cmp = (a.level ?? 0) - (b.level ?? 0);
-      else if (sortKey === "gender") cmp = (a.gender ?? "").localeCompare(b.gender ?? "");
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-
-  const handleAdd = () => {
-    if (!newName.trim()) return;
-    const maxNum = employees.reduce((max, e) => {
-      const match = e.employee_code?.match(/^E(\d+)$/);
-      return match ? Math.max(max, parseInt(match[1], 10)) : max;
-    }, 0);
-    const nextCode = `E${String(maxNum + 1).padStart(3, "0")}`;
-    const newId = `emp_${Date.now()}`;
-    onAdd({ id: newId, employee_code: nextCode, full_name: newName.trim(), homeDepartmentId: null, qualifiedDepartmentIds: [], active: true, ...(newTemporary ? { temporary: true } : {}) });
-    onStatusChange(newId, "available");
-    setNewName("");
-    setNewTemporary(false);
-  };
-
-  const handleSaveName = (id: string) => {
-    if (editingName.trim()) onUpdate(id, { full_name: editingName.trim() });
-    setEditingId(null);
-  };
-
-  return (
-    <Modal
-      title="Manage Roster"
-      onClose={onClose}
-      width="w-[calc(100vw-4rem)] max-w-[1300px]"
-      footer={
-        <div className="flex items-center gap-2">
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
-            placeholder="New employee name..."
-            className="flex-1 rounded-md border px-3 py-2 text-sm"
-          />
-          <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-600 select-none">
-            <input
-              type="checkbox"
-              checked={newTemporary}
-              onChange={(e) => setNewTemporary(e.target.checked)}
-              className="accent-amber-500"
-            />
-            Temporary
-          </label>
-          <button
-            onClick={handleAdd}
-            disabled={!newName.trim()}
-            className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 hover:bg-slate-700"
-          >
-            + Add
-          </button>
-        </div>
-      }
-    >
-      {/* Search / Filter */}
-      <div className="mb-4 flex gap-2">
-        <input
-          value={searchName}
-          onChange={(e) => setSearchName(e.target.value)}
-          placeholder="Search by name..."
-          className="flex-1 rounded-md border px-3 py-1.5 text-sm"
-        />
-        <MultiFilterSelect
-          placeholder="Status"
-          options={statusConfigs.filter((c) => c.code !== "assigned").map((c) => ({ value: c.code, label: c.label }))}
-          selected={filterStatus}
-          onChange={setFilterStatus}
-        />
-        <MultiFilterSelect
-          placeholder="Dept"
-          options={workAreas.map((wa) => ({ value: wa.id, label: wa.name }))}
-          selected={filterDept}
-          onChange={setFilterDept}
-        />
-      </div>
-
-      {/* Employee table */}
-      <div ref={scrollRef} className="h-[calc(100vh-320px)] max-h-140 overflow-y-auto rounded-md border">
-        <table className="w-full border-collapse text-sm table-fixed">
-          <colgroup>
-            <col className="w-52" />
-            <col className="w-24" />
-            <col className="w-32" />
-            <col className="w-28" />
-            <col className="w-36" />
-            <col className="w-16" />
-            <col className="w-16" />
-            <col className="w-28" />
-            <col className="w-16" />
-          </colgroup>
-          <thead className="sticky top-0 z-60 bg-slate-800">
-            <tr>
-              {(["name", "code", "dept"] as const).map((col) => (
-                <th key={col} className="border-b border-slate-700 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">
-                  <button onClick={() => handleSort(col)} className="flex items-center hover:text-white">
-                    {col === "name" ? "Name" : col === "code" ? "Code" : "Home Dept"}
-                    <SortIcon col={col} />
-                  </button>
-                </th>
-              ))}
-              <th className="border-b border-slate-700 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">Active Dept</th>
-              <th className="border-b border-slate-700 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">Station</th>
-              <th className="border-b border-slate-700 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">
-                <button onClick={() => handleSort("gender")} className="flex items-center hover:text-white">
-                  Gender <SortIcon col="gender" />
-                </button>
-              </th>
-              <th className="border-b border-slate-700 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">
-                <button onClick={() => handleSort("level")} className="flex items-center hover:text-white">
-                  Level <SortIcon col="level" />
-                </button>
-              </th>
-              <th className="border-b border-slate-700 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">
-                <button onClick={() => handleSort("status")} className="flex items-center hover:text-white">
-                  Status <SortIcon col="status" />
-                </button>
-              </th>
-              <th className="border-b border-slate-700 px-4 py-2.5" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={9} className="py-10 text-center text-sm text-slate-400">No employees found</td>
-              </tr>
-            )}
-            {filtered.map((emp) => {
-              const alert = hasNoStation(emp);
-              const genderViolations = getGenderViolations(emp);
-              const effectiveActiveDeptIds = emp.activeDepartmentIds != null
-                ? emp.activeDepartmentIds
-                : (emp.homeDepartmentId ? [emp.homeDepartmentId] : []);
-              return (
-                <tr key={emp.id} className={`group border-b last:border-b-0 ${alert ? "bg-red-100 hover:bg-red-200" : "hover:bg-slate-50"}`}>
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-                        {emp.full_name.charAt(0)}
-                      </div>
-                      {editingId === emp.id ? (
-                        <input
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(emp.id); if (e.key === "Escape") setEditingId(null); }}
-                          onBlur={() => handleSaveName(emp.id)}
-                          className="w-full rounded border px-2 py-0.5 text-sm"
-                          autoFocus
-                        />
-                      ) : (
-                        <span
-                          className="cursor-pointer font-medium text-slate-800 hover:text-blue-600 truncate"
-                          onDoubleClick={() => { setEditingId(emp.id); setEditingName(emp.full_name); }}
-                          title={emp.full_name}
-                        >
-                          {emp.full_name}
-                        </span>
-                      )}
-                      {emp.temporary && (
-                        <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide bg-orange-100 text-orange-500">
-                          TEMP
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-slate-400"><span className="block truncate">{emp.employee_code ?? "—"}</span></td>
-                  <td className="px-4 py-2.5 max-w-0">
-                    <DeptSelect
-                      homeDepartmentId={emp.homeDepartmentId}
-                      qualifiedDepartmentIds={emp.qualifiedDepartmentIds}
-                      workAreas={workAreas}
-                      onChangeHome={(waId) => {
-                        const q = waId && !emp.qualifiedDepartmentIds.includes(waId) ? [waId, ...emp.qualifiedDepartmentIds] : emp.qualifiedDepartmentIds;
-                        onUpdate(emp.id, { homeDepartmentId: waId, qualifiedDepartmentIds: q });
-                        if (!waId) { onUnassignAll(emp.id); onStatusChange(emp.id, "available"); }
-                        if (waId && !assignments.some((a) => a.employee_id === emp.id)) {
-                          scrollRef.current?.scrollTo({ top: 0, behavior: "instant" });
-                        }
-                      }}
-                      onChangeQualified={(waIds) => onUpdate(emp.id, { qualifiedDepartmentIds: waIds })}
-                    />
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <ActiveDeptSelect
-                      activeDepartmentIds={effectiveActiveDeptIds}
-                      workAreas={workAreas}
-                      onChange={(ids) => onUpdate(emp.id, { activeDepartmentIds: ids })}
-                    />
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <StationSelect
-                      employeeId={emp.id}
-                      qualifiedDepartmentIds={effectiveActiveDeptIds}
-                      assignments={assignments}
-                      stations={stations}
-                      workAreas={workAreas}
-                      onAssign={(stationId) => onAssignToStation(emp.id, stationId)}
-                      onUnassign={(stationId) => onUnassignFromStation(emp.id, stationId)}
-                    />
-                    {genderViolations.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {genderViolations.map((v, i) => (
-                          <span key={i} className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-600">
-                            ⚠ {v.stationName} ({v.required === "M" ? "Male" : "Female"} only)
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  {/* Gender */}
-                  <td className="px-3 py-2.5">
-                    <button
-                      onClick={() => onUpdate(emp.id, { gender: emp.gender === "M" ? "F" : "M" })}
-                      className={`rounded px-2 py-0.5 text-xs font-semibold transition-colors ${emp.gender === "M" ? "bg-sky-50 text-sky-600 hover:bg-sky-100" : emp.gender === "F" ? "bg-rose-50 text-rose-500 hover:bg-rose-100" : "bg-slate-100 text-slate-400 hover:bg-slate-200"}`}
-                      title="Click to toggle"
-                    >
-                      {emp.gender ?? "—"}
-                    </button>
-                  </td>
-                  {/* Level */}
-                  <td className="px-3 py-2.5">
-                    <button
-                      onClick={() => onUpdate(emp.id, { level: emp.level === 3 ? 1 : ((emp.level ?? 0) + 1) as 1 | 2 | 3 })}
-                      className={`rounded px-2 py-0.5 text-xs font-semibold transition-colors ${emp.level === 3 ? "bg-slate-800 text-white hover:bg-slate-700" : emp.level === 2 ? "bg-slate-200 text-slate-700 hover:bg-slate-300" : "bg-slate-100 text-slate-400 hover:bg-slate-200"}`}
-                      title="Click to cycle level"
-                    >
-                      {emp.level ? `Lv.${emp.level}` : "—"}
-                    </button>
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <StatusSelect
-                      value={statuses[emp.id] ?? "available"}
-                      configs={statusConfigs}
-                      onChange={(val) => {
-                        onStatusChange(emp.id, val);
-                      }}
-                    />
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <button
-                      onClick={() => onRemove(emp.id)}
-                      className="invisible rounded px-1 text-xs text-slate-400 transition-colors group-hover:visible hover:bg-slate-100 hover:text-slate-700"
-                    >
-                      ×
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {confirmRemoveEmp && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-95 rounded-2xl bg-white shadow-2xl">
-            <div className="p-6">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
-                <svg className="h-6 w-6 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <h3 className="text-base font-bold text-slate-900">Remove employee?</h3>
-              <p className="mt-1.5 text-sm text-slate-500">
-                <span className="font-semibold text-slate-700">{confirmRemoveEmp.full_name}</span> will be permanently removed from the roster.
-              </p>
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
-              <button
-                onClick={() => setConfirmRemoveEmp(null)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => { onRemove(confirmRemoveEmp.id); setConfirmRemoveEmp(null); }}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
-}
-
-// ─── AssignmentSidebar ────────────────────────────────────────────────────────
 
 export function AssignmentSidebar({
   employees,
@@ -786,13 +18,18 @@ export function AssignmentSidebar({
   stations,
   workAreas,
   selectedWorkAreaId,
+  statusConfigs,
   onAdd,
   onRemove,
   onUpdate,
+  onSetQualifiedWorkAreas,
   onStatusChange,
   onAssignToStation,
   onUnassignAll,
   onUnassignFromStation,
+  getEmployeeEffectiveDepartmentIds,
+  onOpenRoster,
+  onManageStatuses,
 }: {
   employees: Employee[];
   statuses: Record<string, EmployeeStatus>;
@@ -800,80 +37,58 @@ export function AssignmentSidebar({
   stations: Station[];
   workAreas: WorkArea[];
   selectedWorkAreaId?: string;
+  statusConfigs: StatusConfig[];
   onAdd: (emp: Employee) => void;
   onRemove: (id: string) => void;
-  onUpdate: (id: string, updates: Partial<Employee>) => void;
+  onUpdate: (id: string, updates: Partial<Omit<Employee, "qualifiedDepartmentIds">>) => void;
+  onSetQualifiedWorkAreas: (id: string, workAreaIds: string[]) => void;
   onStatusChange: (id: string, status: EmployeeStatus) => void;
   onAssignToStation: (empId: string, stationId: string) => void;
-  onUnassignAll: (empId: string) => void;
+  onUnassignAll: (empId: string, resetStatus?: boolean) => void;
   onUnassignFromStation: (empId: string, stationId: string) => void;
+  getEmployeeEffectiveDepartmentIds: (emp: import("../types").Employee) => string[];
+  onOpenRoster: (search: string) => void;
+  onManageStatuses: () => void;
 }) {
-  const [statusConfigs, setStatusConfigs] = useState<StatusConfig[]>(DEFAULT_STATUS_CONFIGS);
   const [assignModalEmp, setAssignModalEmp] = useState<Employee | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState("");
-  const [showManage, setShowManage] = useState(false);
-  const [showRosterManage, setShowRosterManage] = useState(false);
 
-  const getStatus = (id: string): EmployeeStatus => statuses[id] ?? "available";
+  const getStatus = (id: string): EmployeeStatus => statuses[id] ?? STATUS_CODE_AVAILABLE;
 
   const activeEmployees = employees.filter((e) => e.active);
   const totalStaff = activeEmployees.length;
 
+  const unavailableCodes = getUnavailableStatusCodes(statusConfigs);
+  const isUnavailableStat = (id: string) => unavailableCodes.has(getStatus(id));
+
+  const unavailableCount = activeEmployees.filter((e) => isUnavailableStat(e.id)).length;
   const assignedCount = activeEmployees.filter(
-    (e) => e.homeDepartmentId !== null && getStatus(e.id) === "available",
+    (e) => !isUnavailableStat(e.id) && assignments.some((a) => a.employee_id === e.id),
   ).length;
+  const unassignedCount = activeEmployees.filter(
+    (e) => !isUnavailableStat(e.id) && !assignments.some((a) => a.employee_id === e.id),
+  ).length;
+  const availableWorkforce = totalStaff - unavailableCount;
+  const efficiency = availableWorkforce > 0 ? ((assignedCount / availableWorkforce) * 100).toFixed(1) : "0.0";
 
-  const notAssignedCount = activeEmployees.filter((e) => e.homeDepartmentId === null).length;
-
-  const efficiency = totalStaff > 0 ? ((assignedCount / totalStaff) * 100).toFixed(1) : "0.0";
-
-
-
-  const handleSaveName = (id: string) => {
-    if (editingName.trim()) onUpdate(id, { full_name: editingName.trim() });
-    setEditingId(null);
-  };
-
-  const handleUpdateConfig = (code: string, updates: Partial<StatusConfig>) =>
-    setStatusConfigs((prev) => prev.map((c) => c.code === code ? { ...c, ...updates } : c));
-
-  const handleDeleteConfig = (code: string) =>
-    setStatusConfigs((prev) => prev.filter((c) => c.code !== code));
-
-  const handleAddConfig = (label: string, colorHex: string) => {
-    const code = `status_${Date.now()}`;
-    setStatusConfigs((prev) => [...prev, { code, label, className: "", colorHex }]);
-  };
-
-  const handleReorderConfig = (newConfigs: StatusConfig[]) =>
-    setStatusConfigs(newConfigs);
 
   return (
     <div className="flex h-full w-72 shrink-0 flex-col gap-4 overflow-hidden">
-      {/* Today's Status */}
-      <div className="shrink-0 rounded-lg border border-slate-700 bg-white p-5">
+      {/* Workforce Overview */}
+      <div className="shrink-0 rounded-lg border border-slate-300 bg-white p-5">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Today's Status</p>
-          <button
-            onClick={() => setShowManage(true)}
-            className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-            title="Manage statuses"
-          >
-            <Settings size={14} />
-          </button>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Workforce Overview</p>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <StatCard label="Total Staff" value={totalStaff} bg="bg-white" labelColor="text-slate-400" color="text-slate-800" borderColor="border-slate-200" />
-          <StatCard label="Assigned" value={assignedCount} color="text-slate-800" bg="bg-white" labelColor="text-slate-400" borderColor="border-slate-200" />
-          <StatCard label="Unassigned" value={notAssignedCount} color="text-white" bg="bg-slate-700" labelColor="text-slate-400" borderColor="border-slate-600" />
-          <StatCard label="Efficiency" value={`${efficiency}%`} bg="bg-slate-800" labelColor="text-slate-400" color="text-white" borderColor="border-slate-700" />
+          <StatCard label="Total Staff" value={totalStaff} bg="bg-[#FFFFFF]" labelColor="text-slate-400" color="text-[#334155]" borderColor="border-[#E2E8F0]" />
+          <StatCard label="Unassigned" value={unassignedCount} bg="bg-white" labelColor="text-[#F75871]" color="text-[#F75871]" borderColor="border-[#E2E8F0]" accent="#F75871" />
+          <StatCard label="Unavailable" value={unavailableCount} bg="bg-white" labelColor="text-[#F8AE17]" color="text-[#F8AE17]" borderColor="border-[#E2E8F0]" accent="#F8AE17" />
+          <StatCard label="Efficiency" value={`${efficiency}%`} bg="bg-[#0F172A]" labelColor="text-slate-400" color="text-[#FFFFFF]" borderColor="border-[#0F172A]" />
         </div>
       </div>
 
-      {/* Employee Roaster */}
-      <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-700 bg-white">
-        <div className="flex items-center justify-between border-b px-5 py-4">
+      {/* Employee Roster */}
+      <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-300 bg-white">
+        <div className="flex items-center justify-between px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
             Available Employees
             <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
@@ -881,7 +96,7 @@ export function AssignmentSidebar({
             </span>
           </p>
           <button
-            onClick={() => setShowRosterManage(true)}
+            onClick={() => onOpenRoster("")}
             className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600"
           >
             <Settings size={14} />
@@ -889,28 +104,50 @@ export function AssignmentSidebar({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {(() => {
-            const UNAVAILABLE = new Set(["sick", "vacation", "off_shift"]);
-            const isUnavailable = (id: string) => UNAVAILABLE.has(getStatus(id));
+          {totalStaff === 0 ? (
+            <div className="flex h-full items-center justify-center px-6 py-8">
+              <div className="text-center">
+                <p className="text-sm font-semibold text-slate-700">No employees yet</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Add your first employee to start building the roster.
+                </p>
+                <button
+                  onClick={() => onOpenRoster("")}
+                  className="mt-4 rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                >
+                  + Add Employee
+                </button>
+              </div>
+            </div>
+          ) : (() => {
+            const unavailableCodes = getUnavailableStatusCodes(statusConfigs);
+            const isUnavailable = (id: string) => unavailableCodes.has(getStatus(id));
             const selectedWa = workAreas.find((w) => w.id === selectedWorkAreaId);
             const visibleWorkAreas = selectedWa ? [selectedWa] : workAreas;
             const noDept = !selectedWa ? activeEmployees.filter((e) => e.homeDepartmentId === null && !isUnavailable(e.id)) : [];
-            const unassignedEmps = activeEmployees.filter((e) => e.homeDepartmentId === null && !isUnavailable(e.id));
-            const unavailableEmps = activeEmployees.filter((e) => isUnavailable(e.id));
+            const unassignedEmps = !selectedWa ? activeEmployees.filter((e) => e.homeDepartmentId === null && !isUnavailable(e.id)) : [];
+            const unavailableEmps = activeEmployees.filter((e) => {
+              if (!isUnavailable(e.id)) return false;
+              if (!selectedWa) return true;
+              return isEmployeeEligibleForWorkArea(e, selectedWa.id);
+            });
             return (
               <>
                 {visibleWorkAreas.map((wa) => {
-                  const waStationIds = new Set(stations.filter((s) => s.work_area_id === wa.id).map((s) => s.id));
                   const deptEmps = activeEmployees.filter((e) => {
-                    const inThisDept = e.homeDepartmentId === wa.id || e.activeDepartmentIds?.includes(wa.id);
-                    if (!inThisDept || isUnavailable(e.id)) return false;
-                    return !assignments.some((a) => a.employee_id === e.id && waStationIds.has(a.station_id));
+                    if (isUnavailable(e.id)) return false;
+                    if (assignments.some((a) => a.employee_id === e.id && a.station_id !== null && getAssignmentWorkAreaId(a, stations) === wa.id)) return false;
+                    const hasNullStation = hasNullStationAssignment(e.id, wa.id, assignments);
+                    if (selectedWa) {
+                      return isEmployeeEligibleForWorkArea(e, wa.id) || hasNullStation;
+                    }
+                    return e.homeDepartmentId === wa.id || hasNullStation;
                   });
                   if (deptEmps.length === 0) return null;
                   return (
                     <div key={wa.id}>
-                      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-t bg-slate-100 px-4 py-2">
-                        <span className="h-2 w-2 rounded-full shrink-0 bg-red-600" />
+                      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-t border-slate-200 bg-slate-100 px-4 py-2">
+                        <span className="h-2 w-2 rounded-full shrink-0 bg-red-500" />
                         <span className="text-xs font-semibold text-slate-600">No Station</span>
                         <span className="ml-auto text-xs text-slate-400">{deptEmps.length}</span>
                       </div>
@@ -918,51 +155,49 @@ export function AssignmentSidebar({
                         return (
                           <div
                             key={emp.id}
-                            className="group flex items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50"
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.effectAllowed = "move";
+                              e.dataTransfer.setData("application/json", JSON.stringify({
+                                employeeId: emp.id,
+                                fromStationId: null,
+                                fromShiftCode: null,
+                                fromModeCode: null,
+                              }));
+                              const ghost = document.createElement("div");
+                              ghost.textContent = emp.full_name;
+                              Object.assign(ghost.style, {
+                                position: "fixed", top: "-200px", left: "0",
+                                padding: "4px 10px", borderRadius: "6px",
+                                background: wa.color_hex ?? "#64748b", color: "#fff",
+                                fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",
+                                boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+                              });
+                              document.body.appendChild(ghost);
+                              e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+                              setTimeout(() => document.body.removeChild(ghost), 0);
+                            }}
+                            onDoubleClick={() => onOpenRoster(emp.full_name)}
+                            title="Drag to assign station · Double-click to look up"
+                            className="group flex cursor-grab items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50 active:cursor-grabbing"
                           >
-                            {editingId === emp.id ? (
-                              <input value={editingName} onChange={(e) => setEditingName(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(emp.id); if (e.key === "Escape") setEditingId(null); }}
-                                onBlur={() => handleSaveName(emp.id)}
-                                className="flex-1 rounded border px-2 py-0.5 text-sm" autoFocus />
-                            ) : (
-                              <p
-                                draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.effectAllowed = "move";
-                                  e.dataTransfer.setData("application/json", JSON.stringify({
-                                    employeeId: emp.id,
-                                    fromStationId: null,
-                                    fromShiftCode: null,
-                                    fromModeCode: null,
-                                  }));
-                                  const ghost = document.createElement("div");
-                                  ghost.textContent = emp.full_name;
-                                  Object.assign(ghost.style, {
-                                    position: "fixed", top: "-200px", left: "0",
-                                    padding: "4px 10px", borderRadius: "6px",
-                                    background: wa.color_hex ?? "#64748b", color: "#fff",
-                                    fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap",
-                                    boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
-                                  });
-                                  document.body.appendChild(ghost);
-                                  e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
-                                  setTimeout(() => document.body.removeChild(ghost), 0);
-                                }}
-                                className="min-w-0 cursor-grab truncate text-sm font-medium text-slate-800 hover:text-blue-600 active:cursor-grabbing"
-                                onDoubleClick={() => { setEditingId(emp.id); setEditingName(emp.full_name); }}
-                                title="Drag to assign station · Double-click to edit">
+                              <p className="min-w-0 truncate text-sm font-medium text-slate-800">
                                 {emp.full_name}
                               </p>
-                            )}
                             {emp.temporary && (
-                              <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide bg-orange-100 text-orange-500">TEMP</span>
+                              <span className="shrink-0 rounded bg-violet-50 px-1 py-px text-[9px] text-violet-500 border border-violet-100">TEMP</span>
                             )}
-                            <div className="ml-auto shrink-0">
+                            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                              {emp.homeDepartmentId !== wa.id && emp.homeDepartmentId && (
+                                <span className="rounded px-1.5 py-0.5 text-[10px] bg-blue-50 text-blue-600 border border-blue-200">
+                                  {abbrevDept(workAreas.find((w) => w.id === emp.homeDepartmentId)?.name ?? "")}
+                                </span>
+                              )}
                               <StatusSelect
                                 value={getStatus(emp.id)}
                                 configs={statusConfigs}
                                 onChange={(val) => onStatusChange(emp.id, val)}
+                                onManageStatuses={onManageStatuses}
                               />
                             </div>
                           </div>
@@ -973,36 +208,39 @@ export function AssignmentSidebar({
                 })}
                 {unassignedEmps.length > 0 && (
                   <div>
-                    <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-t bg-slate-100 px-4 py-2">
+                    <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-t border-slate-200 bg-slate-100 px-4 py-2">
                       <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
                       <span className="text-xs font-semibold text-slate-600">Unassigned</span>
                       <span className="ml-auto text-xs text-slate-400">{unassignedEmps.length}</span>
                     </div>
                     {unassignedEmps.map((emp) => {
                       return (
-                        <div key={emp.id} className="group flex items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50">
-                          <p
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.effectAllowed = "move";
-                              e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
-                              const ghost = document.createElement("div");
-                              ghost.textContent = emp.full_name;
-                              Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: "#94a3b8", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
-                              document.body.appendChild(ghost);
-                              e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
-                              setTimeout(() => document.body.removeChild(ghost), 0);
-                            }}
-                            className="min-w-0 cursor-grab truncate text-sm font-medium text-slate-800 active:cursor-grabbing"
-                          >{emp.full_name}</p>
+                        <div
+                          key={emp.id}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
+                            const ghost = document.createElement("div");
+                            ghost.textContent = emp.full_name;
+                            Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: "#94a3b8", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
+                            document.body.appendChild(ghost);
+                            e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+                            setTimeout(() => document.body.removeChild(ghost), 0);
+                          }}
+                          onDoubleClick={() => onOpenRoster(emp.full_name)}
+                          className="group flex cursor-grab items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50 active:cursor-grabbing"
+                        >
+                          <p className="min-w-0 truncate text-sm font-medium text-slate-800">{emp.full_name}</p>
                           {emp.temporary && (
-                            <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide bg-orange-100 text-orange-500">TEMP</span>
+                            <span className="shrink-0 rounded bg-violet-50 px-1 py-px text-[9px] text-violet-500 border border-violet-100">TEMP</span>
                           )}
                           <div className="ml-auto shrink-0">
                             <StatusSelect
                               value={getStatus(emp.id)}
                               configs={statusConfigs}
                               onChange={(val) => onStatusChange(emp.id, val)}
+                              onManageStatuses={onManageStatuses}
                             />
                           </div>
                         </div>
@@ -1013,28 +251,29 @@ export function AssignmentSidebar({
                 {/* Unavailable section */}
                 {unavailableEmps.length > 0 && (
                   <div>
-                    <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-t bg-slate-100 px-4 py-2">
+                    <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-t border-slate-200 bg-slate-100 px-4 py-2">
                       <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" />
                       <span className="text-xs font-semibold text-slate-600">Unavailable</span>
                       <span className="ml-auto text-xs text-slate-400">{unavailableEmps.length}</span>
                     </div>
                     {unavailableEmps.map((emp) => (
                       <div key={emp.id} className="flex items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50">
-                        <p className="min-w-0 truncate text-sm font-medium text-slate-400">{emp.full_name}</p>
+                        <p className="min-w-0 cursor-pointer truncate text-sm font-medium text-slate-400" onDoubleClick={() => onOpenRoster(emp.full_name)}>{emp.full_name}</p>
                         {emp.temporary && (
-                          <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide bg-orange-100 text-orange-500">TEMP</span>
+                          <span className="shrink-0 rounded bg-violet-50 px-1 py-px text-[9px] text-violet-500 border border-violet-100">TEMP</span>
                         )}
                         <div className="ml-auto shrink-0">
                           <StatusSelect
                             value={getStatus(emp.id)}
                             configs={statusConfigs}
                             onChange={(val) => {
-                              if (val === "available") {
+                              if (val === STATUS_CODE_AVAILABLE) {
                                 onUnassignAll(emp.id);
                               } else {
                                 onStatusChange(emp.id, val);
                               }
                             }}
+                            onManageStatuses={onManageStatuses}
                           />
                         </div>
                       </div>
@@ -1043,15 +282,13 @@ export function AssignmentSidebar({
                 )}
                 {/* Assigned section */}
                 {visibleWorkAreas.map((wa) => {
-                  const waStationIds2 = new Set(stations.filter((s) => s.work_area_id === wa.id).map((s) => s.id));
-                  const assignedEmps = activeEmployees.filter((e) => {
-                    const inThisDept = e.homeDepartmentId === wa.id || e.activeDepartmentIds?.includes(wa.id);
-                    return inThisDept && assignments.some((a) => a.employee_id === e.id && waStationIds2.has(a.station_id));
-                  });
+                  const assignedEmps = activeEmployees.filter((e) =>
+                    assignments.some((a) => a.employee_id === e.id && a.station_id !== null && getAssignmentWorkAreaId(a, stations) === wa.id)
+                  );
                   if (assignedEmps.length === 0) return null;
                   return (
                     <div key={`assigned-${wa.id}`}>
-                      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-t bg-slate-100 px-4 py-2">
+                      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-t border-slate-200 bg-slate-100 px-4 py-2">
                         <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: wa.color_hex ?? "#64748b" }} />
                         <span className="text-xs font-semibold text-slate-600">{wa.name}</span>
                         <span className="ml-auto text-xs text-slate-400">{assignedEmps.length}</span>
@@ -1059,23 +296,25 @@ export function AssignmentSidebar({
                       {assignedEmps.map((emp) => {
                         const empStations = [...new Set(assignments.filter((a) => a.employee_id === emp.id).map((a) => stations.find((s) => s.id === a.station_id)?.name).filter(Boolean))];
                         return (
-                          <div key={emp.id} className="flex items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50">
-                            <p
-                              draggable
-                              onDragStart={(e) => {
-                                e.dataTransfer.effectAllowed = "move";
-                                e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
-                                const ghost = document.createElement("div");
-                                ghost.textContent = emp.full_name;
-                                Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: wa.color_hex ?? "#64748b", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
-                                document.body.appendChild(ghost);
-                                e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
-                                setTimeout(() => document.body.removeChild(ghost), 0);
-                              }}
-                              className="min-w-0 cursor-grab truncate text-sm font-medium text-slate-600 active:cursor-grabbing"
-                            >{emp.full_name}</p>
+                          <div
+                            key={emp.id}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.effectAllowed = "move";
+                              e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
+                              const ghost = document.createElement("div");
+                              ghost.textContent = emp.full_name;
+                              Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: wa.color_hex ?? "#64748b", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
+                              document.body.appendChild(ghost);
+                              e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+                              setTimeout(() => document.body.removeChild(ghost), 0);
+                            }}
+                            onDoubleClick={() => onOpenRoster(emp.full_name)}
+                            className="flex cursor-grab items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50 active:cursor-grabbing"
+                          >
+                            <p className="min-w-0 truncate text-sm font-medium text-slate-600">{emp.full_name}</p>
                             {emp.temporary && (
-                              <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide bg-orange-100 text-orange-500">TEMP</span>
+                              <span className="shrink-0 rounded bg-violet-50 px-1 py-px text-[9px] text-violet-500 border border-violet-100">TEMP</span>
                             )}
                             <span className="ml-auto min-w-0 max-w-[45%] shrink-0 truncate text-right text-xs text-slate-400">{empStations.join(", ")}</span>
                           </div>
@@ -1086,28 +325,30 @@ export function AssignmentSidebar({
                 })}
                 {noDept.length > 0 && (
                   <div>
-                    <div className="flex items-center gap-2 border-b border-t bg-slate-100 px-4 py-2">
+                    <div className="flex items-center gap-2 border-b border-t border-slate-200 bg-slate-100 px-4 py-2">
                       <span className="h-2 w-2 rounded-full bg-slate-300 shrink-0" />
                       <span className="text-xs font-semibold text-slate-600">No Department</span>
                       <span className="ml-auto text-xs text-slate-400">{noDept.length}</span>
                     </div>
                     {noDept.map((emp) => {
                       return (
-                        <div key={emp.id} className="group flex items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50">
-                          <p
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.effectAllowed = "move";
-                              e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
-                              const ghost = document.createElement("div");
-                              ghost.textContent = emp.full_name;
-                              Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: "#64748b", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
-                              document.body.appendChild(ghost);
-                              e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
-                              setTimeout(() => document.body.removeChild(ghost), 0);
-                            }}
-                            className="flex-1 cursor-grab truncate text-sm font-medium text-slate-800 hover:text-blue-600 active:cursor-grabbing"
-                            onDoubleClick={() => { setEditingId(emp.id); setEditingName(emp.full_name); }}>
+                        <div
+                          key={emp.id}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("application/json", JSON.stringify({ employeeId: emp.id, fromStationId: null, fromShiftCode: null, fromModeCode: null }));
+                            const ghost = document.createElement("div");
+                            ghost.textContent = emp.full_name;
+                            Object.assign(ghost.style, { position: "fixed", top: "-200px", left: "0", padding: "4px 10px", borderRadius: "6px", background: "#64748b", color: "#fff", fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" });
+                            document.body.appendChild(ghost);
+                            e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+                            setTimeout(() => document.body.removeChild(ghost), 0);
+                          }}
+                          onDoubleClick={() => onOpenRoster(emp.full_name)}
+                          className="group flex cursor-grab items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50 active:cursor-grabbing"
+                        >
+                          <p className="flex-1 truncate text-sm font-medium text-slate-800">
                             {emp.full_name}
                           </p>
                           <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -1120,6 +361,7 @@ export function AssignmentSidebar({
                               value={getStatus(emp.id)}
                               configs={statusConfigs}
                               onChange={(val) => onStatusChange(emp.id, val)}
+                              onManageStatuses={onManageStatuses}
                             />
                           </div>
                         </div>
@@ -1133,26 +375,17 @@ export function AssignmentSidebar({
         </div>
       </div>
 
-      {showManage && (
-        <ManageStatusesModal
-          configs={statusConfigs}
-          onUpdate={handleUpdateConfig}
-          onDelete={handleDeleteConfig}
-          onAdd={handleAddConfig}
-          onReorder={handleReorderConfig}
-          onClose={() => setShowManage(false)}
-        />
-      )}
-
       {assignModalEmp && (
         <AssignmentModal
           employee={assignModalEmp}
           workAreas={workAreas}
           stations={stations}
-          assignedStationIds={new Set(assignments.filter((a) => a.employee_id === assignModalEmp.id).map((a) => a.station_id))}
+          assignedStationIds={new Set(assignments.filter((a) => a.employee_id === assignModalEmp.id && a.station_id !== null).map((a) => a.station_id!))}
           onSave={(waId: string, toAdd: string[], toRemove: string[]) => {
-            const q = assignModalEmp.qualifiedDepartmentIds.includes(waId) ? assignModalEmp.qualifiedDepartmentIds : [waId, ...assignModalEmp.qualifiedDepartmentIds];
-            onUpdate(assignModalEmp.id, { homeDepartmentId: waId, qualifiedDepartmentIds: q });
+            const qualified = getEmployeeQualifiedWorkAreaIds(assignModalEmp);
+            const q = qualified.includes(waId) ? qualified : [waId, ...qualified];
+            onUpdate(assignModalEmp.id, { homeDepartmentId: waId });
+            onSetQualifiedWorkAreas(assignModalEmp.id, q);
             toAdd.forEach((sid) => onAssignToStation(assignModalEmp.id, sid));
             toRemove.forEach((sid) => onUnassignFromStation(assignModalEmp.id, sid));
             setAssignModalEmp(null);
@@ -1162,25 +395,6 @@ export function AssignmentSidebar({
             onUnassignAll(assignModalEmp.id);
           }}
           onClose={() => setAssignModalEmp(null)}
-        />
-      )}
-
-      {showRosterManage && (
-        <RosterManageModal
-          employees={employees}
-          statuses={statuses}
-          assignments={assignments}
-          stations={stations}
-          workAreas={workAreas}
-          statusConfigs={statusConfigs}
-          onAdd={onAdd}
-          onRemove={onRemove}
-          onUpdate={onUpdate}
-          onStatusChange={onStatusChange}
-          onUnassignAll={onUnassignAll}
-          onAssignToStation={onAssignToStation}
-          onUnassignFromStation={onUnassignFromStation}
-          onClose={() => setShowRosterManage(false)}
         />
       )}
 

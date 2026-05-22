@@ -4,13 +4,15 @@ import React from "react";
 import type { Employee } from "../types";
 import type { ModeCode, ShiftCode } from "../types";
 
-export function EmployeeCard({ employee, stationId, shiftCode, modeCode, onRemove, loanInfo }: {
+export function EmployeeCard({ employee, stationId, shiftCode, modeCode, onRemove, loanInfo, onDoubleClick, statusCode }: {
   employee: Employee;
   stationId: string;
   shiftCode: ShiftCode;
   modeCode: ModeCode;
   onRemove: () => void;
   loanInfo?: { isLoanedIn: boolean; homeWaName?: string };
+  onDoubleClick?: () => void;
+  statusCode?: string;
 }) {
   const handleDragStart = (e: React.DragEvent) => {
     e.stopPropagation();
@@ -35,28 +37,63 @@ export function EmployeeCard({ employee, stationId, shiftCode, modeCode, onRemov
     setTimeout(() => document.body.removeChild(ghost), 0);
   };
 
+  const isInjured = statusCode === "injured";
+
+  const statusAccentColor: Record<string, string> = {
+    injured:  "#fb923c",
+    training: "#a78bfa",
+  };
+  const loanAccent = "#60a5fa";
+  const isLoaned = loanInfo?.isLoanedIn ?? false;
+
+  const nonDefaults: string[] = [];
+  if (statusCode && statusAccentColor[statusCode]) nonDefaults.push(statusAccentColor[statusCode]);
+  if (isLoaned) nonDefaults.push(loanAccent);
+
+  const barStyle =
+    nonDefaults.length === 0 ? { backgroundColor: "#4ade80" } :
+    nonDefaults.length === 1 ? { backgroundColor: nonDefaults[0] } :
+    { background: `linear-gradient(to bottom, ${nonDefaults[0]} 50%, ${nonDefaults[1]} 50%)` };
+
+  type SubtitlePart = string | { dot: string; label: string };
+  const subtitleParts: SubtitlePart[] = [
+    isInjured ? "Injured" : null,
+    employee.temporary ? "Temporary" : null,
+    loanInfo?.isLoanedIn && loanInfo.homeWaName ? `from ${loanInfo.homeWaName}` : null,
+  ].filter((x): x is string => x !== null);
+
   return (
     <div
       draggable
       onDragStart={handleDragStart}
-      className="group flex cursor-grab flex-col gap-0.5 rounded-md bg-white/60 px-3 py-2 text-sm shadow-sm backdrop-blur-sm active:cursor-grabbing"
+      onDoubleClick={onDoubleClick}
+      className="group/empcard relative flex cursor-grab flex-col rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm active:cursor-grabbing overflow-hidden"
     >
+      <span
+        className="absolute left-0 top-0 bottom-0 w-0.5"
+        style={barStyle}
+      />
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          <p className="font-bold text-slate-600 truncate">{employee.full_name}</p>
-          {employee.temporary && (
-            <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-amber-50 text-amber-600 border border-amber-200">
-              Temp
-            </span>
-          )}
+          <p className="font-bold text-slate-700 truncate">{employee.full_name}</p>
         </div>
-        <button onClick={onRemove} className="invisible shrink-0 rounded px-1 text-xs text-slate-400 transition-colors group-hover:visible hover:bg-slate-100 hover:text-slate-700">
+        <button onClick={onRemove} className="invisible shrink-0 rounded px-1 text-xs text-slate-400 transition-colors group-hover/empcard:visible hover:bg-slate-100 hover:text-slate-700">
           ×
         </button>
       </div>
-      {loanInfo?.isLoanedIn && loanInfo.homeWaName && (
-        <p className="text-[10px] font-medium text-blue-500">
-          ↙ From {loanInfo.homeWaName}
+      {subtitleParts.length > 0 && (
+        <p className="flex items-center gap-1 text-[11px] text-slate-400">
+          {subtitleParts.map((part, i) => (
+            <span key={i} className="flex items-center gap-1">
+              {i > 0 && <span>·</span>}
+              {typeof part === "string" ? part : (
+                <span className="flex items-center gap-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: part.dot }} />
+                  {part.label}
+                </span>
+              )}
+            </span>
+          ))}
         </p>
       )}
     </div>

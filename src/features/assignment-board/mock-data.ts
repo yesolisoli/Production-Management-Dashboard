@@ -9,7 +9,7 @@ import type {
   WorkArea,
 } from "./types";
 
-export const mockWorkDate = "2026-04-16";
+const mockWorkDate = "2026-04-16";
 
 export const mockShifts: ShiftInfo[] = [
   { code: "shift_1", label: "1st Shift", time_range: "05:00-07:30" },
@@ -194,7 +194,7 @@ export const mockEmployees: Employee[] = [
   { id: "emp_16",  employee_code: "E016", full_name: "Tommy Larsen",     homeDepartmentId: "wa_meat",        qualifiedDepartmentIds: ["wa_meat", "wa_packaging"],             active: true, gender: "M", level: 2 },
   { id: "emp_17",  employee_code: "E017", full_name: "Fatima Al-Hassan", homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing"],                       active: true, gender: "F", level: 2 },
   { id: "emp_18",  employee_code: "E018", full_name: "David Park",       homeDepartmentId: "wa_packaging",   qualifiedDepartmentIds: ["wa_packaging"],                        active: true, gender: "M", level: 1 },
-  { id: "emp_19",  employee_code: "E019", full_name: "Nina Petrov",      homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_meat"],                 active: true, gender: "F", level: 2, activeDepartmentIds: ["wa_small", "wa_meat"] },
+  { id: "emp_19",  employee_code: "E019", full_name: "Nina Petrov",      homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_meat"],                 active: true, gender: "F", level: 2 },
   { id: "emp_20",  employee_code: "E020", full_name: "Marcus Williams",  homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading"],                          active: true, gender: "M", level: 3 },
   // Loading Dock
   { id: "emp_21",  employee_code: "E021", full_name: "Kevin O'Brien",    homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading"],                          active: true, gender: "M", level: 2 },
@@ -204,14 +204,14 @@ export const mockEmployees: Employee[] = [
   { id: "emp_25",  employee_code: "E025", full_name: "Yemi Adeyemi",     homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading"],                          active: true, gender: "M", level: 2 },
   // Small Pro
   { id: "emp_26",  employee_code: "E026", full_name: "Grace Kim",        homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_loading"],              active: true, gender: "F", level: 2 },
-  { id: "emp_27",  employee_code: "E027", full_name: "Marco Silva",      homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_packaging"],            active: true, gender: "M", level: 1, activeDepartmentIds: ["wa_small", "wa_packaging"] },
-  { id: "emp_28",  employee_code: "E028", full_name: "Olga Marchetti",   homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_meat"],                 active: true, gender: "F", level: 3, activeDepartmentIds: ["wa_small", "wa_meat"] },
+  { id: "emp_27",  employee_code: "E027", full_name: "Marco Silva",      homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_packaging"],            active: true, gender: "M", level: 1 },
+  { id: "emp_28",  employee_code: "E028", full_name: "Olga Marchetti",   homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_meat"],                 active: true, gender: "F", level: 3 },
   { id: "emp_29",  employee_code: "E029", full_name: "Ben Okafor",       homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small"],                            active: true, gender: "M", level: 1 },
-  { id: "emp_30",  employee_code: "E030", full_name: "Chloe Dupont",     homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_packaging"],            active: true, gender: "F", level: 2, activeDepartmentIds: ["wa_small", "wa_packaging"] },
+  { id: "emp_30",  employee_code: "E030", full_name: "Chloe Dupont",     homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_packaging"],            active: true, gender: "F", level: 2 },
   // Processing Floor
-  { id: "emp_31",  employee_code: "E031", full_name: "Victor Hernandez", homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_packaging"],       active: true, gender: "M", level: 3, activeDepartmentIds: ["wa_processing", "wa_packaging"] },
+  { id: "emp_31",  employee_code: "E031", full_name: "Victor Hernandez", homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_packaging"],       active: true, gender: "M", level: 3 },
   { id: "emp_32",  employee_code: "E032", full_name: "Amara Diallo",     homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing"],                       active: true, gender: "F", level: 1 },
-  { id: "emp_33",  employee_code: "E033", full_name: "Patrick Walsh",    homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_small"],           active: true, gender: "M", level: 2, activeDepartmentIds: ["wa_processing", "wa_small"] },
+  { id: "emp_33",  employee_code: "E033", full_name: "Patrick Walsh",    homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_small"],           active: true, gender: "M", level: 2 },
   { id: "emp_34",  employee_code: "E034", full_name: "Yuki Tanaka",      homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing"],                       active: true, gender: "M", level: 2 },
   { id: "emp_35",  employee_code: "E035", full_name: "Rosa Gutierrez",   homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing"],                       active: true, gender: "F", level: 1 },
   { id: "emp_36",  employee_code: "E036", full_name: "Ivan Sokolov",     homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing"],                       active: true, gender: "M", level: 2 },
@@ -236,7 +236,7 @@ export const mockEmployees: Employee[] = [
   { id: "emp_52",  employee_code: "E052", full_name: "Andre Laurent",    homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading", "wa_small"],              active: true, gender: "M", level: 2 },
   { id: "emp_53",  employee_code: "E053", full_name: "Kenji Yamamoto",   homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading"],                          active: true, gender: "M", level: 3 },
   { id: "emp_54",  employee_code: "E054", full_name: "Fatou Diop",       homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading"],                          active: true, gender: "F", level: 1 },
-  { id: "emp_55",  employee_code: "E055", full_name: "Bogdan Ionescu",   homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading", "wa_meat"],               active: true, gender: "M", level: 2, activeDepartmentIds: ["wa_loading", "wa_meat"] },
+  { id: "emp_55",  employee_code: "E055", full_name: "Bogdan Ionescu",   homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading", "wa_meat"],               active: true, gender: "M", level: 2 },
   { id: "emp_56",  employee_code: "E056", full_name: "Soo-Jin Lee",      homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading"],                          active: true, gender: "F", level: 2 },
   { id: "emp_57",  employee_code: "E057", full_name: "Bruno Ferreira",   homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading"],                          active: true, gender: "M", level: 1 },
   { id: "emp_58",  employee_code: "E058", full_name: "Ingrid Hansen",    homeDepartmentId: "wa_loading",     qualifiedDepartmentIds: ["wa_loading"],                          active: true, gender: "F", level: 2 },
@@ -253,23 +253,23 @@ export const mockEmployees: Employee[] = [
   { id: "emp_68",  employee_code: "E068", full_name: "Filippo Romano",   homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small"],                            active: true, gender: "M", level: 1 },
   { id: "emp_69",  employee_code: "E069", full_name: "Amina Barry",      homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small"],                            active: true, gender: "F", level: 2 },
   { id: "emp_70",  employee_code: "E070", full_name: "Sienna Walsh",     homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small"],                            active: true, gender: "F", level: 1 },
-  { id: "emp_71",  employee_code: "E071", full_name: "Hamid Nazari",     homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_packaging"],            active: true, gender: "M", level: 3, activeDepartmentIds: ["wa_small", "wa_packaging"] },
+  { id: "emp_71",  employee_code: "E071", full_name: "Hamid Nazari",     homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small", "wa_packaging"],            active: true, gender: "M", level: 3 },
   { id: "emp_72",  employee_code: "E072", full_name: "Piotr Kowalczyk",  homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small"],                            active: true, gender: "M", level: 2 },
   { id: "emp_73",  employee_code: "E073", full_name: "Selene Martin",    homeDepartmentId: "wa_small",       qualifiedDepartmentIds: ["wa_small"],                            active: true, gender: "F", level: 1 },
   // Processing Floor
-  { id: "emp_74",  employee_code: "E074", full_name: "Takeshi Mori",     homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_meat"],            active: true, gender: "M", level: 3, activeDepartmentIds: ["wa_processing", "wa_meat"] },
+  { id: "emp_74",  employee_code: "E074", full_name: "Takeshi Mori",     homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_meat"],            active: true, gender: "M", level: 3 },
   { id: "emp_75",  employee_code: "E075", full_name: "Abebe Bekele",     homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing"],                       active: true, gender: "M", level: 2 },
   { id: "emp_76",  employee_code: "E076", full_name: "Caitlin Murphy",   homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing"],                       active: true, gender: "F", level: 1 },
   { id: "emp_77",  employee_code: "E077", full_name: "Rafael Herrera",   homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_loading"],         active: true, gender: "M", level: 2 },
   { id: "emp_78",  employee_code: "E078", full_name: "Helga Lindqvist",  homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing"],                       active: true, gender: "F", level: 3 },
-  { id: "emp_79",  employee_code: "E079", full_name: "Moussa Coulibaly", homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_meat"],            active: true, gender: "M", level: 1, activeDepartmentIds: ["wa_processing", "wa_meat"] },
+  { id: "emp_79",  employee_code: "E079", full_name: "Moussa Coulibaly", homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_meat"],            active: true, gender: "M", level: 1 },
   { id: "emp_80",  employee_code: "E080", full_name: "Jing Wei",         homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing"],                       active: true, gender: "F", level: 2 },
-  { id: "emp_81",  employee_code: "E081", full_name: "Tobias Krause",    homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_meat"],            active: true, gender: "M", level: 2, activeDepartmentIds: ["wa_processing", "wa_meat"] },
+  { id: "emp_81",  employee_code: "E081", full_name: "Tobias Krause",    homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_meat"],            active: true, gender: "M", level: 2 },
   { id: "emp_82",  employee_code: "E082", full_name: "Zanele Mokoena",   homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_small"],           active: true, gender: "F", level: 1 },
   { id: "emp_83",  employee_code: "E083", full_name: "Guillermo Perez",  homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing"],                       active: true, gender: "M", level: 3 },
-  { id: "emp_84",  employee_code: "E084", full_name: "Nora Strand",      homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_meat"],            active: true, gender: "F", level: 2, activeDepartmentIds: ["wa_processing", "wa_meat"] },
+  { id: "emp_84",  employee_code: "E084", full_name: "Nora Strand",      homeDepartmentId: "wa_processing",  qualifiedDepartmentIds: ["wa_processing", "wa_meat"],            active: true, gender: "F", level: 2 },
   // Meat Cutting
-  { id: "emp_85",  employee_code: "E085", full_name: "Raj Sharma",       homeDepartmentId: "wa_meat",        qualifiedDepartmentIds: ["wa_meat", "wa_packaging"],             active: true, gender: "M", level: 3, activeDepartmentIds: ["wa_meat", "wa_packaging"] },
+  { id: "emp_85",  employee_code: "E085", full_name: "Raj Sharma",       homeDepartmentId: "wa_meat",        qualifiedDepartmentIds: ["wa_meat", "wa_packaging"],             active: true, gender: "M", level: 3 },
   { id: "emp_86",  employee_code: "E086", full_name: "Ekaterina Ivanova",homeDepartmentId: "wa_meat",        qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "F", level: 2 },
   { id: "emp_87",  employee_code: "E087", full_name: "Ismail Traore",    homeDepartmentId: "wa_meat",        qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "M", level: 1 },
   { id: "emp_88",  employee_code: "E088", full_name: "Carmen Flores",    homeDepartmentId: "wa_meat",        qualifiedDepartmentIds: ["wa_meat", "wa_processing"],            active: true, gender: "F", level: 2 },
@@ -277,7 +277,7 @@ export const mockEmployees: Employee[] = [
   { id: "emp_90",  employee_code: "E090", full_name: "Adaeze Eze",       homeDepartmentId: "wa_meat",        qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "F", level: 1 },
   { id: "emp_91",  employee_code: "E091", full_name: "Stefan Weber",     homeDepartmentId: "wa_meat",        qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "M", level: 2 },
   // Packaging
-  { id: "emp_92",  employee_code: "E092", full_name: "Layla Mahmoud",    homeDepartmentId: "wa_packaging",   qualifiedDepartmentIds: ["wa_packaging", "wa_loading"],          active: true, gender: "F", level: 2, activeDepartmentIds: ["wa_packaging", "wa_loading"] },
+  { id: "emp_92",  employee_code: "E092", full_name: "Layla Mahmoud",    homeDepartmentId: "wa_packaging",   qualifiedDepartmentIds: ["wa_packaging", "wa_loading"],          active: true, gender: "F", level: 2 },
   { id: "emp_93",  employee_code: "E093", full_name: "Chidi Okeke",      homeDepartmentId: "wa_packaging",   qualifiedDepartmentIds: ["wa_packaging"],                        active: true, gender: "M", level: 1 },
   { id: "emp_94",  employee_code: "E094", full_name: "Astrid Larsen",    homeDepartmentId: "wa_packaging",   qualifiedDepartmentIds: ["wa_packaging"],                        active: true, gender: "F", level: 3 },
   { id: "emp_95",  employee_code: "E095", full_name: "Felipe Castillo",  homeDepartmentId: "wa_packaging",   qualifiedDepartmentIds: ["wa_packaging"],                        active: true, gender: "M", level: 2 },
@@ -406,7 +406,6 @@ export const mockEmployees: Employee[] = [
   { id: "emp_210", employee_code: "E210", full_name: "Zara Osei",         homeDepartmentId: "wa_packaging",  qualifiedDepartmentIds: ["wa_packaging"],                        active: true, gender: "F", level: 2 },
   // Meat Cutting (new batch)
   { id: "emp_211", employee_code: "E211", full_name: "Tomasz Kowalski",   homeDepartmentId: "wa_meat",       qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "M", level: 2 },
-  { id: "emp_212", employee_code: "E212", full_name: "Amara Diallo",      homeDepartmentId: "wa_meat",       qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "F", level: 1 },
   { id: "emp_213", employee_code: "E213", full_name: "Hiroshi Nakamura",  homeDepartmentId: "wa_meat",       qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "M", level: 3 },
   { id: "emp_214", employee_code: "E214", full_name: "Fatou Sow",         homeDepartmentId: "wa_meat",       qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "F", level: 2 },
   { id: "emp_215", employee_code: "E215", full_name: "Brendan Walsh",     homeDepartmentId: "wa_meat",       qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "M", level: 1 },
@@ -417,20 +416,17 @@ export const mockEmployees: Employee[] = [
   { id: "emp_220", employee_code: "E220", full_name: "Anya Petrova",      homeDepartmentId: "wa_meat",       qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "F", level: 3 },
   // Supervisors
   { id: "emp_221", employee_code: "E221", full_name: "Darko Pavić",       homeDepartmentId: "wa_meat",       qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "M", level: 3 },
-  { id: "emp_222", employee_code: "E222", full_name: "Chisom Eze",        homeDepartmentId: "wa_meat",       qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "F", level: 3 },
   { id: "emp_223", employee_code: "E223", full_name: "Mikael Lindgren",   homeDepartmentId: "wa_meat",       qualifiedDepartmentIds: ["wa_meat"],                             active: true, gender: "M", level: 3 },
   { id: "emp_224", employee_code: "E224", full_name: "Rosaline Boateng",  homeDepartmentId: "wa_packaging",  qualifiedDepartmentIds: ["wa_packaging"],                        active: true, gender: "F", level: 3 },
   // Loan employees → Meat Cutting shift_2
-  { id: "emp_225", employee_code: "E225", full_name: "Luca Ferretti",     homeDepartmentId: "wa_packaging", qualifiedDepartmentIds: ["wa_packaging", "wa_processing", "wa_meat"], activeDepartmentIds: [], active: true, gender: "M", level: 2 },
-  { id: "emp_226", employee_code: "E226", full_name: "Priya Nair",        homeDepartmentId: "wa_packaging", qualifiedDepartmentIds: ["wa_packaging", "wa_processing", "wa_meat"], activeDepartmentIds: [], active: true, gender: "F", level: 2 },
+  { id: "emp_226", employee_code: "E226", full_name: "Priya Nair",        homeDepartmentId: "wa_packaging", qualifiedDepartmentIds: ["wa_packaging", "wa_processing", "wa_meat"], active: true, gender: "F", level: 2 },
   { id: "emp_227", employee_code: "E227", full_name: "Tobias Gruber",     homeDepartmentId: "wa_small",      qualifiedDepartmentIds: ["wa_small", "wa_meat"],                 active: true, gender: "M", level: 1 },
   { id: "emp_228", employee_code: "E228", full_name: "Adeola Fashola",    homeDepartmentId: "wa_small",      qualifiedDepartmentIds: ["wa_small", "wa_meat"],                 active: true, gender: "F", level: 2 },
-  { id: "emp_229", employee_code: "E229", full_name: "Reuben Mwangi",     homeDepartmentId: "wa_packaging", qualifiedDepartmentIds: ["wa_packaging", "wa_processing", "wa_meat"], activeDepartmentIds: [], active: true, gender: "M", level: 1 },
-  { id: "emp_230", employee_code: "E230", full_name: "Solange Dupont",    homeDepartmentId: "wa_packaging",  qualifiedDepartmentIds: ["wa_packaging", "wa_meat"],             activeDepartmentIds: [], active: true, gender: "F", level: 2 },
-  { id: "emp_231", employee_code: "E231", full_name: "Yusuf Adeyemi",     homeDepartmentId: "wa_packaging", qualifiedDepartmentIds: ["wa_packaging", "wa_processing", "wa_meat"], activeDepartmentIds: [], active: true, gender: "M", level: 2 },
+  { id: "emp_229", employee_code: "E229", full_name: "Reuben Mwangi",     homeDepartmentId: "wa_packaging", qualifiedDepartmentIds: ["wa_packaging", "wa_processing", "wa_meat"], active: true, gender: "M", level: 1 },
+  { id: "emp_230", employee_code: "E230", full_name: "Solange Dupont",    homeDepartmentId: "wa_packaging",  qualifiedDepartmentIds: ["wa_packaging", "wa_meat"],             active: true, gender: "F", level: 2 },
+  { id: "emp_231", employee_code: "E231", full_name: "Yusuf Adeyemi",     homeDepartmentId: "wa_packaging", qualifiedDepartmentIds: ["wa_packaging", "wa_processing", "wa_meat"], active: true, gender: "M", level: 2 },
   { id: "emp_232", employee_code: "E232", full_name: "Nastja Kovač",      homeDepartmentId: "wa_small",      qualifiedDepartmentIds: ["wa_small", "wa_meat"],                 active: true, gender: "F", level: 1 },
   { id: "emp_233", employee_code: "E233", full_name: "Ciarán Doyle",      homeDepartmentId: "wa_loading",    qualifiedDepartmentIds: ["wa_loading", "wa_meat"],               active: true, gender: "M", level: 2 },
-  { id: "emp_234", employee_code: "E234", full_name: "Nkechi Obi",        homeDepartmentId: "wa_packaging",  qualifiedDepartmentIds: ["wa_packaging", "wa_meat"],             activeDepartmentIds: [], active: true, gender: "F", level: 1 },
 ];
 
 export const mockEmployeeStatuses: EmployeeDailyStatus[] = [
@@ -461,15 +457,14 @@ function mkA(
   shift: string,
   mode: string,
 ): StationAssignment {
-  const station = mockStations.find((s) => s.id === stationId)!;
   return {
     id,
     employee_id: empId,
     station_id: stationId,
+    work_area_id: null,
     work_date: date,
     shift_code: shift as ShiftCode,
     mode_code: mode as ModeCode,
-    activeDepartmentId: station.work_area_id,
   };
 }
 
@@ -490,12 +485,8 @@ export const mockAssignments: StationAssignment[] = [
   // Small Pro
   mkA("a9",  "emp_6",  "st_small_slab_off",     D, "shift_1", "normal"),
   // Meat Cutting - hog_break
-  mkA("a10", "emp_7",  "st_meat_saw",           D, "shift_1", "hog_break"),
-  mkA("a11", "emp_4",  "st_meat_saw",           D, "shift_2", "hog_break"),
   mkA("a12", "emp_3",  "st_meat_neck_bones",    D, "shift_1", "hog_break"),
   // Meat Cutting - after_hog_break
-  mkA("a13", "emp_7",  "st_ahb_meat_saw",       D, "shift_1", "after_hog_break"),
-  mkA("a14", "emp_4",  "st_ahb_meat_proof",     D, "shift_2", "after_hog_break"),
   mkA("a15", "emp_3",  "st_ahb_meat_saw",       D, "shift_2", "after_hog_break"),
   // Processing Floor
   mkA("a16", "emp_11", "st_proc_barn_setup",    D, "shift_1", "normal"),
@@ -635,7 +626,7 @@ export const mockAssignments: StationAssignment[] = [
   mkA("a_loan_1", "emp_79", "st_meat_saw",        D, "shift_3", "hog_break"),
   mkA("a_loan_2", "emp_81", "st_meat_neck_bones", D, "shift_3", "hog_break"),
   mkA("a_loan_3", "emp_84", "st_meat_skinner",    D, "shift_3", "hog_break"),
-  // Cross-dept loans (isLoaned derived: activeDepartmentId !== employee.homeDepartmentId)
+  // Cross-dept loans
   mkA("a_loan_6", "emp_85", "st_pack_vac_pac_bag",    D, "shift_1", "hog_break"),       // Raj Sharma (wa_meat) → Packaging
   mkA("a_loan_8", "emp_92", "st_loading_helper_5",    D, "shift_3", "normal"),           // Layla Mahmoud (wa_packaging) → Loading
   mkA("a_loan_9", "emp_33", "st_small_slab_jalapeno", D, "shift_3", "normal"),           // Patrick Walsh (wa_processing) → Small Pro
@@ -812,7 +803,6 @@ export const mockAssignments: StationAssignment[] = [
   // Meat Cutting - emp_211-220 (hog_break + after_hog_break)
   mkA("a_new_192", "emp_211", "st_meat_saw",            D, "shift_1", "hog_break"),
   mkA("a_new_193", "emp_211", "st_ahb_meat_saw",        D, "shift_1", "after_hog_break"),
-  mkA("a_new_195", "emp_212", "st_ahb_meat_proof",      D, "shift_2", "after_hog_break"),
   mkA("a_new_196", "emp_213", "st_meat_proof",          D, "shift_3", "hog_break"),
   mkA("a_new_197", "emp_213", "st_ahb_meat_rib",        D, "shift_3", "after_hog_break"),
   mkA("a_new_198", "emp_214", "st_meat_skinner",        D, "shift_1", "hog_break"),
@@ -832,13 +822,10 @@ export const mockAssignments: StationAssignment[] = [
   // Meat Cutting supervisors - all 3 shifts
   mkA("a_sup_1",  "emp_221", "st_meat_supervisor",     D, "shift_1", "hog_break"),
   mkA("a_sup_2",  "emp_221", "st_ahb_meat_supervisor", D, "shift_1", "after_hog_break"),
-  mkA("a_sup_3",  "emp_222", "st_meat_supervisor",     D, "shift_2", "hog_break"),
-  mkA("a_sup_4",  "emp_222", "st_ahb_meat_supervisor", D, "shift_2", "after_hog_break"),
   mkA("a_sup_5",  "emp_223", "st_meat_supervisor",     D, "shift_3", "hog_break"),
   mkA("a_sup_6",  "emp_223", "st_ahb_meat_supervisor", D, "shift_3", "after_hog_break"),
   // HOG_BREAK loans → Meat Cutting shift_2 (emp_225-234)
   mkA("a_loan_36", "emp_230", "st_ahb_pack_downstairs", D, "shift_2", "after_hog_break"),
-  mkA("a_loan_44", "emp_234", "st_ahb_pack_cleanup",   D, "shift_2", "after_hog_break"),
   // Fill previously unassigned employees into empty stations
   mkA("a_fill_1",  "emp_50",  "st_supervisor",           D, "shift_3", "hog_break"),
   mkA("a_fill_2",  "emp_151", "st_lead",                 D, "shift_2", "hog_break"),

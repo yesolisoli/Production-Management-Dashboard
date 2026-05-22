@@ -2,13 +2,11 @@
 
 import clsx from "clsx";
 import { Megaphone, Monitor } from "lucide-react";
-import { useDashboardUserEmail } from "./dashboard-user-context";
 
 type AppHeaderProps = {
   actions?: React.ReactNode;
   description?: string;
   eyebrow?: string;
-  showUserBadge?: boolean;
   title: string;
   variant?: "default" | "hero";
 };
@@ -17,13 +15,9 @@ export function AppHeader({
   actions,
   description,
   eyebrow,
-  showUserBadge,
   title,
   variant = "default",
 }: AppHeaderProps) {
-  const userEmail = useDashboardUserEmail();
-  const shouldShowUserBadge = showUserBadge ?? variant === "default";
-
   return (
     <header
       className={clsx(
@@ -74,15 +68,9 @@ export function AppHeader({
           ) : null}
         </div>
 
-        {(actions || shouldShowUserBadge) && (
+        {actions && (
           <div className="flex shrink-0 items-center gap-3">
             {actions}
-
-            {shouldShowUserBadge ? (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500 text-sm font-semibold text-white">
-                {(userEmail.slice(0, 2) || "JP").toUpperCase()}
-              </div>
-            ) : null}
           </div>
         )}
       </div>

@@ -48,14 +48,12 @@ export function StationSelect({ employeeId, qualifiedDepartmentIds, assignments,
             if (waStations.length === 0) return null;
             return (
               <div key={wa.id}>
-                {deptWas.length > 1 && (
-                  <div
-                    className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${waIdx > 0 ? "border-t-2 border-slate-300" : ""}`}
-                    style={{ color: wa.color_hex ?? "#475569" }}
-                  >
-                    {wa.name}
-                  </div>
-                )}
+                <div
+                  className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${waIdx > 0 ? "border-t-2 border-slate-300" : ""}`}
+                  style={{ color: wa.color_hex ?? "#475569" }}
+                >
+                  {wa.name}
+                </div>
                 {waStations.map((s) => {
                   const assigned = assignedIds.has(s.id);
                   const waColor = wa.color_hex ?? "#475569";
