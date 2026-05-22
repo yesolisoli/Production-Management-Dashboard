@@ -11,7 +11,7 @@ export function WorkAreaModal({ initial, onClose, onSave, onDelete }: {
   onDelete?: () => void;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [color, setColor] = useState(initial?.color_hex ?? "#334155");
+  const [color, setColor] = useState(initial?.color_hex ?? "#0F172A");
   const [hasModes, setHasModes] = useState(!!(initial?.mode_views?.length));
   const [modeLabels, setModeLabels] = useState<[string, string]>([
     initial?.mode_views?.[0]?.label ?? "Hog Break",

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Modal } from "@/components/shared/modal";
-import { StatusSelect, STATUS_CODE_AVAILABLE, STATUS_CODE_ASSIGNED, type StatusConfig } from "../status-select";
+import { StatusSelect, STATUS_CODE_AVAILABLE, type StatusConfig } from "../status-select";
 import { MultiFilterSelect } from "../multi-filter-select";
 import { DeptSelect } from "../dept-select";
 import { ActiveDeptSelect } from "../active-dept-select";
@@ -82,11 +82,6 @@ export function RosterManageModal({
   );
 
   const getStatus = (id: string): EmployeeStatus => statuses[id] ?? STATUS_CODE_AVAILABLE;
-  const getDisplayStatus = (emp: Employee): EmployeeStatus => {
-    const s = getStatus(emp.id);
-    if (s === STATUS_CODE_AVAILABLE && emp.homeDepartmentId !== null) return STATUS_CODE_ASSIGNED;
-    return s;
-  };
 
   const active = employees.filter((e) => e.active);
 
@@ -135,7 +130,7 @@ export function RosterManageModal({
         const bOrder = workAreas.find((w) => w.id === b.homeDepartmentId)?.display_order ?? 999;
         cmp = aOrder - bOrder;
       }
-      else if (sortKey === "status") cmp = getDisplayStatus(a).localeCompare(getDisplayStatus(b));
+      else if (sortKey === "status") cmp = getStatus(a.id).localeCompare(getStatus(b.id));
       else if (sortKey === "level") cmp = (a.level ?? 0) - (b.level ?? 0);
       else if (sortKey === "gender") cmp = (a.gender ?? "").localeCompare(b.gender ?? "");
       return sortDir === "asc" ? cmp : -cmp;
@@ -169,13 +164,17 @@ export function RosterManageModal({
       width="w-[calc(100vw-4rem)] max-w-[1300px]"
       footer={
         <div className="flex items-center gap-2">
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
-            placeholder="New employee name..."
-            className="flex-1 rounded-md border px-3 py-2 text-sm"
-          />
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-base font-medium text-slate-400">+</span>
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+              placeholder="New employee name..."
+              autoFocus={employees.length === 0}
+              className="w-full rounded-md border py-2 pl-8 pr-3 text-sm"
+            />
+          </div>
           <DeptSelect
             homeDepartmentId={newDeptId || null}
             workAreas={workAreas}
@@ -203,7 +202,7 @@ export function RosterManageModal({
         />
         <MultiFilterSelect
           placeholder="Status"
-          options={statusConfigs.filter((c) => c.code !== STATUS_CODE_ASSIGNED).map((c) => ({ value: c.code, label: c.label }))}
+          options={statusConfigs.map((c) => ({ value: c.code, label: c.label }))}
           selected={filterStatus}
           onChange={setFilterStatus}
         />
@@ -261,7 +260,19 @@ export function RosterManageModal({
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-10 text-center text-sm text-slate-400">No employees found</td>
+                <td colSpan={9} className="py-10 text-center text-sm text-slate-400">
+                  {employees.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="font-medium text-slate-600">No employees yet</span>
+                      <span className="text-xs text-slate-400">
+                        Type a name in the input below and click <span className="font-semibold text-slate-600">+ Add</span> to create your first employee.
+                      </span>
+                      <span className="mt-1 text-lg text-slate-300">↓</span>
+                    </div>
+                  ) : (
+                    "No employees found"
+                  )}
+                </td>
               </tr>
             )}
             {[...filtered.filter((e) => pinnedNewIds.has(e.id)), ...filtered.filter((e) => !pinnedNewIds.has(e.id))].map((emp) => {

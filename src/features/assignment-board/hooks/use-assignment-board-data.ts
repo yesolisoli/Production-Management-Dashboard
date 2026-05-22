@@ -680,6 +680,39 @@ export function useAssignmentBoardData() {
       void restoreShiftsFromDb("handleAddShift");
     });
 
+    const wa = workAreas.find((w) => w.id === workAreaId);
+    const waHasModes = (wa?.mode_views?.length ?? 0) > 0;
+    const stationsInScope = stations.filter((s) => {
+      if (s.work_area_id !== workAreaId) return false;
+      if (!waHasModes) return true;
+      return ((s.mode_code as ModeCode | undefined) ?? DEFAULT_MODE_CODE) === modeCode;
+    });
+    if (stationsInScope.length === 0) {
+      const supervisorId = `st_${crypto.randomUUID()}`;
+      const supervisorStation: Station = {
+        id: supervisorId,
+        work_area_id: workAreaId,
+        name: "Supervisor",
+        required_headcount: 1,
+        display_order: 0,
+        protected: true,
+        ...(waHasModes ? { mode_code: modeCode } : {}),
+      };
+      setStations((prev) => [...prev, supervisorStation]);
+      void insertStation({
+        id: supervisorId,
+        workAreaId,
+        name: "Supervisor",
+        requiredHeadcount: 1,
+        displayOrder: 0,
+        protected: true,
+        modeCode: waHasModes ? modeCode : undefined,
+      }).catch((error) => {
+        reportSaveError("Failed to auto-create supervisor station", error);
+        void restoreStationsFromDb("handleAddShift supervisor");
+      });
+    }
+
     stations
       .filter((s) => {
         if (s.work_area_id !== workAreaId || !s.defaultEmployeeId) return false;
@@ -837,36 +870,6 @@ export function useAssignmentBoardData() {
       mode_views: modeViews.length ? modeViews : undefined,
     };
     setWorkAreas((prev) => [...prev, newWa]);
-    const hasModes = modeViews.length > 0;
-    const seedModeCodes: ModeCode[] = hasModes
-      ? (modeViews.map((mv) => mv.mode_code) as ModeCode[])
-      : [DEFAULT_MODE_CODE];
-    const seedPerMode = {} as Record<ModeCode, ShiftInfo[]>;
-    for (const modeCode of seedModeCodes) {
-      seedPerMode[modeCode] = defaultShiftTemplate.map((s) => ({ ...s }));
-    }
-    setWorkAreaShifts((prev) => ({ ...prev, [newId]: seedPerMode }));
-    const defaultStations: Station[] = hasModes
-      ? modeViews.flatMap((mv) =>
-          ["Station 1", "Station 2", "Station 3"].map((stName, i) => ({
-            id: `st_${crypto.randomUUID()}`,
-            work_area_id: newId,
-            name: stName,
-            required_headcount: 1,
-            display_order: i + 1,
-            group: "Group 1",
-            mode_code: mv.mode_code as ModeCode,
-          }))
-        )
-      : ["Station 1", "Station 2", "Station 3"].map((stName, i) => ({
-          id: `st_${crypto.randomUUID()}`,
-          work_area_id: newId,
-          name: stName,
-          required_headcount: 1,
-          display_order: i + 1,
-          group: "Group 1",
-        }));
-    setStations((prev) => [...prev, ...defaultStations]);
 
     void (async () => {
       try {
@@ -885,36 +888,9 @@ export function useAssignmentBoardData() {
             timeRange: modeView.time_range,
           })),
         });
-
-        for (const modeCode of seedModeCodes) {
-          for (const [index, shift] of defaultShiftTemplate.entries()) {
-            await insertWorkAreaShift({
-              workAreaId: newId,
-              modeCode,
-              code: shift.code,
-              label: shift.label,
-              timeRange: shift.time_range,
-              displayOrder: index + 1,
-            });
-          }
-        }
-
-        for (const station of defaultStations) {
-          await insertStation({
-            id: station.id,
-            workAreaId: station.work_area_id,
-            name: station.name,
-            requiredHeadcount: station.required_headcount,
-            displayOrder: station.display_order,
-            modeCode: station.mode_code,
-            group: station.group,
-          });
-        }
       } catch (error) {
         reportSaveError("Failed to add work area", error);
         void restoreWorkAreasFromDb("handleAddWorkArea");
-        void restoreShiftsFromDb("handleAddWorkArea");
-        void restoreStationsFromDb("handleAddWorkArea");
       }
     })();
 

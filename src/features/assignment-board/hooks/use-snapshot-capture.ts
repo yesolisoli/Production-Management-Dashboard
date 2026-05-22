@@ -52,6 +52,15 @@ export function useSnapshotCapture(params: {
       const latestEnd = getLatestShiftEndMin(shiftsRef.current);
       if (latestEnd === null) return;
 
+      const snap = snapshotRef.current;
+      if (
+        snap.workAreas.length === 0 ||
+        snap.stations.length === 0 ||
+        snap.employees.length === 0
+      ) {
+        return;
+      }
+
       const now = new Date();
       const nowMin = now.getHours() * 60 + now.getMinutes();
       if (nowMin < latestEnd + GRACE_MIN) return;

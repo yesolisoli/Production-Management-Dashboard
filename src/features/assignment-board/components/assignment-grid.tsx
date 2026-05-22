@@ -22,7 +22,7 @@ import { ShiftModal } from "./modals/shift-modal";
 import { StationModal } from "./modals/station-modal";
 import { WorkAreaModal } from "./modals/work-area-modal";
 
-export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmployeeIds, assignments: assignmentsProp, onAssign: onAssignProp, onUnassign: onUnassignProp, onClearWorkArea, stations: stationsProp, onStationsChange, onAddStation: onAddStationProp, onUpdateStation: onUpdateStationProp, onDeleteStation: onDeleteStationProp, onReorderStation: onReorderStationProp, onAddWorkArea: onAddWorkAreaProp, onUpdateWorkArea: onUpdateWorkAreaProp, onDeleteWorkArea: onDeleteWorkAreaProp, onAddShift: onAddShiftProp, onUpdateShift: onUpdateShiftProp, onDeleteShift: onDeleteShiftProp, workAreas: workAreasProp, onWorkAreasChange, workAreaShifts: workAreaShiftsProp, onWorkAreaShiftsChange, selectedWorkAreaId: selectedWorkAreaIdProp, onWorkAreaChange, defaultShifts: defaultShiftsProp, onEmployeeDoubleClick, statusConfigs }: { employees?: Employee[]; statuses?: Record<string, string>; disabledEmployeeIds?: Set<string>; assignments?: StationAssignment[]; onAssign?: (employeeId: string, stationId: string, shiftCode: ShiftCode, modeCode: ModeCode) => void; onUnassign?: (employeeId: string, stationId: string, shiftCode: ShiftCode, modeCode: ModeCode) => void; onClearWorkArea?: (workAreaId: string) => void; stations?: Station[]; onStationsChange?: (s: Station[]) => void; onAddStation?: (params: { workAreaId: string; name: string; group?: string; genderRestriction?: "M" | "F"; defaultEmployeeId?: string; modeCode: ModeCode }) => void; onUpdateStation?: (stationId: string, params: { name: string; group?: string; genderRestriction?: "M" | "F"; defaultEmployeeId?: string }) => void; onDeleteStation?: (stationId: string) => void; onReorderStation?: (draggedStationId: string, targetStationId: string) => void; onAddWorkArea?: (name: string, color: string, modeViews: WorkAreaModeView[]) => string; onUpdateWorkArea?: (id: string, name: string, color: string, modeViews: WorkAreaModeView[]) => void; onDeleteWorkArea?: (workAreaId: string) => void; onAddShift?: (workAreaId: string, modeCode: ModeCode, label: string, startTime: string, endTime: string) => void; onUpdateShift?: (workAreaId: string, modeCode: ModeCode, code: ShiftCode, label: string, startTime: string, endTime: string) => void; onDeleteShift?: (workAreaId: string, modeCode: ModeCode, code: ShiftCode) => void; workAreas?: WorkArea[]; onWorkAreasChange?: (wa: WorkArea[]) => void; workAreaShifts?: WorkAreaShiftMap; onWorkAreaShiftsChange?: (v: WorkAreaShiftMap) => void; selectedWorkAreaId?: string; onWorkAreaChange?: (id: string) => void; defaultShifts?: ShiftInfo[]; onEmployeeDoubleClick?: (name: string) => void; statusConfigs?: StatusConfig[] } = {}) {
+export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmployeeIds, assignments: assignmentsProp, onAssign: onAssignProp, onUnassign: onUnassignProp, onClearWorkArea, stations: stationsProp, onStationsChange, onAddStation: onAddStationProp, onUpdateStation: onUpdateStationProp, onDeleteStation: onDeleteStationProp, onReorderStation: onReorderStationProp, onAddWorkArea: onAddWorkAreaProp, onUpdateWorkArea: onUpdateWorkAreaProp, onDeleteWorkArea: onDeleteWorkAreaProp, onAddShift: onAddShiftProp, onUpdateShift: onUpdateShiftProp, onDeleteShift: onDeleteShiftProp, workAreas: workAreasProp, onWorkAreasChange, workAreaShifts: workAreaShiftsProp, onWorkAreaShiftsChange, selectedWorkAreaId: selectedWorkAreaIdProp, onWorkAreaChange, defaultShifts: defaultShiftsProp, onEmployeeDoubleClick, statusConfigs, onOpenRoster }: { employees?: Employee[]; statuses?: Record<string, string>; disabledEmployeeIds?: Set<string>; assignments?: StationAssignment[]; onAssign?: (employeeId: string, stationId: string, shiftCode: ShiftCode, modeCode: ModeCode) => void; onUnassign?: (employeeId: string, stationId: string, shiftCode: ShiftCode, modeCode: ModeCode) => void; onClearWorkArea?: (workAreaId: string) => void; stations?: Station[]; onStationsChange?: (s: Station[]) => void; onAddStation?: (params: { workAreaId: string; name: string; group?: string; genderRestriction?: "M" | "F"; defaultEmployeeId?: string; modeCode: ModeCode }) => void; onUpdateStation?: (stationId: string, params: { name: string; group?: string; genderRestriction?: "M" | "F"; defaultEmployeeId?: string }) => void; onDeleteStation?: (stationId: string) => void; onReorderStation?: (draggedStationId: string, targetStationId: string) => void; onAddWorkArea?: (name: string, color: string, modeViews: WorkAreaModeView[]) => string; onUpdateWorkArea?: (id: string, name: string, color: string, modeViews: WorkAreaModeView[]) => void; onDeleteWorkArea?: (workAreaId: string) => void; onAddShift?: (workAreaId: string, modeCode: ModeCode, label: string, startTime: string, endTime: string) => void; onUpdateShift?: (workAreaId: string, modeCode: ModeCode, code: ShiftCode, label: string, startTime: string, endTime: string) => void; onDeleteShift?: (workAreaId: string, modeCode: ModeCode, code: ShiftCode) => void; workAreas?: WorkArea[]; onWorkAreasChange?: (wa: WorkArea[]) => void; workAreaShifts?: WorkAreaShiftMap; onWorkAreaShiftsChange?: (v: WorkAreaShiftMap) => void; selectedWorkAreaId?: string; onWorkAreaChange?: (id: string) => void; defaultShifts?: ShiftInfo[]; onEmployeeDoubleClick?: (name: string) => void; statusConfigs?: StatusConfig[]; onOpenRoster?: (search: string) => void } = {}) {
   const [localWorkAreas, setLocalWorkAreas] = useState<WorkArea[]>([]);
   const workAreas = workAreasProp ?? localWorkAreas;
   const setWorkAreas = (updater: WorkArea[] | ((prev: WorkArea[]) => WorkArea[])) => {
@@ -107,12 +107,13 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
 
   const computeNextShiftDefaults = (): { startTime: string; endTime: string } => {
     const last = currentShifts[currentShifts.length - 1];
-    const parts = last?.time_range?.split("-");
-    if (!parts || parts.length !== 2) return { startTime: "", endTime: "" };
+    if (!last) return { startTime: "06:00", endTime: "08:00" };
+    const parts = last.time_range?.split("-");
+    if (!parts || parts.length !== 2) return { startTime: "06:00", endTime: "08:00" };
     const [hStr, mStr] = parts[1].split(":");
     const h = Number(hStr);
     const m = Number(mStr);
-    if (!Number.isFinite(h) || !Number.isFinite(m)) return { startTime: "", endTime: "" };
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return { startTime: "06:00", endTime: "08:00" };
     const endH = (h + 2) % 24;
     const endStr = `${String(endH).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
     return { startTime: parts[1], endTime: endStr };
@@ -418,8 +419,32 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
 
   const color = selectedWorkArea?.color_hex ?? "#334155";
 
+  const showEmptyDeptState = sortedWorkAreas.length === 0;
+  const needsShifts = currentShifts.length === 0;
+  const needsStations = workAreaStations.filter((s) => !s.protected).length === 0;
+  const needsEmployees = employees.length === 0;
+  const showEmptyBoardHint =
+    !showEmptyDeptState && (needsShifts || needsStations || needsEmployees);
+
   return (
     <div className="flex h-full min-w-0 flex-col gap-4" onClick={() => setLoanPopover(null)}>
+      {showEmptyDeptState ? (
+        <div className="flex h-full flex-col items-center justify-center">
+          <div className="max-w-md rounded-xl border-2 border-dashed border-slate-300 bg-white px-10 py-12 text-center shadow-sm">
+            <h2 className="text-base font-bold text-slate-700">No departments yet</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              Create your first department to get started. You&apos;ll be able to add shifts and stations next.
+            </p>
+            <button
+              onClick={() => setWorkAreaModal("add")}
+              className="mt-6 rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
+            >
+              + Add Department
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Work Area Tabs */}
       <div className="shrink-0 flex flex-wrap items-center gap-2 justify-between">
         <div className="flex flex-wrap items-center gap-2">
@@ -464,8 +489,17 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
       )}
 
       {/* Table */}
-      <div className="min-h-0 flex-1 flex items-start gap-2">
-        <div ref={scrollContainerRef} className="min-h-0 min-w-0 h-full flex-1 overflow-auto rounded-lg border border-slate-300 bg-white">
+      <div className="relative min-h-0 flex-1 flex items-start gap-2">
+        {!needsShifts && (
+          <>
+        <div
+          ref={scrollContainerRef}
+          className="min-h-0 min-w-0 h-full flex-1 overflow-auto rounded-lg border border-slate-300 bg-white"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, transparent calc(10.5rem - 1px), #e2e8f0 calc(10.5rem - 1px), #e2e8f0 10.5rem, transparent 10.5rem)",
+          }}
+        >
         <table className="w-full table-fixed border-separate border-spacing-0" style={{ minWidth: `calc(10.5rem + ${currentShifts.length} * 280px)` }}>
           <thead className="sticky top-0 z-30" onMouseEnter={() => setHeaderHover(true)} onMouseLeave={() => setHeaderHover(false)}>
             <tr>
@@ -473,8 +507,8 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
               <th className="group/stnhdr sticky left-0 z-10 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-white" style={{ width: "10.5rem", minWidth: "10.5rem", maxWidth: "10.5rem", backgroundColor: color }}>
                 <div className="flex items-center justify-between gap-2">
                   <span>Station</span>
-                  <button onClick={() => setAddingStation(true)} title="Add station"
-                    className="flex h-5 w-5 items-center justify-center rounded border border-dashed border-white/30 text-white/80 hover:border-white hover:text-white text-xs opacity-0 transition-opacity group-hover/stnhdr:opacity-100">
+                  <button onClick={() => setAddingStation(true)} title="Add station" disabled={needsShifts}
+                    className={`flex h-5 w-5 items-center justify-center rounded border border-dashed border-white/30 text-white/80 hover:border-white hover:text-white text-xs transition-opacity disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-white/30 disabled:hover:text-white/80 ${needsStations && !needsShifts ? "opacity-100" : "opacity-0 group-hover/stnhdr:opacity-100"}`}>
                     +
                   </button>
                 </div>
@@ -546,13 +580,14 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
           <tbody style={{ backgroundColor: "#ffffff" }}>
             {(() => {
               let prevGroup: string | undefined = "__init__";
-              return workAreaStations.map((station) => {
+              return workAreaStations.map((station, idx) => {
                 const showGroupHeader = station.group !== undefined && station.group !== prevGroup;
                 prevGroup = station.group;
                 const defaultEmployee = station.defaultEmployeeId ? employees.find((e) => e.id === station.defaultEmployeeId) : null;
                 const defaultAssigned = defaultEmployee
                   ? assignments.some((a) => a.station_id === station.id && a.employee_id === defaultEmployee.id)
                   : false;
+                const isLast = idx === workAreaStations.length - 1;
                 return (
                   <React.Fragment key={station.id}>
                     {showGroupHeader && (
@@ -607,7 +642,7 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
                       onDrop={() => handleStationDrop(station.id)}
                     >
                 {/* Station name */}
-                <td className="group/stnname sticky left-0 z-20 border-t border-r border-slate-200 bg-white px-5 py-4 align-top group-hover:bg-slate-50" style={{ borderTopColor: "#e2e8f0", width: "10.5rem", minWidth: "10.5rem", maxWidth: "10.5rem" }}>
+                <td className={`group/stnname sticky left-0 z-20 border-t border-r border-slate-200 bg-white px-5 py-4 align-top group-hover:bg-slate-50 ${isLast ? "border-b" : ""}`} style={{ borderTopColor: "#e2e8f0", borderBottomColor: "#e2e8f0", width: "10.5rem", minWidth: "10.5rem", maxWidth: "10.5rem" }}>
                   {station.protected ? (
                     <div className="flex min-w-0 flex-col gap-0.5">
                       <span
@@ -664,7 +699,7 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
 
                 {/* Assignment cells */}
                 {currentShifts.map((shift) => (
-                  <td key={shift.code} className="h-px border-t border-black/6 p-0 align-top">
+                  <td key={shift.code} className={`h-px border-t border-black/6 p-0 align-top ${isLast ? "border-b border-b-black/6" : ""}`}>
                     <div className="h-full px-2 py-4">
                       <AssignmentCell stationId={station.id} shiftCode={shift.code} modeCode={selectedMode} color={color}
                         assignments={assignments} allEmployees={employees} statuses={statuses} disabledEmployeeIds={disabledEmployeeIds} onAssign={handleAssign} onRemove={handleRemove} workAreaId={selectedWorkArea.id} workAreas={workAreas} stations={stations} genderRestriction={station.gender_restriction} onEmployeeDoubleClick={onEmployeeDoubleClick} statusConfigs={statusConfigs} />
@@ -685,12 +720,60 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
           onClick={() => setAddingShift({ label: "", startTime: "", endTime: "" })}
           onMouseEnter={() => setHeaderHover(true)}
           onMouseLeave={() => setHeaderHover(false)}
-          className={`shrink-0 mt-3 flex h-6 w-6 items-center justify-center rounded-md border border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-700 text-base leading-none transition-opacity ${headerHover ? "opacity-100" : "opacity-0"}`}
+          className={`shrink-0 mt-3 flex h-6 w-6 items-center justify-center rounded-md border border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-700 text-base leading-none transition-opacity ${headerHover || currentShifts.length === 0 ? "opacity-100" : "opacity-0"}`}
           title="Add shift"
         >
           +
         </button>
+          </>
+        )}
+        {showEmptyBoardHint && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="pointer-events-auto max-w-md rounded-xl border-2 border-dashed border-slate-300 bg-white/95 px-8 py-6 text-center shadow-sm">
+              <h3 className="text-sm font-bold text-slate-700">
+                {needsShifts
+                  ? "Step 1 — Add a shift"
+                  : needsStations
+                    ? "Step 2 — Add a station"
+                    : "Step 3 — Add an employee"}
+              </h3>
+              <p className="mt-1.5 text-xs text-slate-500">
+                {needsShifts
+                  ? "Add at least one shift column before creating stations."
+                  : needsStations
+                    ? "Add at least one station to start assigning employees."
+                    : "Add employees to your roster to start assigning them to stations."}
+              </p>
+              <div className="mt-4 flex justify-center">
+                {needsShifts ? (
+                  <button
+                    onClick={() => setAddingShift({ label: "", startTime: "", endTime: "" })}
+                    className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                  >
+                    + Add Shift
+                  </button>
+                ) : needsStations ? (
+                  <button
+                    onClick={() => setAddingStation(true)}
+                    className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                  >
+                    + Add Station
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => onOpenRoster?.("")}
+                    className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                  >
+                    + Add Employee
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+        </>
+      )}
 
       {/* Datalist for group autocomplete — must be outside <table> */}
       <datalist id="group-datalist">
@@ -792,6 +875,8 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
       {confirmDeleteWorkArea && (() => {
         const waStations = stations.filter((s) => s.work_area_id === confirmDeleteWorkArea.id);
         const assignedEmpIds = new Set(assignments.filter((a) => waStations.some((s) => s.id === a.station_id)).map((a) => a.employee_id));
+        const homeEmployees = (employeesProp ?? []).filter((e) => e.homeDepartmentId === confirmDeleteWorkArea.id);
+        const blocked = homeEmployees.length > 0;
         return (
           <Modal
             title="Delete Department"
@@ -803,7 +888,8 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
                 </button>
                 <button
                   onClick={() => handleDeleteWorkArea(confirmDeleteWorkArea)}
-                  className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                  disabled={blocked}
+                  className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-red-600"
                 >
                   Delete Permanently
                 </button>
@@ -822,7 +908,15 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
                   <p className="mt-1 text-sm text-slate-500">This cannot be undone.</p>
                 </div>
               </div>
-              {(waStations.length > 0 || assignedEmpIds.size > 0) && (
+              {blocked && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Cannot delete</p>
+                  <p className="text-sm text-amber-800">
+                    <span className="font-semibold">{homeEmployees.length}</span> employee{homeEmployees.length > 1 ? "s have" : " has"} this as their home department. Reassign their home department before deleting.
+                  </p>
+                </div>
+              )}
+              {!blocked && (waStations.length > 0 || assignedEmpIds.size > 0) && (
                 <div className="rounded-lg border border-red-100 bg-red-50 p-3 space-y-1">
                   <p className="text-xs font-semibold uppercase tracking-wide text-red-500">Will also be deleted</p>
                   {waStations.length > 0 && (

@@ -273,6 +273,7 @@ export function AssignmentBoardClient() {
             defaultShifts={defaultShiftTemplate}
             statusConfigs={statusConfigs}
             onEmployeeDoubleClick={(name) => { setRosterSearch(name); setRosterOpen(true); }}
+            onOpenRoster={(search) => { setRosterSearch(search); setRosterOpen(true); }}
           />
         </div>
       </div>

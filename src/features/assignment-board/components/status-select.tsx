@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import { BaseDropdown, DROPDOWN_WIDTH } from "./base-dropdown";
 
 export const STATUS_CODE_AVAILABLE = "available" as const;
-export const STATUS_CODE_ASSIGNED = "assigned" as const;
 
 export type StatusConfig = {
   code: string;
@@ -66,7 +65,6 @@ export const COLOR_OPTIONS: { label: string; colorHex: string }[] = [
 
 export const DEFAULT_STATUS_CONFIGS: StatusConfig[] = [
   { code: "available",  label: "Available",  className: "bg-emerald-50 text-emerald-600",  colorHex: "#059669", protected: true },
-  { code: "assigned",   label: "Assigned",   className: "bg-sky-50 text-sky-600",          colorHex: "#0284c7", protected: true },
   { code: "sick",       label: "Sick",       className: "bg-rose-50 text-rose-500",        colorHex: "#f43f5e", unavailable: true },
   { code: "vacation",   label: "Vacation",   className: "bg-amber-50 text-amber-500",      colorHex: "#f59e0b", unavailable: true },
   { code: "injured",    label: "Injured",    className: "bg-orange-50 text-orange-400",    colorHex: "#fb923c" },
@@ -82,9 +80,10 @@ export function StatusSelect({ value, configs, onChange, onManageStatuses }: {
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const options = configs.filter((c) => c.code !== STATUS_CODE_ASSIGNED);
-  const current = options.find((c) => c.code === value) ?? options[0];
-  const longestLabel = options.reduce((m, c) => (c.label.length > m.length ? c.label : m), "");
+  const current = configs.find((c) => c.code === value) ?? configs[0];
+  const longestLabel = configs.reduce((m, c) => (c.label.length > m.length ? c.label : m), "");
+
+  if (!current) return null;
 
   return (
     <div className="relative">
@@ -116,7 +115,7 @@ export function StatusSelect({ value, configs, onChange, onManageStatuses }: {
           )}
         </div>
         <div className="py-1.75">
-        {options.map((cfg) => {
+        {configs.map((cfg) => {
             const active = cfg.code === value;
             return (
               <button

@@ -24,7 +24,6 @@ export function useStatusConfigs(initialConfigs: StatusConfig[] = DEFAULT_STATUS
 
   const handleUpdateConfig = (code: string, updates: Partial<StatusConfig>) => {
     setStatusConfigs((prev) => prev.map((c) => c.code === code ? { ...c, ...updates } : c));
-    if (code === "assigned") return;
 
     void updateStatusConfigRecord({
       code,
@@ -39,7 +38,7 @@ export function useStatusConfigs(initialConfigs: StatusConfig[] = DEFAULT_STATUS
 
   const handleDeleteConfig = (code: string) => {
     const config = statusConfigs.find((c) => c.code === code);
-    if (config?.protected || code === "assigned") return;
+    if (config?.protected) return;
 
     setStatusConfigs((prev) => prev.filter((c) => c.code !== code));
 
@@ -54,7 +53,7 @@ export function useStatusConfigs(initialConfigs: StatusConfig[] = DEFAULT_STATUS
     const nextConfig: StatusConfig = { code, label, className: "", colorHex };
     setStatusConfigs((prev) => [...prev, nextConfig]);
 
-    const displayOrder = statusConfigs.filter((config) => config.code !== "assigned").length + 1;
+    const displayOrder = statusConfigs.length + 1;
     void insertStatusConfig({
       code,
       label,

@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 
-import { DEFAULT_STATUS_CONFIGS, STATUS_CODE_ASSIGNED, type StatusConfig } from "./components/status-select";
+import { DEFAULT_STATUS_CONFIGS, type StatusConfig } from "./components/status-select";
 import { DEFAULT_MODE_CODE, type Employee, type EmployeeStatus, type ModeCode, type ShiftCode, type ShiftInfo, type Station, type StationAssignment, type WorkArea, type WorkAreaModeView, type WorkAreaShiftMap } from "./types";
 import { DEPT_ONLY_SHIFT_CODE, todayDateString } from "./utils";
 
@@ -114,9 +114,27 @@ function toDbShiftCode(shiftCode: ShiftCode | null): string | null {
   return shiftCode;
 }
 
+async function seedDefaultStatusConfigs(): Promise<void> {
+  const supabase = createClient();
+  const rows = DEFAULT_STATUS_CONFIGS.map((cfg, index) => ({
+    code: cfg.code,
+    label: cfg.label,
+    color_hex: cfg.colorHex ?? null,
+    unavailable: cfg.unavailable ?? false,
+    display_order: index + 1,
+  }));
+  const { error } = await supabase
+    .from("status_configs")
+    .upsert(rows, { onConflict: "code", ignoreDuplicates: true });
+  if (error) console.error("[assignment-board] Failed to seed default status configs:", error.message);
+}
+
 function mergeStatusConfigs(rows: StatusConfigRow[]): StatusConfig[] {
+  if (rows.length === 0) {
+    return DEFAULT_STATUS_CONFIGS.map((cfg) => ({ ...cfg }));
+  }
   const defaultsByCode = new Map(DEFAULT_STATUS_CONFIGS.map((cfg) => [cfg.code, cfg]));
-  const loaded: StatusConfig[] = rows.map((row) => {
+  return rows.map((row) => {
     const fallback = defaultsByCode.get(row.code);
     return {
       code: row.code,
@@ -127,13 +145,6 @@ function mergeStatusConfigs(rows: StatusConfigRow[]): StatusConfig[] {
       ...(fallback?.protected ? { protected: true } : {}),
     };
   });
-
-  if (!loaded.some((cfg) => cfg.code === STATUS_CODE_ASSIGNED)) {
-    const assigned = defaultsByCode.get(STATUS_CODE_ASSIGNED);
-    if (assigned) loaded.splice(1, 0, assigned);
-  }
-
-  return loaded;
 }
 
 async function fetchStatusConfigs(): Promise<StatusConfig[]> {
@@ -758,8 +769,6 @@ export async function insertStatusConfig(params: {
   unavailable?: boolean;
   displayOrder: number;
 }): Promise<void> {
-  if (params.code === STATUS_CODE_ASSIGNED) return;
-
   const supabase = createClient();
   const { error } = await supabase
     .from("status_configs")
@@ -781,8 +790,6 @@ export async function updateStatusConfigRecord(params: {
   unavailable?: boolean;
   displayOrder?: number;
 }): Promise<void> {
-  if (params.code === STATUS_CODE_ASSIGNED) return;
-
   const updates: Record<string, unknown> = {};
   if (params.label !== undefined) updates.label = params.label;
   if (params.colorHex !== undefined) updates.color_hex = params.colorHex;
@@ -799,8 +806,6 @@ export async function updateStatusConfigRecord(params: {
 }
 
 export async function deleteStatusConfigRecord(code: string): Promise<void> {
-  if (code === STATUS_CODE_ASSIGNED) return;
-
   const supabase = createClient();
   const { error } = await supabase
     .from("status_configs")
@@ -812,7 +817,6 @@ export async function deleteStatusConfigRecord(code: string): Promise<void> {
 
 export async function replaceStatusConfigOrder(configs: StatusConfig[]): Promise<void> {
   const dbConfigs = configs
-    .filter((config) => config.code !== STATUS_CODE_ASSIGNED)
     .map((config, index) => ({
       code: config.code,
       label: config.label,
@@ -1013,10 +1017,15 @@ export async function fetchAssignmentBoardSnapshot(): Promise<AssignmentBoardSna
       (modeViewsResult.data ?? []) as WorkAreaModeViewRow[],
     );
 
+    const statusConfigRows = (statusConfigsResult.data ?? []) as StatusConfigRow[];
+    if (statusConfigRows.length === 0) {
+      void seedDefaultStatusConfigs();
+    }
+
     return {
       workAreas,
       workAreaShifts: buildWorkAreaShifts(workAreas, (shiftsResult.data ?? []) as WorkAreaShiftRow[]),
-      statusConfigs: mergeStatusConfigs((statusConfigsResult.data ?? []) as StatusConfigRow[]),
+      statusConfigs: mergeStatusConfigs(statusConfigRows),
       employees: buildEmployees(
         (employeesResult.data ?? []) as EmployeeRow[],
         (qualifiedResult.data ?? []) as EmployeeQualifiedWorkAreaRow[],

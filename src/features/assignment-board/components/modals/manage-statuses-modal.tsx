@@ -23,7 +23,7 @@ export function ManageStatusesModal({
   const [editingLabel, setEditingLabel] = useState("");
   const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState("");
-  const [newColorHex, setNewColorHex] = useState("#312e81");
+  const [newColorHex, setNewColorHex] = useState("#a5b4fc");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const longestLabel = configs.reduce((m, c) => (c.label.length > m.length ? c.label : m), "");

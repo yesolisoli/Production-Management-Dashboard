@@ -104,7 +104,22 @@ export function AssignmentSidebar({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {(() => {
+          {totalStaff === 0 ? (
+            <div className="flex h-full items-center justify-center px-6 py-8">
+              <div className="text-center">
+                <p className="text-sm font-semibold text-slate-700">No employees yet</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Add your first employee to start building the roster.
+                </p>
+                <button
+                  onClick={() => onOpenRoster("")}
+                  className="mt-4 rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                >
+                  + Add Employee
+                </button>
+              </div>
+            </div>
+          ) : (() => {
             const unavailableCodes = getUnavailableStatusCodes(statusConfigs);
             const isUnavailable = (id: string) => unavailableCodes.has(getStatus(id));
             const selectedWa = workAreas.find((w) => w.id === selectedWorkAreaId);

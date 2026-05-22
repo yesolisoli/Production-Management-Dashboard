@@ -8,10 +8,7 @@ import {
   mockStations,
   mockWorkAreas,
 } from "../src/features/assignment-board/mock-data";
-import {
-  DEFAULT_STATUS_CONFIGS,
-  STATUS_CODE_ASSIGNED,
-} from "../src/features/assignment-board/components/status-select";
+import { DEFAULT_STATUS_CONFIGS } from "../src/features/assignment-board/components/status-select";
 
 type SeedClient = SupabaseClient;
 
@@ -160,7 +157,6 @@ function buildShiftRows() {
 
 function buildStatusConfigRows() {
   return DEFAULT_STATUS_CONFIGS
-    .filter((cfg) => cfg.code !== STATUS_CODE_ASSIGNED)
     .map((cfg, index) => ({
       code: cfg.code,
       label: cfg.label,
@@ -211,7 +207,6 @@ function buildStatusRows() {
   return mockEmployeeStatuses.map((status) => ({
     id: status.id,
     employee_id: status.employee_id,
-    work_date: status.work_date,
     status_code: status.status,
     reason: status.reason,
   }));
@@ -223,7 +218,6 @@ function buildAssignmentRows() {
     employee_id: assignment.employee_id,
     station_id: assignment.station_id,
     work_area_id: assignment.work_area_id,
-    work_date: assignment.work_date,
     shift_code: assignment.shift_code ?? null,
     mode_code: assignment.mode_code,
   }));
@@ -279,7 +273,7 @@ async function verifyCounts(supabase: SeedClient) {
     (sum, wa) => sum + (wa.mode_views?.length ?? 1) * mockShifts.length,
     0,
   );
-  const expectedStatusConfigs = DEFAULT_STATUS_CONFIGS.filter((cfg) => cfg.code !== STATUS_CODE_ASSIGNED).length;
+  const expectedStatusConfigs = DEFAULT_STATUS_CONFIGS.length;
   const expectedQualifiedRows = mockEmployees.reduce((sum, emp) => sum + emp.qualifiedDepartmentIds.length, 0);
 
   await verifyCount(supabase, "work_areas", mockWorkAreas.length);
@@ -298,11 +292,11 @@ async function main() {
 
   await runStep("validate source data", async () => {
     const uniqueEmployeeStatusKeys = new Set(
-      mockEmployeeStatuses.map((status) => `${status.employee_id}|${status.work_date}`),
+      mockEmployeeStatuses.map((status) => status.employee_id),
     );
 
     if (uniqueEmployeeStatusKeys.size !== mockEmployeeStatuses.length) {
-      throw new Error("mockEmployeeStatuses contains duplicate employee/date rows");
+      throw new Error("mockEmployeeStatuses contains duplicate employee rows");
     }
 
     const workAreaIds = new Set(mockWorkAreas.map((wa) => wa.id));
@@ -339,8 +333,7 @@ async function main() {
 
     const statusCodes = new Set(
       DEFAULT_STATUS_CONFIGS
-        .filter((cfg) => cfg.code !== STATUS_CODE_ASSIGNED)
-        .map((cfg) => cfg.code),
+            .map((cfg) => cfg.code),
     );
 
     for (const status of mockEmployeeStatuses) {

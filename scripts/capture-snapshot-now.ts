@@ -21,7 +21,7 @@ function env(name: string): string {
   return v;
 }
 
-const WORK_DATE = process.argv[2] ?? "2026-04-16";
+const WORK_DATE = process.argv[2] ?? new Date().toISOString().split("T")[0];
 
 async function main() {
   const supabase = createClient(env("NEXT_PUBLIC_SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
@@ -48,8 +48,8 @@ async function main() {
     supabase.from("employees").select("id, employee_code, full_name, home_work_area_id, active, gender, level, temporary").order("employee_code", { nullsFirst: false }),
     supabase.from("employee_qualified_work_areas").select("employee_id, work_area_id"),
     supabase.from("stations").select("id, work_area_id, name, required_headcount, display_order, mode_code, gender_restriction, default_employee_id").order("work_area_id").order("display_order"),
-    supabase.from("employee_daily_statuses").select("employee_id, status_code").eq("work_date", WORK_DATE),
-    supabase.from("station_assignments").select("id, employee_id, station_id, work_area_id, work_date, shift_code, mode_code").eq("work_date", WORK_DATE),
+    supabase.from("employee_daily_statuses").select("employee_id, status_code"),
+    supabase.from("station_assignments").select("id, employee_id, station_id, work_area_id, work_date, shift_code, mode_code"),
   ]);
 
   for (const r of [workAreas, modeViews, shifts, statusConfigs, employees, qualified, stations, statuses, assignments]) {
