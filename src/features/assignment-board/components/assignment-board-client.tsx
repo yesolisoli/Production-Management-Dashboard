@@ -7,7 +7,6 @@ import { useAssignmentBoardData } from "../hooks/use-assignment-board-data";
 import { useSnapshotCapture } from "../hooks/use-snapshot-capture";
 import { AssignmentGrid } from "./assignment-grid";
 import { AssignmentSidebar } from "./assignment-sidebar";
-import { TVDisplay } from "./tv-display";
 import { RosterManageModal } from "./modals/roster-manage-modal";
 import { ManageStatusesModal } from "./modals/manage-statuses-modal";
 
@@ -79,18 +78,11 @@ export function AssignmentBoardClient() {
   });
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showTV, setShowTV] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [rosterSearch, setRosterSearch] = useState("");
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const [announcementDraft, setAnnouncementDraft] = useState(announcement);
   const [showManageStatuses, setShowManageStatuses] = useState(false);
-
-  useEffect(() => {
-    const handler = () => setShowTV(true);
-    window.addEventListener("tv-open", handler);
-    return () => window.removeEventListener("tv-open", handler);
-  }, []);
 
   useEffect(() => {
     const handler = () => {
@@ -147,21 +139,6 @@ export function AssignmentBoardClient() {
             ×
           </button>
         </div>
-      )}
-
-      {showTV && (
-        <TVDisplay
-          employees={employees}
-          statuses={statuses}
-          assignments={assignments}
-          stations={stations}
-          workAreas={workAreas}
-          shifts={Object.values(workAreaShifts).flatMap((perMode) => Object.values(perMode)).flat().filter((s, i, arr) => arr.findIndex((x) => x.code === s.code) === i)}
-          workAreaShifts={workAreaShifts}
-          statusConfigs={statusConfigs}
-          announcement={announcement}
-          onClose={() => setShowTV(false)}
-        />
       )}
 
       {showAnnouncementModal && (

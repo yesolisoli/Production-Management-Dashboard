@@ -43,6 +43,8 @@ function AutoScrollRows({ children, style }: { children: React.ReactNode; style?
   );
 }
 
+export type TVSyncStatus = "idle" | "syncing" | "ok" | "error";
+
 export function TVDisplay({
   employees,
   statuses,
@@ -54,6 +56,8 @@ export function TVDisplay({
   statusConfigs,
   announcement = "Please clean your work area and report any equipment issues.",
   onClose,
+  syncStatus,
+  lastSyncedAt,
 }: {
   employees: Employee[];
   statuses: Record<string, EmployeeStatus>;
@@ -65,6 +69,8 @@ export function TVDisplay({
   statusConfigs: StatusConfig[];
   announcement?: string;
   onClose: () => void;
+  syncStatus?: TVSyncStatus;
+  lastSyncedAt?: Date | null;
 }) {
   const unavailableCodes = getUnavailableStatusCodes(statusConfigs);
   const [now, setNow] = useState(new Date());
@@ -461,9 +467,40 @@ export function TVDisplay({
           <span className="text-xl text-slate-300">{announcement}</span>
         </div>
         <div className="flex items-center gap-6 text-sm text-slate-400 shrink-0">
-          <span>
-            Last Updated <span className="font-semibold text-white">{fmt(now)}</span>
-          </span>
+          {syncStatus !== undefined && (() => {
+            const syncedSecAgo = lastSyncedAt
+              ? Math.max(0, Math.floor((now.getTime() - lastSyncedAt.getTime()) / 1000))
+              : null;
+            const isStale = syncStatus === "ok" && syncedSecAgo !== null && syncedSecAgo > 90;
+            const dotClass =
+              syncStatus === "error"
+                ? "bg-red-500"
+                : syncStatus === "syncing"
+                ? "bg-amber-400 animate-pulse"
+                : isStale
+                ? "bg-amber-400"
+                : syncStatus === "ok"
+                ? "bg-green-500"
+                : "bg-slate-500";
+            const label =
+              syncStatus === "error"
+                ? lastSyncedAt
+                  ? `Sync failed · last ${fmt(lastSyncedAt)}`
+                  : "Sync failed"
+                : syncStatus === "syncing"
+                ? "Syncing…"
+                : isStale && lastSyncedAt
+                ? `Stale · last ${fmt(lastSyncedAt)}`
+                : syncStatus === "ok" && lastSyncedAt
+                ? `Synced ${fmt(lastSyncedAt)}`
+                : "Waiting for sync";
+            return (
+              <span className="flex items-center gap-2" title={label}>
+                <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
+                <span className="text-xs">{label}</span>
+              </span>
+            );
+          })()}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_MODE_CODE } from "../types";
 import type { Employee, EmployeeStatus, ModeCode, ShiftCode, ShiftInfo, Station, StationAssignment, WorkArea, WorkAreaModeView, WorkAreaShiftMap } from "../types";
 import { getUnavailableStatusCodes, STATUS_CODE_AVAILABLE } from "../components/status-select";
@@ -123,6 +123,19 @@ export function useAssignmentBoardData() {
     return () => {
       isCancelled = true;
     };
+  }, [setStatusConfigs]);
+
+  const refetchSnapshot = useCallback(async () => {
+    if (!SUPABASE_ENABLED) return;
+    const snapshot = await fetchAssignmentBoardSnapshot();
+    setEmployees(snapshot.employees);
+    setStatuses(snapshot.statuses);
+    setAssignmentsState(snapshot.assignments);
+    setStations(snapshot.stations);
+    setWorkAreas(snapshot.workAreas);
+    setWorkAreaShifts(snapshot.workAreaShifts);
+    setStatusConfigs(snapshot.statusConfigs);
+    persistedEmployeeIdsRef.current = new Set(snapshot.employees.map((employee) => employee.id));
   }, [setStatusConfigs]);
 
   const setAssignments = (updater: StationAssignment[] | ((prev: StationAssignment[]) => StationAssignment[])) => {
@@ -1183,6 +1196,7 @@ export function useAssignmentBoardData() {
     loadError,
     saveError,
     clearSaveError,
+    refetchSnapshot,
     disabledIds,
     defaultShiftTemplate,
     handleDeleteShift,
