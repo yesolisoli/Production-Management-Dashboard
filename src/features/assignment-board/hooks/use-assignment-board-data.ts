@@ -6,6 +6,7 @@ import type { Employee, EmployeeStatus, ModeCode, ShiftCode, ShiftInfo, Station,
 import { getUnavailableStatusCodes, STATUS_CODE_AVAILABLE } from "../components/status-select";
 import { getAssignmentWorkAreaId, getEmployeeActiveDepartmentIds, hasNullStationAssignment, todayDateString, DEPT_ONLY_SHIFT_CODE } from "../utils";
 import {
+  bulkUpsertEmployees,
   deleteEmployee,
   deleteAssignmentsByIds,
   deleteAssignmentsForEmployee,
@@ -329,6 +330,78 @@ export function useAssignmentBoardData() {
     void persistEmployeePromise;
   };
 
+  const handleBulkImport = async (rows: Array<{
+    id: string;
+    employeeCode: string;
+    fullName: string;
+    homeWorkAreaId: string;
+    active: boolean;
+    gender: "M" | "F" | null;
+    level: 1 | 2 | 3 | null;
+    temporary: boolean;
+    isUpdate: boolean;
+  }>): Promise<void> => {
+    if (rows.length === 0) return;
+
+    const createdIds = rows.filter((r) => !r.isUpdate).map((r) => r.id);
+
+    setEmployees((existing) => {
+      const byId = new Map(existing.map((e) => [e.id, e] as const));
+      for (const row of rows) {
+        const current = byId.get(row.id);
+        const qualifiedDepartmentIds = Array.from(
+          new Set([
+            ...(current?.qualifiedDepartmentIds ?? []),
+            row.homeWorkAreaId,
+          ]),
+        );
+        const nextEmp: Employee = {
+          id: row.id,
+          employee_code: row.employeeCode,
+          full_name: row.fullName,
+          homeDepartmentId: row.homeWorkAreaId,
+          qualifiedDepartmentIds,
+          active: row.active,
+          ...(row.gender ? { gender: row.gender } : {}),
+          ...(row.level ? { level: row.level } : {}),
+          ...(row.temporary ? { temporary: true } : {}),
+        };
+        byId.set(row.id, nextEmp);
+      }
+      return Array.from(byId.values());
+    });
+
+    try {
+      await bulkUpsertEmployees(
+        rows.map((row) => ({
+          id: row.id,
+          employeeCode: row.employeeCode,
+          fullName: row.fullName,
+          homeWorkAreaId: row.homeWorkAreaId,
+          active: row.active,
+          gender: row.gender,
+          level: row.level,
+          temporary: row.temporary,
+        })),
+      );
+
+      for (const row of rows) {
+        if (!row.isUpdate) {
+          await replaceEmployeeQualifiedWorkAreas({
+            employeeId: row.id,
+            workAreaIds: [row.homeWorkAreaId],
+          });
+          persistedEmployeeIdsRef.current.add(row.id);
+        }
+      }
+    } catch (error) {
+      reportSaveError("Failed to import employees", error);
+      for (const id of createdIds) persistedEmployeeIdsRef.current.delete(id);
+      void restoreEmployeesFromDb("handleBulkImport");
+      throw error;
+    }
+  };
+
   const handleRemoveEmployee = (id: string) => {
     setEmployees((prev) => prev.filter((e) => e.id !== id));
     persistedEmployeeIdsRef.current.delete(id);
@@ -363,23 +436,10 @@ export function useAssignmentBoardData() {
       ...("gender" in updates ? { gender: updates.gender ?? null } : {}),
       ...("level" in updates ? { level: updates.level ?? null } : {}),
       ...("temporary" in updates ? { temporary: updates.temporary ?? false } : {}),
-    })
-      .then(async () => {
-        if (!nextHomeWorkAreaId) return;
-
-        const employee = employees.find((e) => e.id === id);
-        const nextQualificationIds = Array.from(
-          new Set([...(employee?.qualifiedDepartmentIds ?? []), nextHomeWorkAreaId]),
-        );
-        await replaceEmployeeQualifiedWorkAreas({
-          employeeId: id,
-          workAreaIds: nextQualificationIds,
-        });
-      })
-      .catch((error) => {
-        reportSaveError("Failed to update employee", error);
-        void restoreEmployeesFromDb("handleUpdate");
-      });
+    }).catch((error) => {
+      reportSaveError("Failed to update employee", error);
+      void restoreEmployeesFromDb("handleUpdate");
+    });
   };
 
   const handleSetQualifiedWorkAreas = (employeeId: string, workAreaIds: string[]) => {
@@ -1140,6 +1200,7 @@ export function useAssignmentBoardData() {
     handleWorkAreaShiftsChange,
     handleWorkAreaChange,
     handleAdd,
+    handleBulkImport,
     handleRemoveEmployee,
     handleUpdate,
     handleSetQualifiedWorkAreas,

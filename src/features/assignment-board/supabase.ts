@@ -422,6 +422,37 @@ export async function insertEmployee(params: {
   if (error) throw new Error(error.message);
 }
 
+export async function bulkUpsertEmployees(rows: Array<{
+  id: string;
+  employeeCode: string | null;
+  fullName: string;
+  homeWorkAreaId: string;
+  active: boolean;
+  gender: "M" | "F" | null;
+  level: 1 | 2 | 3 | null;
+  temporary: boolean;
+}>): Promise<void> {
+  if (rows.length === 0) return;
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("employees")
+    .upsert(
+      rows.map((row) => ({
+        id: row.id,
+        employee_code: row.employeeCode,
+        full_name: row.fullName,
+        home_work_area_id: row.homeWorkAreaId,
+        active: row.active,
+        gender: row.gender,
+        level: row.level,
+        temporary: row.temporary,
+      })),
+      { onConflict: "id", ignoreDuplicates: false },
+    );
+
+  if (error) throw new Error(error.message);
+}
+
 export async function insertWorkArea(params: {
   id: string;
   name: string;

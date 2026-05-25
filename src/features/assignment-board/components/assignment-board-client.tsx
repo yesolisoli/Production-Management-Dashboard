@@ -48,6 +48,7 @@ export function AssignmentBoardClient() {
     handleWorkAreaShiftsChange,
     handleWorkAreaChange,
     handleAdd,
+    handleBulkImport,
     handleRemoveEmployee,
     handleUpdate,
     handleSetQualifiedWorkAreas,
@@ -287,6 +288,7 @@ export function AssignmentBoardClient() {
           workAreas={workAreas}
           statusConfigs={statusConfigs}
           onAdd={handleAdd}
+          onBulkImport={handleBulkImport}
           onRemove={handleRemoveEmployee}
           onUpdate={handleUpdate}
           onSetQualifiedWorkAreas={handleSetQualifiedWorkAreas}
