@@ -9,7 +9,26 @@ import {
   type Role,
 } from "@/lib/permissions";
 
+// Static-asset and Next-internal paths that must never be gated by the
+// proxy. Belt-and-suspenders alongside the matcher: even if a runtime
+// (edge / Node / future Vercel quirks) interprets the matcher loosely,
+// this early-return guarantees these paths are passed through untouched.
+const STATIC_ASSET_EXT =
+  /\.(?:css|js|map|woff2?|ttf|otf|svg|png|jpg|jpeg|gif|webp|ico)$/;
+
+function isStaticAssetPath(pathname: string): boolean {
+  return (
+    pathname.startsWith("/_next/") ||
+    pathname === "/favicon.ico" ||
+    STATIC_ASSET_EXT.test(pathname)
+  );
+}
+
 export async function proxy(request: NextRequest) {
+  if (isStaticAssetPath(request.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+
   if (!AUTH_ENABLED) {
     return NextResponse.next();
   }
@@ -68,6 +87,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|_next/data|favicon.ico|.*\\.(?:css|js|map|woff2?|ttf|otf|svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
