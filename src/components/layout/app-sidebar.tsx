@@ -10,21 +10,37 @@ import {
   Package,
   CalendarRange,
   Settings,
+  Archive,
+  type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
+import { useDashboardUser } from "./dashboard-user-context";
+import { canAccessRoute, type RouteKey } from "@/lib/permissions";
 
-const items = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/assignment-board", label: "Assignment Board", icon: Users },
-  { href: "/hog-intake", label: "Hog Intake", icon: Beef },
-  { href: "/primal-calc", label: "Primal Calc", icon: Calculator },
-  { href: "/orders-allocation", label: "Orders & Allocation", icon: Package },
-  { href: "/production-planner", label: "Production Planner", icon: CalendarRange },
-  { href: "/settings", label: "Settings", icon: Settings },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  routeKey: RouteKey;
+};
+
+const items: NavItem[] = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, routeKey: "home" },
+  { href: "/assignment-board", label: "Assignment Board", icon: Users, routeKey: "assignment-board" },
+  { href: "/history", label: "History", icon: Archive, routeKey: "history" },
+  { href: "/hog-intake", label: "Hog Intake", icon: Beef, routeKey: "hog-intake" },
+  { href: "/primal-calc", label: "Primal Calc", icon: Calculator, routeKey: "primal-calc" },
+  { href: "/orders-allocation", label: "Orders & Allocation", icon: Package, routeKey: "orders-allocation" },
+  { href: "/production-planner", label: "Production Planner", icon: CalendarRange, routeKey: "production-planner" },
+  { href: "/settings", label: "Settings", icon: Settings, routeKey: "settings" },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { role } = useDashboardUser();
+
+  const visibleItems =
+    role === null ? items : items.filter((item) => canAccessRoute(role, item.routeKey));
 
   return (
     <aside className="group sticky top-0 h-screen w-24 shrink-0 overflow-hidden border-r bg-white transition-[width] duration-300 ease-out hover:w-80">
@@ -45,7 +61,7 @@ export function AppSidebar() {
         </div>
 
         <nav className="flex flex-1 flex-col gap-3">
-          {items.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = item.icon;
             const active =
               pathname === item.href ||

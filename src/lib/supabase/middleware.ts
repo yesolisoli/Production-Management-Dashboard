@@ -1,6 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_ENABLED } from "@/lib/config";
+import {
+  canAccessRoute,
+  defaultPathForRole,
+  DEFAULT_ROLE,
+  pathnameToRouteKey,
+  type Role,
+} from "@/lib/permissions";
 
 export async function middleware(request: NextRequest) {
   if (!AUTH_ENABLED) {
@@ -31,11 +38,29 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isLoginPage = request.nextUrl.pathname.startsWith("/login");
-  const isAuthCallback = request.nextUrl.pathname.startsWith("/auth/callback");
+  const pathname = request.nextUrl.pathname;
+  const isLoginPage = pathname.startsWith("/login");
+  const isAuthCallback = pathname.startsWith("/auth/callback");
 
   if (!user && !isLoginPage && !isAuthCallback) {
     return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  if (user && !isLoginPage && !isAuthCallback) {
+    const routeKey = pathnameToRouteKey(pathname);
+    if (routeKey) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+      const role: Role = (profile?.role as Role | undefined) ?? DEFAULT_ROLE;
+      if (!canAccessRoute(role, routeKey)) {
+        return NextResponse.redirect(
+          new URL(defaultPathForRole(role), request.url)
+        );
+      }
+    }
   }
 
   return response;

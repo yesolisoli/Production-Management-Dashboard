@@ -7,6 +7,7 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
+import type { RouteKey } from "@/lib/permissions";
 
 export type DashboardModule = {
   href: string;
@@ -17,6 +18,7 @@ export type DashboardModule = {
   iconColor: string;
   cardClassName: string;
   wide: boolean;
+  routeKey: RouteKey;
 };
 
 export const dashboardModules: DashboardModule[] = [
@@ -29,6 +31,7 @@ export const dashboardModules: DashboardModule[] = [
     iconColor: "text-blue-600",
     cardClassName: "bg-blue-100/60 ring-blue-200/80",
     wide: false,
+    routeKey: "assignment-board",
   },
   {
     href: "/hog-intake",
@@ -39,6 +42,7 @@ export const dashboardModules: DashboardModule[] = [
     iconColor: "text-emerald-600",
     cardClassName: "bg-emerald-100/60 ring-emerald-200/80",
     wide: false,
+    routeKey: "hog-intake",
   },
   {
     href: "/primal-calc",
@@ -49,6 +53,7 @@ export const dashboardModules: DashboardModule[] = [
     iconColor: "text-violet-600",
     cardClassName: "bg-violet-100/60 ring-violet-200/80",
     wide: false,
+    routeKey: "primal-calc",
   },
   {
     href: "/orders-allocation",
@@ -59,6 +64,7 @@ export const dashboardModules: DashboardModule[] = [
     iconColor: "text-amber-600",
     cardClassName: "bg-amber-100/60 ring-amber-200/80",
     wide: false,
+    routeKey: "orders-allocation",
   },
   {
     href: "/production-planner",
@@ -69,6 +75,7 @@ export const dashboardModules: DashboardModule[] = [
     iconColor: "text-red-500",
     cardClassName: "bg-red-100/60 ring-red-200/80",
     wide: true,
+    routeKey: "production-planner",
   },
   {
     href: "/settings",
@@ -79,5 +86,6 @@ export const dashboardModules: DashboardModule[] = [
     iconColor: "text-sky-600",
     cardClassName: "bg-sky-100/60 ring-sky-200/80",
     wide: true,
+    routeKey: "settings",
   },
 ];
