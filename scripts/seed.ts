@@ -1,3 +1,9 @@
+import { config as loadEnv } from "dotenv";
+import { resolve } from "path";
+
+// Load .env.local before any code reads process.env.
+loadEnv({ path: resolve(__dirname, "..", ".env.local") });
+
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {

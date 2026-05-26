@@ -56,6 +56,7 @@ export function TVDisplay({
   statusConfigs,
   announcement = "Please clean your work area and report any equipment issues.",
   onClose,
+  canAccessAssignmentBoard = true,
   syncStatus,
   lastSyncedAt,
 }: {
@@ -69,6 +70,7 @@ export function TVDisplay({
   statusConfigs: StatusConfig[];
   announcement?: string;
   onClose: () => void;
+  canAccessAssignmentBoard?: boolean;
   syncStatus?: TVSyncStatus;
   lastSyncedAt?: Date | null;
 }) {
@@ -288,13 +290,15 @@ export function TVDisplay({
 
 
         <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={onClose}
-            className="flex items-center gap-2 rounded-lg border border-white bg-transparent px-3 py-2 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
-          >
-            <LayoutGrid size={14} />
-            Admin View
-          </button>
+          {canAccessAssignmentBoard && (
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 rounded-lg border border-white bg-transparent px-3 py-2 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+            >
+              <LayoutGrid size={14} />
+              Admin View
+            </button>
+          )}
         </div>
           </div>
         </div>

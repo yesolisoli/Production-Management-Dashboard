@@ -10,12 +10,18 @@ import {
   Package,
   CalendarRange,
   Settings,
-  Archive,
   type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
 import { useDashboardUser } from "./dashboard-user-context";
-import { canAccessRoute, type RouteKey } from "@/lib/permissions";
+import { canAccessRoute, type Role, type RouteKey } from "@/lib/permissions";
+
+function formatRole(role: Role): string {
+  return role
+    .split("_")
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(" ");
+}
 
 type NavItem = {
   href: string;
@@ -27,7 +33,6 @@ type NavItem = {
 const items: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, routeKey: "home" },
   { href: "/assignment-board", label: "Assignment Board", icon: Users, routeKey: "assignment-board" },
-  { href: "/history", label: "History", icon: Archive, routeKey: "history" },
   { href: "/hog-intake", label: "Hog Intake", icon: Beef, routeKey: "hog-intake" },
   { href: "/primal-calc", label: "Primal Calc", icon: Calculator, routeKey: "primal-calc" },
   { href: "/orders-allocation", label: "Orders & Allocation", icon: Package, routeKey: "orders-allocation" },
@@ -37,7 +42,7 @@ const items: NavItem[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { role } = useDashboardUser();
+  const { email, role } = useDashboardUser();
 
   const visibleItems =
     role === null ? items : items.filter((item) => canAccessRoute(role, item.routeKey));
@@ -91,13 +96,17 @@ export function AppSidebar() {
         </nav>
 
         <div className="grid h-12 grid-cols-[56px_1fr] items-center gap-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white">
-            N
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+            {email ? email.charAt(0).toUpperCase() : "U"}
           </div>
 
-          <div className="whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <p className="text-sm font-medium text-slate-900">User</p>
-            <p className="text-xs text-slate-500">Account</p>
+          <div className="min-w-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <p className="truncate text-sm font-medium text-slate-900">
+              {email || "User"}
+            </p>
+            <p className="truncate text-xs text-slate-500">
+              {role ? formatRole(role) : "—"}
+            </p>
           </div>
         </div>
       </div>

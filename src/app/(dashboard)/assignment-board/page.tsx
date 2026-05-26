@@ -1,10 +1,11 @@
-"use client";
-
 import { AppHeader } from "@/components/layout/app-header";
 import { AssignmentBoardClient } from "@/features/assignment-board/components/assignment-board-client";
 import { AssignmentBoardHeaderActions } from "./header-actions";
+import { requireRouteAccess } from "@/lib/route-guard";
 
-export default function AssignmentBoardPage() {
+export default async function AssignmentBoardPage() {
+  await requireRouteAccess("assignment-board");
+
   return (
     <div className="flex h-full min-h-full flex-col">
       <AppHeader

@@ -9,7 +9,7 @@ import {
   type Role,
 } from "@/lib/permissions";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   if (!AUTH_ENABLED) {
     return NextResponse.next();
   }

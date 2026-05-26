@@ -17,10 +17,11 @@ export type RouteKey =
   | "tv-display";
 
 // Access matrix.
-//   admin              — everything
-//   supervisor         — home, assignment-board, history, tv-display
-//   production_planner — everything except assignment-board
-//   basic              — history only
+//   Common to all roles    — home, history, settings, tv-display
+//   admin                  — everything
+//   supervisor             — common + assignment-board
+//   production_planner     — common + planning modules (no assignment-board)
+//   basic                  — common only
 const ROLE_ROUTES: Record<Role, ReadonlyArray<RouteKey>> = {
   admin: [
     "home",
@@ -33,7 +34,13 @@ const ROLE_ROUTES: Record<Role, ReadonlyArray<RouteKey>> = {
     "history",
     "tv-display",
   ],
-  supervisor: ["home", "assignment-board", "history", "tv-display"],
+  supervisor: [
+    "home",
+    "assignment-board",
+    "settings",
+    "history",
+    "tv-display",
+  ],
   production_planner: [
     "home",
     "hog-intake",
@@ -44,7 +51,7 @@ const ROLE_ROUTES: Record<Role, ReadonlyArray<RouteKey>> = {
     "history",
     "tv-display",
   ],
-  basic: ["history"],
+  basic: ["home", "settings", "history", "tv-display"],
 };
 
 // Landing path per role — used when redirecting away from a disallowed
@@ -54,7 +61,7 @@ const ROLE_DEFAULT_PATH: Record<Role, string> = {
   admin: "/",
   supervisor: "/",
   production_planner: "/",
-  basic: "/history",
+  basic: "/",
 };
 
 export function canAccessRoute(role: Role, routeKey: RouteKey): boolean {

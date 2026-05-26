@@ -1,6 +1,10 @@
 import { AppHeader } from "@/components/layout/app-header";
+import { requireRouteAccess } from "@/lib/route-guard";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  await requireRouteAccess("settings");
+
+
   return (
     <div className="flex min-h-full flex-col">
       <AppHeader eyebrow="System Module" title="Settings" />

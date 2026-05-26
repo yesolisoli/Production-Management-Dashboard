@@ -13,7 +13,11 @@ const RELOAD_INTERVAL_MS = 4 * 60 * 60 * 1000;
 type WakeLockSentinelLike = { release: () => Promise<void> };
 type WakeLockApi = { request: (type: "screen") => Promise<WakeLockSentinelLike> };
 
-export function TVDisplayPageClient() {
+export function TVDisplayPageClient({
+  canAccessAssignmentBoard = true,
+}: {
+  canAccessAssignmentBoard?: boolean;
+} = {}) {
   const router = useRouter();
   const {
     employees,
@@ -182,6 +186,7 @@ export function TVDisplayPageClient() {
       statusConfigs={statusConfigs}
       announcement={announcement}
       onClose={() => router.push("/assignment-board")}
+      canAccessAssignmentBoard={canAccessAssignmentBoard}
       syncStatus={syncStatus}
       lastSyncedAt={lastSyncedAt}
     />

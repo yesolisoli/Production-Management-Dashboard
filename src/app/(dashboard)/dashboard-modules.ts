@@ -1,8 +1,10 @@
 import {
+  Archive,
   Beef,
   CalendarRange,
   Calculator,
   LayoutGrid,
+  Monitor,
   Package,
   Settings,
   type LucideIcon,
@@ -81,6 +83,45 @@ export const dashboardModules: DashboardModule[] = [
     href: "/settings",
     title: "Settings",
     description: "Configure system settings and preferences.",
+    icon: Settings,
+    accent: "text-sky-700",
+    iconColor: "text-sky-600",
+    cardClassName: "bg-sky-100/60 ring-sky-200/80",
+    wide: true,
+    routeKey: "settings",
+  },
+];
+
+// Dashboard cards shown to basic-role users instead of operational
+// modules. Kept separate so non-basic roles don't see History/TV cards
+// on their dashboard.
+export const basicDashboardModules: DashboardModule[] = [
+  {
+    href: "/history",
+    title: "History",
+    description: "Review past shift snapshots and assignments.",
+    icon: Archive,
+    accent: "text-slate-800",
+    iconColor: "text-slate-700",
+    cardClassName: "bg-slate-200/70 ring-slate-300/80",
+    wide: false,
+    routeKey: "history",
+  },
+  {
+    href: "/tv-display",
+    title: "TV Display",
+    description: "Open the live floor display.",
+    icon: Monitor,
+    accent: "text-indigo-700",
+    iconColor: "text-indigo-600",
+    cardClassName: "bg-indigo-100/60 ring-indigo-200/80",
+    wide: false,
+    routeKey: "tv-display",
+  },
+  {
+    href: "/settings",
+    title: "Settings",
+    description: "Configure your account and preferences.",
     icon: Settings,
     accent: "text-sky-700",
     iconColor: "text-sky-600",

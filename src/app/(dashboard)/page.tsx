@@ -1,30 +1,26 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
-import { dashboardModules } from "./dashboard-modules";
-import { createClient } from "@/lib/supabase/server";
+import {
+  basicDashboardModules,
+  dashboardModules,
+  type DashboardModule,
+} from "./dashboard-modules";
 import { AUTH_ENABLED } from "@/lib/config";
-import { canAccessRoute, DEFAULT_ROLE, type Role } from "@/lib/permissions";
+import { canAccessRoute } from "@/lib/permissions";
+import { getCurrentRole, requireRouteAccess } from "@/lib/route-guard";
 
 export default async function DashboardHomePage() {
-  let visibleModules = dashboardModules;
+  await requireRouteAccess("home");
+
+  let visibleModules: DashboardModule[] = dashboardModules;
 
   if (AUTH_ENABLED) {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-      const role: Role = (profile?.role as Role | undefined) ?? DEFAULT_ROLE;
-      visibleModules = dashboardModules.filter((m) =>
-        canAccessRoute(role, m.routeKey)
-      );
+    const role = await getCurrentRole();
+    if (role) {
+      const source =
+        role === "basic" ? basicDashboardModules : dashboardModules;
+      visibleModules = source.filter((m) => canAccessRoute(role, m.routeKey));
     }
   }
 
