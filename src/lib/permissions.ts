@@ -1,9 +1,14 @@
 // Central permission source for the role-aware frontend.
 // RLS is intentionally not enabled yet — this file gates UI and routes only.
 
-export type Role = "admin" | "supervisor" | "production_planner" | "basic";
+export type Role =
+  | "admin"
+  | "supervisor"
+  | "production_planner"
+  | "basic"
+  | "pending";
 
-export const DEFAULT_ROLE: Role = "basic";
+export const DEFAULT_ROLE: Role = "pending";
 
 export type RouteKey =
   | "home"
@@ -17,11 +22,12 @@ export type RouteKey =
   | "tv-display";
 
 // Access matrix.
-//   Common to all roles    — home, history, settings, tv-display
 //   admin                  — everything
-//   supervisor             — common + assignment-board
-//   production_planner     — common + planning modules (no assignment-board)
-//   basic                  — common only
+//   supervisor             — home, assignment-board, settings, history, tv-display
+//   production_planner     — home + planning modules + settings + history + tv-display
+//                            (no assignment-board)
+//   basic                  — home, settings, history, tv-display
+//   pending                — home, settings (no history, no tv-display)
 const ROLE_ROUTES: Record<Role, ReadonlyArray<RouteKey>> = {
   admin: [
     "home",
@@ -52,6 +58,7 @@ const ROLE_ROUTES: Record<Role, ReadonlyArray<RouteKey>> = {
     "tv-display",
   ],
   basic: ["home", "settings", "history", "tv-display"],
+  pending: ["home", "settings"],
 };
 
 // Landing path per role — used when redirecting away from a disallowed
@@ -62,6 +69,7 @@ const ROLE_DEFAULT_PATH: Record<Role, string> = {
   supervisor: "/",
   production_planner: "/",
   basic: "/",
+  pending: "/",
 };
 
 export function canAccessRoute(role: Role, routeKey: RouteKey): boolean {
