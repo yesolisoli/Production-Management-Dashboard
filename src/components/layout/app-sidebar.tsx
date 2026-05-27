@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -10,11 +11,15 @@ import {
   Package,
   CalendarRange,
   Settings,
+  LogOut,
   type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
 import { useDashboardUser } from "./dashboard-user-context";
 import { canAccessRoute, type Role, type RouteKey } from "@/lib/permissions";
+import { createClient } from "@/lib/supabase/client";
+import { AUTH_ENABLED } from "@/lib/config";
+import { Modal } from "@/components/shared/modal";
 
 function formatRole(role: Role): string {
   return role
@@ -42,12 +47,27 @@ const items: NavItem[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { email, role } = useDashboardUser();
+  const [signingOut, setSigningOut] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const visibleItems =
     role === null ? items : items.filter((item) => canAccessRoute(role, item.routeKey));
 
+  const handleLogout = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    if (AUTH_ENABLED) {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    }
+    router.replace("/login");
+    router.refresh();
+  };
+
   return (
+    <>
     <aside className="group sticky top-0 h-screen w-24 shrink-0 overflow-hidden border-r bg-white transition-[width] duration-300 ease-out hover:w-80">
       <div className="flex h-full flex-col px-5 py-5">
         <div className="mb-8 grid h-16 grid-cols-[56px_1fr] items-center gap-4">
@@ -95,7 +115,7 @@ export function AppSidebar() {
           })}
         </nav>
 
-        <div className="grid h-12 grid-cols-[56px_1fr] items-center gap-4">
+        <div className="grid h-12 grid-cols-[56px_1fr_auto] items-center gap-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
             {email ? email.charAt(0).toUpperCase() : "U"}
           </div>
@@ -108,8 +128,52 @@ export function AppSidebar() {
               {role ? formatRole(role) : "—"}
             </p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            disabled={signingOut}
+            title="Sign out"
+            aria-label="Sign out"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 opacity-0 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 group-hover:opacity-100"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
       </div>
     </aside>
+
+    {confirmOpen && (
+      <Modal
+        title="Sign out"
+        onClose={() => !signingOut && setConfirmOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setConfirmOpen(false)}
+              disabled={signingOut}
+              className="rounded-lg px-4 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleLogout}
+              disabled={signingOut}
+              className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-60"
+            >
+              {signingOut ? "Signing out..." : "Sign out"}
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm text-slate-600">
+          Are you sure you want to sign out?
+        </p>
+        {email && (
+          <p className="mt-2 text-xs text-slate-400">{email}</p>
+        )}
+      </Modal>
+    )}
+    </>
   );
 }
