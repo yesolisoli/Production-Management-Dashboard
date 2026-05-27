@@ -1,9 +1,29 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
-import { dashboardModules } from "./dashboard-modules";
+import {
+  basicDashboardModules,
+  dashboardModules,
+  type DashboardModule,
+} from "./dashboard-modules";
+import { AUTH_ENABLED } from "@/lib/config";
+import { canAccessRoute } from "@/lib/permissions";
+import { getCurrentRole, requireRouteAccess } from "@/lib/route-guard";
 
-export default function DashboardHomePage() {
+export default async function DashboardHomePage() {
+  await requireRouteAccess("home");
+
+  let visibleModules: DashboardModule[] = dashboardModules;
+
+  if (AUTH_ENABLED) {
+    const role = await getCurrentRole();
+    if (role) {
+      const source =
+        role === "basic" ? basicDashboardModules : dashboardModules;
+      visibleModules = source.filter((m) => canAccessRoute(role, m.routeKey));
+    }
+  }
+
   return (
     <div className="flex min-h-full flex-col bg-slate-50">
       <AppHeader
@@ -14,7 +34,7 @@ export default function DashboardHomePage() {
       <section className="min-h-0 flex-1 bg-slate-50 px-[3.25rem] pt-8 pb-5 lg:px-[3.75rem] lg:pt-8 lg:pb-6 xl:px-[4.25rem]">
         <div className="mx-auto flex h-full min-h-0 max-w-[1660px] overflow-visible bg-slate-50">
           <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 xl:grid-rows-2 xl:gap-5">
-            {dashboardModules.map((module) => {
+            {visibleModules.map((module) => {
               const Icon = module.icon;
 
               return (

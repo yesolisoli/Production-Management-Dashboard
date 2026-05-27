@@ -1,6 +1,10 @@
 import { AppHeader } from "@/components/layout/app-header";
+import { requireRouteAccess } from "@/lib/route-guard";
 
-export default function ProductionPlannerPage() {
+export default async function ProductionPlannerPage() {
+  await requireRouteAccess("production-planner");
+
+
   return (
     <div className="flex min-h-full flex-col">
       <AppHeader eyebrow="Operations Module" title="Production Planner" />

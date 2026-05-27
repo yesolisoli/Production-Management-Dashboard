@@ -1,14 +1,17 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Upload, Download } from "lucide-react";
 import { Modal } from "@/components/shared/modal";
 import { StatusSelect, STATUS_CODE_AVAILABLE, type StatusConfig } from "../status-select";
 import { MultiFilterSelect } from "../multi-filter-select";
 import { DeptSelect } from "../dept-select";
 import { ActiveDeptSelect } from "../active-dept-select";
 import { BaseDropdown, DropdownSection, DROPDOWN_WIDTH } from "../base-dropdown";
+import { RosterCsvImportModal } from "./roster-csv-import-modal";
 import type { Employee, Station, StationAssignment, WorkArea } from "../../types";
 import { getEmployeeQualifiedWorkAreaIds, isEmployeeEligibleForWorkArea } from "../../utils";
+import { buildEmployeeTemplateCsv, downloadCsv } from "../../csv-import";
 
 type EmployeeStatus = string;
 
@@ -20,6 +23,7 @@ export function RosterManageModal({
   workAreas,
   statusConfigs,
   onAdd,
+  onBulkImport,
   onRemove,
   onUpdate,
   onSetQualifiedWorkAreas,
@@ -40,6 +44,17 @@ export function RosterManageModal({
   workAreas: WorkArea[];
   statusConfigs: StatusConfig[];
   onAdd: (emp: Employee) => void;
+  onBulkImport: (rows: Array<{
+    id: string;
+    employeeCode: string;
+    fullName: string;
+    homeWorkAreaId: string;
+    active: boolean;
+    gender: "M" | "F" | null;
+    level: 1 | 2 | 3 | null;
+    temporary: boolean;
+    isUpdate: boolean;
+  }>) => Promise<void>;
   onRemove: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Omit<Employee, "qualifiedDepartmentIds">>) => void;
   onSetQualifiedWorkAreas: (id: string, workAreaIds: string[]) => void;
@@ -65,6 +80,7 @@ export function RosterManageModal({
   const [sortKey, setSortKey] = useState<"name" | "code" | "dept" | "status" | "level" | "gender">("dept");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [pinnedNewIds, setPinnedNewIds] = useState<Set<string>>(new Set());
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [stationPopover, setStationPopover] = useState<{
     empId: string;
     triggerEl: HTMLButtonElement;
@@ -157,6 +173,15 @@ export function RosterManageModal({
     setEditingId(null);
   };
 
+  const handleCsvImport = async (rows: Parameters<typeof onBulkImport>[0]) => {
+    await onBulkImport(rows);
+    const newIds = rows.filter((r) => !r.isUpdate).map((r) => r.id);
+    if (newIds.length > 0) {
+      setPinnedNewIds((prev) => new Set([...prev, ...newIds]));
+      scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
   return (
     <Modal
       title="Manage Roster"
@@ -189,6 +214,23 @@ export function RosterManageModal({
             className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 hover:bg-slate-700"
           >
             + Add
+          </button>
+          <div className="mx-1 h-6 w-px bg-slate-200" />
+          <button
+            onClick={() => setCsvImportOpen(true)}
+            className="group flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-700 hover:shadow active:scale-[0.98]"
+            title="Bulk import employees from a CSV file"
+          >
+            <Upload size={14} strokeWidth={2.25} className="transition-transform group-hover:-translate-y-0.5" />
+            Import CSV
+          </button>
+          <button
+            onClick={() => downloadCsv("employee_import_template.csv", buildEmployeeTemplateCsv())}
+            className="group flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:border-slate-400 hover:bg-slate-50 hover:shadow active:scale-[0.98]"
+            title="Download a CSV template with example rows"
+          >
+            <Download size={14} strokeWidth={2.25} className="transition-transform group-hover:translate-y-0.5" />
+            Template
           </button>
         </div>
       }
@@ -465,6 +507,14 @@ export function RosterManageModal({
             ))}
           </DropdownSection>
         </BaseDropdown>
+      )}
+      {csvImportOpen && (
+        <RosterCsvImportModal
+          employees={employees}
+          workAreas={workAreas}
+          onImport={handleCsvImport}
+          onClose={() => setCsvImportOpen(false)}
+        />
       )}
     </Modal>
   );

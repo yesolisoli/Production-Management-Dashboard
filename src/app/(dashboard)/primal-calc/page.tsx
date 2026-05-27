@@ -1,6 +1,10 @@
 import { AppHeader } from "@/components/layout/app-header";
+import { requireRouteAccess } from "@/lib/route-guard";
 
-export default function PrimalCalcPage() {
+export default async function PrimalCalcPage() {
+  await requireRouteAccess("primal-calc");
+
+
   return (
     <div className="flex min-h-full flex-col">
       <AppHeader eyebrow="Operations Module" title="Primal Calc" />

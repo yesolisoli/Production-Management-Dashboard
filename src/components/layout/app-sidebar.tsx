@@ -10,21 +10,42 @@ import {
   Package,
   CalendarRange,
   Settings,
+  type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
+import { useDashboardUser } from "./dashboard-user-context";
+import { canAccessRoute, type Role, type RouteKey } from "@/lib/permissions";
 
-const items = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/assignment-board", label: "Assignment Board", icon: Users },
-  { href: "/hog-intake", label: "Hog Intake", icon: Beef },
-  { href: "/primal-calc", label: "Primal Calc", icon: Calculator },
-  { href: "/orders-allocation", label: "Orders & Allocation", icon: Package },
-  { href: "/production-planner", label: "Production Planner", icon: CalendarRange },
-  { href: "/settings", label: "Settings", icon: Settings },
+function formatRole(role: Role): string {
+  return role
+    .split("_")
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(" ");
+}
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  routeKey: RouteKey;
+};
+
+const items: NavItem[] = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, routeKey: "home" },
+  { href: "/assignment-board", label: "Assignment Board", icon: Users, routeKey: "assignment-board" },
+  { href: "/hog-intake", label: "Hog Intake", icon: Beef, routeKey: "hog-intake" },
+  { href: "/primal-calc", label: "Primal Calc", icon: Calculator, routeKey: "primal-calc" },
+  { href: "/orders-allocation", label: "Orders & Allocation", icon: Package, routeKey: "orders-allocation" },
+  { href: "/production-planner", label: "Production Planner", icon: CalendarRange, routeKey: "production-planner" },
+  { href: "/settings", label: "Settings", icon: Settings, routeKey: "settings" },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { email, role } = useDashboardUser();
+
+  const visibleItems =
+    role === null ? items : items.filter((item) => canAccessRoute(role, item.routeKey));
 
   return (
     <aside className="group sticky top-0 h-screen w-24 shrink-0 overflow-hidden border-r bg-white transition-[width] duration-300 ease-out hover:w-80">
@@ -45,7 +66,7 @@ export function AppSidebar() {
         </div>
 
         <nav className="flex flex-1 flex-col gap-3">
-          {items.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = item.icon;
             const active =
               pathname === item.href ||
@@ -75,13 +96,17 @@ export function AppSidebar() {
         </nav>
 
         <div className="grid h-12 grid-cols-[56px_1fr] items-center gap-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white">
-            N
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+            {email ? email.charAt(0).toUpperCase() : "U"}
           </div>
 
-          <div className="whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <p className="text-sm font-medium text-slate-900">User</p>
-            <p className="text-xs text-slate-500">Account</p>
+          <div className="min-w-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <p className="truncate text-sm font-medium text-slate-900">
+              {email || "User"}
+            </p>
+            <p className="truncate text-xs text-slate-500">
+              {role ? formatRole(role) : "—"}
+            </p>
           </div>
         </div>
       </div>

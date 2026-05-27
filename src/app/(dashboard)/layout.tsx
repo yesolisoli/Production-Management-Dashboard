@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { DashboardUserProvider } from "@/components/layout/dashboard-user-context";
 import { AUTH_ENABLED } from "@/lib/config";
+import { DEFAULT_ROLE, type Role } from "@/lib/permissions";
 
 export default async function DashboardLayout({
   children,
@@ -10,6 +11,7 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   let userEmail = "";
+  let role: Role | null = null;
 
   if (AUTH_ENABLED) {
     const supabase = await createClient();
@@ -23,13 +25,21 @@ export default async function DashboardLayout({
     }
 
     userEmail = user.email ?? "";
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    role = (profile?.role as Role | undefined) ?? DEFAULT_ROLE;
   }
-  
+
   return (
     <div className="h-screen overflow-hidden bg-white">
       <div className="flex h-full">
-        <AppSidebar />
-        <DashboardUserProvider userEmail={userEmail}>
+        <DashboardUserProvider userEmail={userEmail} role={role}>
+          <AppSidebar />
           <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
             <main className="min-h-0 flex-1 overflow-auto">{children}</main>
           </div>

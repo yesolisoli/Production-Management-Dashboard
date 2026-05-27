@@ -1,6 +1,10 @@
 import { AppHeader } from "@/components/layout/app-header";
+import { requireRouteAccess } from "@/lib/route-guard";
 
-export default function HogIntakePage() {
+export default async function HogIntakePage() {
+  await requireRouteAccess("hog-intake");
+
+
   return (
     <div className="flex min-h-full flex-col">
       <AppHeader eyebrow="Operations Module" title="Hog Intake" />
