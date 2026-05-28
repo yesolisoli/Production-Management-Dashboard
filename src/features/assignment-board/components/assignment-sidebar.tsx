@@ -6,6 +6,10 @@ import { getAssignmentWorkAreaId, isEmployeeEligibleForWorkArea, getEmployeeQual
 import type { Employee, Station, StationAssignment, WorkArea } from "../types";
 import { StatCard } from "./stat-card";
 import { StatusSelect, getUnavailableStatusCodes, STATUS_CODE_AVAILABLE } from "./status-select";
+import { resolveWorkAreaTarget } from "@/features/daily-lineup/config/targets";
+import { useTargetOverrides } from "@/features/daily-lineup/hooks/use-target-overrides";
+import { classifyStatus, STATUS_META } from "@/features/daily-lineup/utils/classify-status";
+import { TargetModal } from "./modals/target-modal";
 import type { StatusConfig } from "./status-select";
 import { AssignmentModal } from "./modals/assignment-modal";
 
@@ -51,38 +55,76 @@ export function AssignmentSidebar({
   onManageStatuses: () => void;
 }) {
   const [assignModalEmp, setAssignModalEmp] = useState<Employee | null>(null);
+  const [targetModalOpen, setTargetModalOpen] = useState(false);
+  const { overrides: targetOverrides, setOverride: setTargetOverride } = useTargetOverrides();
 
   const getStatus = (id: string): EmployeeStatus => statuses[id] ?? STATUS_CODE_AVAILABLE;
 
   const activeEmployees = employees.filter((e) => e.active);
-  const totalStaff = activeEmployees.length;
+
+  // Workforce Overview shows the same Daily Lineup metrics for the selected
+  // work area: present (incl. light duty), light duty, over target, and
+  // unavailable (absent + vacation). Scoped to the WA's home roster.
+  const overviewEmployees = selectedWorkAreaId
+    ? activeEmployees.filter((e) => e.homeDepartmentId === selectedWorkAreaId)
+    : activeEmployees;
 
   const unavailableCodes = getUnavailableStatusCodes(statusConfigs);
-  const isUnavailableStat = (id: string) => unavailableCodes.has(getStatus(id));
+  const VACATION_CODE = "vacation";
+  const LIGHT_DUTY_CODE = "injured";
 
-  const unavailableCount = activeEmployees.filter((e) => isUnavailableStat(e.id)).length;
-  const assignedCount = activeEmployees.filter(
-    (e) => !isUnavailableStat(e.id) && assignments.some((a) => a.employee_id === e.id),
-  ).length;
-  const unassignedCount = activeEmployees.filter(
-    (e) => !isUnavailableStat(e.id) && !assignments.some((a) => a.employee_id === e.id),
-  ).length;
-  const availableWorkforce = totalStaff - unavailableCount;
-  const efficiency = availableWorkforce > 0 ? ((assignedCount / availableWorkforce) * 100).toFixed(1) : "0.0";
+  let presentCount = 0;
+  let lightDutyCount = 0;
+  let absentCount = 0;
+  let vacationCount = 0;
+  for (const e of overviewEmployees) {
+    const s = getStatus(e.id);
+    if (s === VACATION_CODE) {
+      vacationCount += 1;
+    } else if (unavailableCodes.has(s)) {
+      absentCount += 1;
+    } else {
+      presentCount += 1;
+      if (s === LIGHT_DUTY_CODE) lightDutyCount += 1;
+    }
+  }
+  const unavailableTotal = absentCount + vacationCount;
+  const targetCount = resolveWorkAreaTarget(selectedWorkAreaId ?? "", employees, targetOverrides);
+  const overTargetValue = presentCount - targetCount;
+  const overTargetDisplay =
+    overTargetValue > 0 ? `+${overTargetValue}` :
+    overTargetValue < 0 ? `${overTargetValue}` : "—";
+
+  // Used downstream by the "Available Employees" header badge.
+  const totalStaff = overviewEmployees.length;
 
 
   return (
     <div className="flex h-full w-72 shrink-0 flex-col gap-4 overflow-hidden">
       {/* Workforce Overview */}
       <div className="shrink-0 rounded-lg border border-slate-300 bg-white p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Workforce Overview</p>
+          {selectedWorkAreaId && (() => {
+            const meta = STATUS_META[classifyStatus(presentCount, targetCount)];
+            return (
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${meta.badgeClass}`}>
+                {meta.label}
+              </span>
+            );
+          })()}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <StatCard label="Total Staff" value={totalStaff} bg="bg-[#FFFFFF]" labelColor="text-slate-400" color="text-[#334155]" borderColor="border-[#E2E8F0]" />
-          <StatCard label="Unassigned" value={unassignedCount} bg="bg-white" labelColor="text-[#F75871]" color="text-[#F75871]" borderColor="border-[#E2E8F0]" accent="#F75871" />
-          <StatCard label="Unavailable" value={unavailableCount} bg="bg-white" labelColor="text-[#F8AE17]" color="text-[#F8AE17]" borderColor="border-[#E2E8F0]" accent="#F8AE17" />
-          <StatCard label="Efficiency" value={`${efficiency}%`} bg="bg-[#0F172A]" labelColor="text-slate-400" color="text-[#FFFFFF]" borderColor="border-[#0F172A]" />
+          <StatCard label="Total Staff" value={presentCount} bg="bg-[#FFFFFF]" labelColor="text-slate-400" color="text-[#334155]" borderColor="border-[#E2E8F0]" />
+          <div
+            onDoubleClick={() => { if (selectedWorkAreaId) setTargetModalOpen(true); }}
+            title="Double-click to set target"
+            className="cursor-pointer"
+          >
+            <StatCard label="Over Target" value={overTargetDisplay} bg="bg-white" labelColor="text-[#1E3A8A]" color="text-[#1E3A8A]" borderColor="border-[#E2E8F0]" accent="#1E3A8A" />
+          </div>
+          <StatCard label="Light Duty" value={lightDutyCount} bg="bg-white" labelColor="text-[#F8AE17]" color="text-[#F8AE17]" borderColor="border-[#E2E8F0]" accent="#F8AE17" />
+          <StatCard label="Unavailable" value={unavailableTotal} bg="bg-white" labelColor="text-[#F75871]" color="text-[#F75871]" borderColor="border-[#E2E8F0]" accent="#F75871" />
         </div>
       </div>
 
@@ -126,10 +168,14 @@ export function AssignmentSidebar({
             const visibleWorkAreas = selectedWa ? [selectedWa] : workAreas;
             const noDept = !selectedWa ? activeEmployees.filter((e) => e.homeDepartmentId === null && !isUnavailable(e.id)) : [];
             const unassignedEmps = !selectedWa ? activeEmployees.filter((e) => e.homeDepartmentId === null && !isUnavailable(e.id)) : [];
+            // Unavailable list is scoped to the selected work area's home
+            // roster so the count matches the Workforce Overview tile. Loan-in
+            // eligible employees from other home depts are intentionally
+            // excluded here to keep the two numbers consistent.
             const unavailableEmps = activeEmployees.filter((e) => {
               if (!isUnavailable(e.id)) return false;
               if (!selectedWa) return true;
-              return isEmployeeEligibleForWorkArea(e, selectedWa.id);
+              return e.homeDepartmentId === selectedWa.id;
             });
             return (
               <>
@@ -147,8 +193,8 @@ export function AssignmentSidebar({
                   return (
                     <div key={wa.id}>
                       <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-t border-slate-200 bg-slate-100 px-4 py-2">
-                        <span className="h-2 w-2 rounded-full shrink-0 bg-red-500" />
-                        <span className="text-xs font-semibold text-slate-600">No Station</span>
+                        <span className="h-2 w-2 rounded-full shrink-0 bg-emerald-500" />
+                        <span className="text-xs font-semibold text-slate-600">Available</span>
                         <span className="ml-auto text-xs text-slate-400">{deptEmps.length}</span>
                       </div>
                       {deptEmps.map((emp) => {
@@ -184,10 +230,10 @@ export function AssignmentSidebar({
                               <p className="min-w-0 truncate text-sm font-medium text-slate-800">
                                 {emp.full_name}
                               </p>
-                            {emp.temporary && (
-                              <span className="shrink-0 rounded bg-violet-50 px-1 py-px text-[9px] text-violet-500 border border-violet-100">TEMP</span>
-                            )}
                             <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                              {emp.temporary && (
+                                <span className="rounded bg-slate-100 px-1.5 py-px text-[9px] text-slate-800 border border-slate-300">TEMP</span>
+                              )}
                               {emp.homeDepartmentId !== wa.id && emp.homeDepartmentId && (
                                 <span className="rounded px-1.5 py-0.5 text-[10px] bg-blue-50 text-blue-600 border border-blue-200">
                                   {abbrevDept(workAreas.find((w) => w.id === emp.homeDepartmentId)?.name ?? "")}
@@ -232,10 +278,10 @@ export function AssignmentSidebar({
                           className="group flex cursor-grab items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50 active:cursor-grabbing"
                         >
                           <p className="min-w-0 truncate text-sm font-medium text-slate-800">{emp.full_name}</p>
-                          {emp.temporary && (
-                            <span className="shrink-0 rounded bg-violet-50 px-1 py-px text-[9px] text-violet-500 border border-violet-100">TEMP</span>
-                          )}
-                          <div className="ml-auto shrink-0">
+                          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                            {emp.temporary && (
+                              <span className="rounded bg-slate-100 px-1.5 py-px text-[9px] text-slate-800 border border-slate-300">TEMP</span>
+                            )}
                             <StatusSelect
                               value={getStatus(emp.id)}
                               configs={statusConfigs}
@@ -259,10 +305,10 @@ export function AssignmentSidebar({
                     {unavailableEmps.map((emp) => (
                       <div key={emp.id} className="flex items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50">
                         <p className="min-w-0 cursor-pointer truncate text-sm font-medium text-slate-400" onDoubleClick={() => onOpenRoster(emp.full_name)}>{emp.full_name}</p>
-                        {emp.temporary && (
-                          <span className="shrink-0 rounded bg-violet-50 px-1 py-px text-[9px] text-violet-500 border border-violet-100">TEMP</span>
-                        )}
-                        <div className="ml-auto shrink-0">
+                        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                          {emp.temporary && (
+                            <span className="rounded bg-slate-100 px-1.5 py-px text-[9px] text-slate-800 border border-slate-300">TEMP</span>
+                          )}
                           <StatusSelect
                             value={getStatus(emp.id)}
                             configs={statusConfigs}
@@ -290,7 +336,7 @@ export function AssignmentSidebar({
                     <div key={`assigned-${wa.id}`}>
                       <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-t border-slate-200 bg-slate-100 px-4 py-2">
                         <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: wa.color_hex ?? "#64748b" }} />
-                        <span className="text-xs font-semibold text-slate-600">{wa.name}</span>
+                        <span className="text-xs font-semibold text-slate-600">Assigned</span>
                         <span className="ml-auto text-xs text-slate-400">{assignedEmps.length}</span>
                       </div>
                       {assignedEmps.map((emp) => {
@@ -313,10 +359,12 @@ export function AssignmentSidebar({
                             className="flex cursor-grab items-center gap-2 border-b border-slate-100 px-4 py-2 last:border-b-0 hover:bg-slate-50/50 active:cursor-grabbing"
                           >
                             <p className="min-w-0 truncate text-sm font-medium text-slate-600">{emp.full_name}</p>
-                            {emp.temporary && (
-                              <span className="shrink-0 rounded bg-violet-50 px-1 py-px text-[9px] text-violet-500 border border-violet-100">TEMP</span>
-                            )}
-                            <span className="ml-auto min-w-0 max-w-[45%] shrink-0 truncate text-right text-xs text-slate-400">{empStations.join(", ")}</span>
+                            <div className="ml-auto flex shrink-0 items-center gap-1.5 min-w-0 max-w-[55%]">
+                              {emp.temporary && (
+                                <span className="shrink-0 rounded bg-slate-100 px-1.5 py-px text-[9px] text-slate-800 border border-slate-300">TEMP</span>
+                              )}
+                              <span className="min-w-0 truncate text-right text-xs text-slate-400">{empStations.join(", ")}</span>
+                            </div>
                           </div>
                         );
                       })}
@@ -398,6 +446,22 @@ export function AssignmentSidebar({
         />
       )}
 
+      {targetModalOpen && selectedWorkAreaId && (
+        <TargetModal
+          workAreaName={workAreas.find((w) => w.id === selectedWorkAreaId)?.name ?? "—"}
+          currentTarget={targetCount}
+          hasOverride={targetOverrides[selectedWorkAreaId] !== undefined}
+          onSave={(value) => {
+            setTargetOverride(selectedWorkAreaId, value);
+            setTargetModalOpen(false);
+          }}
+          onReset={() => {
+            setTargetOverride(selectedWorkAreaId, null);
+            setTargetModalOpen(false);
+          }}
+          onClose={() => setTargetModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -9,8 +9,8 @@ export default async function AssignmentBoardPage() {
   return (
     <div className="flex h-full min-h-full flex-col">
       <AppHeader
-        eyebrow="Daily Lineup"
-        title="Employee Assignment"
+        eyebrow="Admin View"
+        title="Daily Lineup"
         actions={<AssignmentBoardHeaderActions />}
       />
 

@@ -38,6 +38,7 @@ export function EmployeeCard({ employee, stationId, shiftCode, modeCode, onRemov
   };
 
   const isInjured = statusCode === "injured";
+  const isTraining = statusCode === "training";
 
   const statusAccentColor: Record<string, string> = {
     injured:  "#fb923c",
@@ -50,14 +51,16 @@ export function EmployeeCard({ employee, stationId, shiftCode, modeCode, onRemov
   if (statusCode && statusAccentColor[statusCode]) nonDefaults.push(statusAccentColor[statusCode]);
   if (isLoaned) nonDefaults.push(loanAccent);
 
+  const defaultBarColor = employee.temporary ? "#0f172a" : "#4ade80";
   const barStyle =
-    nonDefaults.length === 0 ? { backgroundColor: "#4ade80" } :
+    nonDefaults.length === 0 ? { backgroundColor: defaultBarColor } :
     nonDefaults.length === 1 ? { backgroundColor: nonDefaults[0] } :
     { background: `linear-gradient(to bottom, ${nonDefaults[0]} 50%, ${nonDefaults[1]} 50%)` };
 
   type SubtitlePart = string | { dot: string; label: string };
   const subtitleParts: SubtitlePart[] = [
     isInjured ? "Light Duty" : null,
+    isTraining ? "Training" : null,
     employee.temporary ? "Temporary" : null,
     loanInfo?.isLoanedIn && loanInfo.homeWaName ? `from ${loanInfo.homeWaName}` : null,
   ].filter((x): x is string => x !== null);

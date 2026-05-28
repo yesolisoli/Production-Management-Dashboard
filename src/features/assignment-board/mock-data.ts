@@ -430,12 +430,12 @@ export const mockEmployees: Employee[] = [
 ];
 
 export const mockEmployeeStatuses: EmployeeDailyStatus[] = [
-  { id: "status_1", employee_id: "emp_1", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "available", reason: null },
+  { id: "status_1", employee_id: "emp_1", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "injured", reason: "Back strain" },
   { id: "status_2", employee_id: "emp_2", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "available", reason: null },
-  { id: "status_3", employee_id: "emp_3", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "available", reason: null },
+  { id: "status_3", employee_id: "emp_3", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "off_shift", reason: "Schedule change" },
   { id: "status_4", employee_id: "emp_4", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "vacation", reason: "Family event" },
-  { id: "status_5", employee_id: "emp_5", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "available", reason: null },
-  { id: "status_6", employee_id: "emp_6", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "available", reason: null },
+  { id: "status_5", employee_id: "emp_5", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "injured", reason: "Wrist strain" },
+  { id: "status_6", employee_id: "emp_6", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "sick", reason: "Flu" },
   { id: "status_7", employee_id: "emp_7", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "sick", reason: "Not feeling well" },
   { id: "status_101", employee_id: "emp_101", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "available", reason: null },
   { id: "status_102", employee_id: "emp_102", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "available", reason: null },
@@ -447,6 +447,13 @@ export const mockEmployeeStatuses: EmployeeDailyStatus[] = [
   { id: "status_108", employee_id: "emp_108", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "available", reason: null },
   { id: "status_109", employee_id: "emp_109", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "available", reason: null },
   { id: "status_110", employee_id: "emp_110", work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "available", reason: null },
+  { id: "status_15",  employee_id: "emp_15",  work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "vacation",  reason: "Approved time off" },
+  { id: "status_11",  employee_id: "emp_11",  work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "sick",      reason: "Migraine" },
+  { id: "status_17",  employee_id: "emp_17",  work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "vacation",  reason: "Family event" },
+  { id: "status_31",  employee_id: "emp_31",  work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "off_shift", reason: "Schedule change" },
+  { id: "status_32",  employee_id: "emp_32",  work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "vacation",  reason: "Personal" },
+  { id: "status_12",  employee_id: "emp_12",  work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "sick",      reason: "Fever" },
+  { id: "status_16",  employee_id: "emp_16",  work_date: mockWorkDate, shift_code: "shift_1", mode_code: "normal", status: "vacation",  reason: "Approved time off" },
 ];
 
 function mkA(

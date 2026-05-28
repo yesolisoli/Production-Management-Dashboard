@@ -307,7 +307,7 @@ export function AssignmentCell({
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="text-sm font-medium text-slate-800 truncate">{emp.full_name}</span>
                           {emp.temporary && (
-                            <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-amber-50 text-amber-600 border border-amber-200">Temp</span>
+                            <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-300">Temp</span>
                           )}
                         </div>
                         <div className="ml-2 flex shrink-0 items-center gap-1.5">
