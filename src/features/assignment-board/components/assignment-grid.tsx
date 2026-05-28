@@ -716,7 +716,7 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
                   <td key={shift.code} className={`h-px border-t border-black/6 p-0 align-top ${isLast ? "border-b border-b-black/6" : ""}`}>
                     <div className="h-full px-2 py-4">
                       <AssignmentCell stationId={station.id} shiftCode={shift.code} modeCode={selectedMode} color={color}
-                        assignments={assignments} allEmployees={employees} statuses={statuses} disabledEmployeeIds={disabledEmployeeIds} onAssign={handleAssign} onRemove={handleRemove} workAreaId={selectedWorkArea.id} workAreas={workAreas} stations={stations} genderRestriction={station.gender_restriction} onEmployeeDoubleClick={onEmployeeDoubleClick} statusConfigs={statusConfigs} />
+                        assignments={assignments} allEmployees={employees} statuses={statuses} disabledEmployeeIds={disabledEmployeeIds} onAssign={handleAssign} onRemove={handleRemove} workAreaId={selectedWorkArea.id} workAreas={workAreas} stations={stations} workAreaShifts={workAreaShifts} genderRestriction={station.gender_restriction} onEmployeeDoubleClick={onEmployeeDoubleClick} statusConfigs={statusConfigs} />
                     </div>
                   </td>
                 ))}

@@ -3,8 +3,9 @@
 import React from "react";
 import type { Employee } from "../types";
 import type { ModeCode, ShiftCode } from "../types";
+import type { ConflictInfo } from "../utils";
 
-export function EmployeeCard({ employee, stationId, shiftCode, modeCode, onRemove, loanInfo, onDoubleClick, statusCode }: {
+export function EmployeeCard({ employee, stationId, shiftCode, modeCode, onRemove, loanInfo, onDoubleClick, statusCode, conflicts }: {
   employee: Employee;
   stationId: string;
   shiftCode: ShiftCode;
@@ -13,6 +14,7 @@ export function EmployeeCard({ employee, stationId, shiftCode, modeCode, onRemov
   loanInfo?: { isLoanedIn: boolean; homeWaName?: string };
   onDoubleClick?: () => void;
   statusCode?: string;
+  conflicts?: ConflictInfo[];
 }) {
   const handleDragStart = (e: React.DragEvent) => {
     e.stopPropagation();
@@ -65,20 +67,46 @@ export function EmployeeCard({ employee, stationId, shiftCode, modeCode, onRemov
     loanInfo?.isLoanedIn && loanInfo.homeWaName ? `from ${loanInfo.homeWaName}` : null,
   ].filter((x): x is string => x !== null);
 
+  const hasConflict = !!conflicts && conflicts.length > 0;
+  const conflictTooltip = hasConflict
+    ? "Also assigned to:\n" +
+      conflicts!
+        .map((c) => `${c.workAreaName} · ${c.shiftLabel}\n${c.timeRange}`)
+        .join("\n\n")
+    : undefined;
+
   return (
     <div
       draggable
       onDragStart={handleDragStart}
       onDoubleClick={onDoubleClick}
-      className="group/empcard relative flex cursor-grab flex-col rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm active:cursor-grabbing overflow-hidden"
+      className={`group/empcard relative flex cursor-grab flex-col rounded-md border bg-white px-3 py-2 text-sm shadow-sm active:cursor-grabbing ${
+        hasConflict ? "border-amber-300 ring-2 ring-amber-300/70 bg-amber-50/60" : "border-slate-200"
+      }`}
     >
       <span
-        className="absolute left-0 top-0 bottom-0 w-0.5"
+        className="absolute left-0 top-0 bottom-0 w-0.5 rounded-l-md"
         style={barStyle}
       />
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <p className="font-bold text-slate-700 truncate">{employee.full_name}</p>
+          {hasConflict && (
+            <span className="group/conflict relative shrink-0">
+              <span
+                aria-label="Overlapping assignment"
+                className="text-amber-600"
+              >
+                ⚠
+              </span>
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-0 top-full z-30 mt-1 hidden w-max max-w-[16rem] whitespace-pre-line rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-left text-[11px] font-medium text-amber-900 shadow-md group-hover/conflict:block"
+              >
+                {conflictTooltip}
+              </span>
+            </span>
+          )}
         </div>
         <button onClick={onRemove} className="invisible shrink-0 rounded px-1 text-xs text-slate-400 transition-colors group-hover/empcard:visible hover:bg-slate-100 hover:text-slate-700">
           ×

@@ -6,6 +6,7 @@ import type {
   Station,
   StationAssignment,
   WorkArea,
+  WorkAreaShiftMap,
 } from "./types";
 
 /** Sentinel shift code used for dept-level assignments when no real shift is configured. */
@@ -104,5 +105,75 @@ export function getEmployeeActiveDepartmentIds(
         .filter((id): id is string => id !== undefined),
     ),
   ];
+}
+
+export type AssignmentTimeRange = {
+  startMin: number;
+  endMin: number;
+  timeRange: string;
+  shiftLabel: string;
+};
+
+export type ConflictContext = {
+  workAreas: WorkArea[];
+  stations: Station[];
+  workAreaShifts: WorkAreaShiftMap;
+};
+
+export type ConflictInfo = {
+  workAreaName: string;
+  shiftLabel: string;
+  timeRange: string;
+};
+
+export function getAssignmentTimeRange(
+  assignment: StationAssignment,
+  ctx: ConflictContext,
+): AssignmentTimeRange | null {
+  const workAreaId = getAssignmentWorkAreaId(assignment, ctx.stations);
+  if (!workAreaId) return null;
+  const shifts = ctx.workAreaShifts[workAreaId]?.[assignment.mode_code];
+  if (!shifts) return null;
+  const shift = shifts.find((s) => s.code === assignment.shift_code);
+  if (!shift || !shift.time_range.includes("-")) return null;
+  const [rawStart, rawEnd] = shift.time_range.split("-").map((s) => s.trim());
+  const startMin = parseTimeMin(rawStart);
+  const endMin = parseTimeMin(rawEnd);
+  if (Number.isNaN(startMin) || Number.isNaN(endMin)) return null;
+  return { startMin, endMin, timeRange: shift.time_range, shiftLabel: shift.label };
+}
+
+export function rangesOverlap(
+  a: { startMin: number; endMin: number },
+  b: { startMin: number; endMin: number },
+): boolean {
+  return a.startMin < b.endMin && b.startMin < a.endMin;
+}
+
+export function findEmployeeTimeConflicts(
+  assignment: StationAssignment,
+  allAssignments: StationAssignment[],
+  ctx: ConflictContext,
+): ConflictInfo[] {
+  const own = getAssignmentTimeRange(assignment, ctx);
+  if (!own) return [];
+  const conflicts: ConflictInfo[] = [];
+  for (const other of allAssignments) {
+    if (other.id === assignment.id) continue;
+    if (other.employee_id !== assignment.employee_id) continue;
+    if (other.work_date !== assignment.work_date) continue;
+    const otherRange = getAssignmentTimeRange(other, ctx);
+    if (!otherRange) continue;
+    if (!rangesOverlap(own, otherRange)) continue;
+    const otherWaId = getAssignmentWorkAreaId(other, ctx.stations);
+    const workAreaName =
+      ctx.workAreas.find((w) => w.id === otherWaId)?.name ?? "Unknown";
+    conflicts.push({
+      workAreaName,
+      shiftLabel: otherRange.shiftLabel,
+      timeRange: otherRange.timeRange,
+    });
+  }
+  return conflicts;
 }
 
