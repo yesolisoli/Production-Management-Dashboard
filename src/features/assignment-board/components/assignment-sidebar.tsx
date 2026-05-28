@@ -90,7 +90,23 @@ export function AssignmentSidebar({
   }
   const unavailableTotal = absentCount + vacationCount;
   const targetCount = resolveWorkAreaTarget(selectedWorkAreaId ?? "", employees, targetOverrides);
-  const overTargetValue = presentCount - targetCount;
+  // Total Staff = distinct active employees with at least one station
+  // assignment in the selected WA (loan-ins included). Over Target compares
+  // against this so both tiles share one definition.
+  const assignedCount = selectedWorkAreaId
+    ? new Set(
+        assignments
+          .filter((a) => a.station_id !== null && getAssignmentWorkAreaId(a, stations) === selectedWorkAreaId)
+          .map((a) => a.employee_id)
+          .filter((id) => activeEmployees.some((e) => e.id === id))
+      ).size
+    : new Set(
+        assignments
+          .filter((a) => a.station_id !== null)
+          .map((a) => a.employee_id)
+          .filter((id) => activeEmployees.some((e) => e.id === id))
+      ).size;
+  const overTargetValue = assignedCount - targetCount;
   const overTargetDisplay =
     overTargetValue > 0 ? `+${overTargetValue}` :
     overTargetValue < 0 ? `${overTargetValue}` : "—";
@@ -106,7 +122,7 @@ export function AssignmentSidebar({
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Workforce Overview</p>
           {selectedWorkAreaId && (() => {
-            const meta = STATUS_META[classifyStatus(presentCount, targetCount)];
+            const meta = STATUS_META[classifyStatus(assignedCount, targetCount)];
             return (
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${meta.badgeClass}`}>
                 {meta.label}
@@ -115,7 +131,7 @@ export function AssignmentSidebar({
           })()}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <StatCard label="Total Staff" value={presentCount} bg="bg-[#FFFFFF]" labelColor="text-slate-400" color="text-[#334155]" borderColor="border-[#E2E8F0]" />
+          <StatCard label="Total Staff" value={assignedCount} bg="bg-[#FFFFFF]" labelColor="text-slate-400" color="text-[#334155]" borderColor="border-[#E2E8F0]" />
           <div
             onDoubleClick={() => { if (selectedWorkAreaId) setTargetModalOpen(true); }}
             title="Double-click to set target"

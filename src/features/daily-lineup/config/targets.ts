@@ -17,8 +17,14 @@ import type { Employee } from "@/features/assignment-board/types";
  * on `work_areas`) without changing any callers.
  */
 export const WORK_AREA_TARGET_OVERRIDES: Record<string, number> = {
-  // Current packaging target. Adjust as ops updates the staffing goal.
-  wa_packaging: 56,
+  // Seed-data targets chosen so the Daily Lineup demo surfaces every
+  // LineupStatus (over / short / critical / on_track / full_crew) across the
+  // five work areas. Adjust freely as ops updates the staffing goal.
+  wa_loading: 37,     // assigned 35 → on_track   (deficit 2)
+  wa_small: 37,       // assigned 37 → full_crew  (deficit 0)
+  wa_processing: 38,  // assigned 32 → critical   (deficit 6)
+  wa_meat: 70,        // assigned 73 → over       (+3)
+  wa_packaging: 73,   // assigned 70 → short      (deficit 3)
 };
 
 /**

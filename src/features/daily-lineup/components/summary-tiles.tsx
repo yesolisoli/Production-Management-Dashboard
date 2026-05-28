@@ -35,8 +35,8 @@ function buildTiles(summary: LineupSummary): Tile[] {
 
   return [
     {
-      label: "TOTAL PRESENT",
-      value: summary.totalPresent,
+      label: "TOTAL STAFF",
+      value: summary.totalAssigned,
       caption: `of ${summary.totalTarget} target`,
       cardClass: "bg-emerald-50/70 ring-emerald-200/70",
       valueClass: "text-emerald-800",

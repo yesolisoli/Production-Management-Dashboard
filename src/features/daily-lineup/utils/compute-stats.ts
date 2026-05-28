@@ -1,9 +1,12 @@
 import type {
   Employee,
   EmployeeStatus,
+  Station,
+  StationAssignment,
   WorkArea,
 } from "@/features/assignment-board/types";
 import { getUnavailableStatusCodes, type StatusConfig } from "@/features/assignment-board/components/status-select";
+import { getAssignmentWorkAreaId } from "@/features/assignment-board/utils";
 import type { LineupSummary, WorkAreaStats } from "../types";
 import { classifyStatus } from "./classify-status";
 import { resolveWorkAreaTarget } from "../config/targets";
@@ -16,16 +19,19 @@ type ComputeContext = {
   employees: Employee[];
   statuses: Record<string, EmployeeStatus>;
   statusConfigs: StatusConfig[];
+  assignments: StationAssignment[];
+  stations: Station[];
   targetOverrides?: Record<string, number>;
 };
 
 export function computeAllStats(ctx: ComputeContext): WorkAreaStats[] {
   const unavailable = getUnavailableStatusCodes(ctx.statusConfigs);
+  const activeIds = new Set(ctx.employees.filter((e) => e.active).map((e) => e.id));
 
-  type Counts = { present: number; absent: number; vacation: number; lightDuty: number };
+  type Counts = { absent: number; vacation: number; lightDuty: number };
   const countsByWa = new Map<string, Counts>();
   for (const wa of ctx.workAreas) {
-    countsByWa.set(wa.id, { present: 0, absent: 0, vacation: 0, lightDuty: 0 });
+    countsByWa.set(wa.id, { absent: 0, vacation: 0, lightDuty: 0 });
   }
 
   for (const emp of ctx.employees) {
@@ -44,27 +50,38 @@ export function computeAllStats(ctx: ComputeContext): WorkAreaStats[] {
       bucket.vacation += 1;
     } else if (isUnavailable) {
       bucket.absent += 1;
-    } else {
-      bucket.present += 1;
-      if (isLightDuty) bucket.lightDuty += 1;
+    } else if (isLightDuty) {
+      bucket.lightDuty += 1;
     }
+  }
+
+  // Distinct active employees actually assigned to a station in each WA
+  // (loan-ins count toward the WA they're assigned to, not their home).
+  const assignedByWa = new Map<string, Set<string>>();
+  for (const wa of ctx.workAreas) assignedByWa.set(wa.id, new Set());
+  for (const a of ctx.assignments) {
+    if (a.station_id === null) continue;
+    if (!activeIds.has(a.employee_id)) continue;
+    const waId = getAssignmentWorkAreaId(a, ctx.stations);
+    if (!waId) continue;
+    assignedByWa.get(waId)?.add(a.employee_id);
   }
 
   return ctx.workAreas.map((wa) => {
     const required = resolveWorkAreaTarget(wa.id, ctx.employees, ctx.targetOverrides);
-    const counts = countsByWa.get(wa.id) ?? { present: 0, absent: 0, vacation: 0, lightDuty: 0 };
-    const present = counts.present;
+    const counts = countsByWa.get(wa.id) ?? { absent: 0, vacation: 0, lightDuty: 0 };
+    const assigned = assignedByWa.get(wa.id)?.size ?? 0;
     return {
       workAreaId: wa.id,
       workAreaName: wa.name,
       workAreaColorHex: wa.color_hex,
       required,
-      present,
+      assigned,
       absent: counts.absent,
       vacation: counts.vacation,
       lightDuty: counts.lightDuty,
-      overTarget: present - required,
-      status: classifyStatus(present, required),
+      overTarget: assigned - required,
+      status: classifyStatus(assigned, required),
     };
   });
 }
@@ -72,7 +89,7 @@ export function computeAllStats(ctx: ComputeContext): WorkAreaStats[] {
 export function computeSummary(stats: WorkAreaStats[]): LineupSummary {
   return stats.reduce<LineupSummary>(
     (acc, s) => {
-      acc.totalPresent += s.present;
+      acc.totalAssigned += s.assigned;
       acc.totalTarget += s.required;
       acc.lightDuty += s.lightDuty;
       acc.totalAbsent += s.absent;
@@ -85,7 +102,7 @@ export function computeSummary(stats: WorkAreaStats[]): LineupSummary {
       return acc;
     },
     {
-      totalPresent: 0,
+      totalAssigned: 0,
       totalTarget: 0,
       lightDuty: 0,
       totalAbsent: 0,
