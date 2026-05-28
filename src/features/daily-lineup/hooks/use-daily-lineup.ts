@@ -17,6 +17,8 @@ export function useDailyLineup(): UseDailyLineupResult {
     employees,
     statuses,
     statusConfigs,
+    assignments,
+    stations,
     isHydrating,
     loadError,
   } = useAssignmentBoardData();
@@ -24,8 +26,8 @@ export function useDailyLineup(): UseDailyLineupResult {
   const { overrides: targetOverrides } = useTargetOverrides();
 
   const workAreaStats = useMemo(
-    () => computeAllStats({ workAreas, employees, statuses, statusConfigs, targetOverrides }),
-    [workAreas, employees, statuses, statusConfigs, targetOverrides],
+    () => computeAllStats({ workAreas, employees, statuses, statusConfigs, assignments, stations, targetOverrides }),
+    [workAreas, employees, statuses, statusConfigs, assignments, stations, targetOverrides],
   );
 
   const summary = useMemo(() => computeSummary(workAreaStats), [workAreaStats]);

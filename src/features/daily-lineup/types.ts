@@ -10,7 +10,7 @@ export type WorkAreaStats = {
   workAreaName: string;
   workAreaColorHex: string | null;
   required: number;
-  present: number;
+  assigned: number;
   absent: number;
   vacation: number;
   lightDuty: number;
@@ -19,7 +19,7 @@ export type WorkAreaStats = {
 };
 
 export type LineupSummary = {
-  totalPresent: number;
+  totalAssigned: number;
   totalTarget: number;
   lightDuty: number;
   totalAbsent: number;

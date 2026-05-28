@@ -25,9 +25,9 @@ function Metric({ label, value, caption }: MetricProps) {
 
 export function WorkAreaCard({ stats }: { stats: WorkAreaStats }) {
   const meta = STATUS_META[stats.status];
-  const presentPct =
+  const assignedPct =
     stats.required > 0
-      ? Math.round((stats.present / stats.required) * 100)
+      ? Math.round((stats.assigned / stats.required) * 100)
       : 0;
 
   const overTargetValue =
@@ -76,7 +76,7 @@ export function WorkAreaCard({ stats }: { stats: WorkAreaStats }) {
       <div className="grid grid-cols-2 gap-2">
         <Metric
           label="TOTAL STAFF"
-          value={stats.present}
+          value={stats.assigned}
           caption={`of ${stats.required} required`}
         />
         <Metric
@@ -98,12 +98,12 @@ export function WorkAreaCard({ stats }: { stats: WorkAreaStats }) {
 
       <div className="flex flex-col gap-1">
         <ProgressBar
-          present={stats.present}
+          present={stats.assigned}
           required={stats.required}
           barClass={meta.barClass}
         />
         <p className="text-[11px] text-slate-600">
-          {stats.present} / {stats.required} present · {presentPct}%
+          {stats.assigned} / {stats.required} assigned · {assignedPct}%
           {stats.overTarget < 0 && ` · ${Math.abs(stats.overTarget)} below target`}
           {stats.overTarget > 0 && ` · +${stats.overTarget} surplus`}
         </p>
