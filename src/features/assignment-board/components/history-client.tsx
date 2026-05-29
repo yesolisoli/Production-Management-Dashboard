@@ -679,7 +679,7 @@ function WorkAreaShiftCard({
                           <span key={`${emp.id}-${asgn.id}`} className="flex items-center gap-1.5">
                             <span
                               className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                unavailable ? "bg-red-500" : emp.temporary ? "bg-violet-400" : "bg-green-500"
+                                unavailable ? "bg-red-500" : emp.temporary ? "bg-slate-900" : "bg-green-500"
                               }`}
                             />
                             <span className={`truncate text-xs font-medium ${unavailable ? "text-red-500" : "text-slate-700"}`}>

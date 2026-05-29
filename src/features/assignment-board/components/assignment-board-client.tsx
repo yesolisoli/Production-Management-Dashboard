@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { SUPABASE_ENABLED } from "@/lib/config";
 import { useAssignmentBoardData } from "../hooks/use-assignment-board-data";
@@ -83,6 +84,18 @@ export function AssignmentBoardClient() {
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const [announcementDraft, setAnnouncementDraft] = useState(announcement);
   const [showManageStatuses, setShowManageStatuses] = useState(false);
+
+  const searchParams = useSearchParams();
+  const initialWorkAreaParam = searchParams?.get("workArea") ?? null;
+  const appliedInitialWorkAreaRef = useRef(false);
+  useEffect(() => {
+    if (appliedInitialWorkAreaRef.current) return;
+    if (isHydrating) return;
+    if (!initialWorkAreaParam) return;
+    if (!workAreas.some((wa) => wa.id === initialWorkAreaParam)) return;
+    handleWorkAreaChange(initialWorkAreaParam);
+    appliedInitialWorkAreaRef.current = true;
+  }, [isHydrating, initialWorkAreaParam, workAreas, handleWorkAreaChange]);
 
   useEffect(() => {
     const handler = () => {

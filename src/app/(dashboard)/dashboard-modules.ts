@@ -3,6 +3,7 @@ import {
   Beef,
   CalendarRange,
   Calculator,
+  ClipboardList,
   LayoutGrid,
   Monitor,
   Package,
@@ -25,15 +26,15 @@ export type DashboardModule = {
 
 export const dashboardModules: DashboardModule[] = [
   {
-    href: "/assignment-board",
-    title: "Assignment Board",
-    description: "View and manage assignments and tasks.",
-    icon: LayoutGrid,
+    href: "/daily-lineup",
+    title: "Daily Lineup",
+    description: "Today's staffing status across all work areas.",
+    icon: ClipboardList,
     accent: "text-blue-700",
     iconColor: "text-blue-600",
     cardClassName: "bg-blue-100/60 ring-blue-200/80",
     wide: false,
-    routeKey: "assignment-board",
+    routeKey: "daily-lineup",
   },
   {
     href: "/hog-intake",

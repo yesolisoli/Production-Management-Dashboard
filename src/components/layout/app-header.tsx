@@ -30,7 +30,7 @@ export function AppHeader({
     >
       <div
         className={clsx(
-          "flex items-start justify-between gap-6",
+          "flex items-center justify-between gap-6",
           variant === "hero" ? "px-7 py-7 lg:px-9 lg:py-8" : "px-6 py-4"
         )}
       >

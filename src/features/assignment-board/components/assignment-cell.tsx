@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Employee, ModeCode, ShiftCode, Station, StationAssignment, WorkArea } from "../types";
-import { getAssignmentWorkAreaId, isEmployeeEligibleForWorkArea, abbrevDept } from "../utils";
+import type { Employee, ModeCode, ShiftCode, Station, StationAssignment, WorkArea, WorkAreaShiftMap } from "../types";
+import { findEmployeeTimeConflicts, getAssignmentWorkAreaId, isEmployeeEligibleForWorkArea, abbrevDept } from "../utils";
 import { cfgBadge, STATUS_CODE_AVAILABLE, type StatusConfig } from "./status-select";
 import { EmployeeCard } from "./employee-card";
 
@@ -17,7 +17,7 @@ type PendingMove = {
 };
 
 export function AssignmentCell({
-  stationId, shiftCode, modeCode, color, assignments, allEmployees, statuses, disabledEmployeeIds, onAssign, onRemove, workAreaId, workAreas, stations, genderRestriction, onEmployeeDoubleClick, statusConfigs,
+  stationId, shiftCode, modeCode, color, assignments, allEmployees, statuses, disabledEmployeeIds, onAssign, onRemove, workAreaId, workAreas, stations, workAreaShifts, genderRestriction, onEmployeeDoubleClick, statusConfigs,
 }: {
   stationId: string;
   shiftCode: ShiftCode;
@@ -32,6 +32,7 @@ export function AssignmentCell({
   workAreaId?: string;
   workAreas?: WorkArea[];
   stations: Station[];
+  workAreaShifts?: WorkAreaShiftMap;
   genderRestriction?: "M" | "F";
   onEmployeeDoubleClick?: (name: string) => void;
   statusConfigs?: StatusConfig[];
@@ -225,6 +226,9 @@ export function AssignmentCell({
               const isLoaned = !!activeWaId && activeWaId !== emp.homeDepartmentId;
               const homeWaName = isLoaned ? workAreas?.find((w) => w.id === emp.homeDepartmentId)?.name : undefined;
               const genderViolation = genderRestriction && emp.gender && emp.gender !== genderRestriction;
+              const conflicts = workAreaShifts && workAreas
+                ? findEmployeeTimeConflicts(asgn, assignments, { workAreas, stations, workAreaShifts })
+                : [];
               return (
                 <div key={emp.id}>
                   <div className={genderViolation ? "rounded-md ring-2 ring-red-400" : undefined}>
@@ -237,6 +241,7 @@ export function AssignmentCell({
                       loanInfo={{ isLoanedIn: isLoaned, homeWaName }}
                       onDoubleClick={() => onEmployeeDoubleClick?.(emp.full_name)}
                       statusCode={statuses?.[emp.id]}
+                      conflicts={conflicts}
                     />
                   </div>
                   {genderViolation && (
@@ -307,7 +312,7 @@ export function AssignmentCell({
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="text-sm font-medium text-slate-800 truncate">{emp.full_name}</span>
                           {emp.temporary && (
-                            <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-amber-50 text-amber-600 border border-amber-200">Temp</span>
+                            <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-300">Temp</span>
                           )}
                         </div>
                         <div className="ml-2 flex shrink-0 items-center gap-1.5">

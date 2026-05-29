@@ -12,6 +12,7 @@ import {
   CalendarRange,
   Settings,
   LogOut,
+  ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
@@ -37,7 +38,7 @@ type NavItem = {
 
 const items: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, routeKey: "home" },
-  { href: "/assignment-board", label: "Assignment Board", icon: Users, routeKey: "assignment-board" },
+  { href: "/daily-lineup", label: "Daily Lineup", icon: ClipboardList, routeKey: "daily-lineup" },
   { href: "/hog-intake", label: "Hog Intake", icon: Beef, routeKey: "hog-intake" },
   { href: "/primal-calc", label: "Primal Calc", icon: Calculator, routeKey: "primal-calc" },
   { href: "/orders-allocation", label: "Orders & Allocation", icon: Package, routeKey: "orders-allocation" },

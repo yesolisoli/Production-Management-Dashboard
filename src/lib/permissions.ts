@@ -13,6 +13,7 @@ export const DEFAULT_ROLE: Role = "pending";
 export type RouteKey =
   | "home"
   | "assignment-board"
+  | "daily-lineup"
   | "hog-intake"
   | "primal-calc"
   | "orders-allocation"
@@ -32,6 +33,7 @@ const ROLE_ROUTES: Record<Role, ReadonlyArray<RouteKey>> = {
   admin: [
     "home",
     "assignment-board",
+    "daily-lineup",
     "hog-intake",
     "primal-calc",
     "orders-allocation",
@@ -43,6 +45,7 @@ const ROLE_ROUTES: Record<Role, ReadonlyArray<RouteKey>> = {
   supervisor: [
     "home",
     "assignment-board",
+    "daily-lineup",
     "settings",
     "history",
     "tv-display",
@@ -83,6 +86,7 @@ export function defaultPathForRole(role: Role): string {
 const PATH_TO_ROUTE_KEY: ReadonlyArray<{ pattern: RegExp; key: RouteKey }> = [
   { pattern: /^\/$/, key: "home" },
   { pattern: /^\/assignment-board(?:\/|$)/, key: "assignment-board" },
+  { pattern: /^\/daily-lineup(?:\/|$)/, key: "daily-lineup" },
   { pattern: /^\/hog-intake(?:\/|$)/, key: "hog-intake" },
   { pattern: /^\/primal-calc(?:\/|$)/, key: "primal-calc" },
   { pattern: /^\/orders-allocation(?:\/|$)/, key: "orders-allocation" },

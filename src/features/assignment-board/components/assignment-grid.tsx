@@ -51,7 +51,21 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
   const [localSelectedWorkAreaId, setLocalSelectedWorkAreaId] = useState<string>("");
   const selectedWorkAreaId = selectedWorkAreaIdProp ?? localSelectedWorkAreaId;
   const [selectedMode, setSelectedMode] = useState<ModeCode>(DEFAULT_MODE_CODE);
+  const lastSyncedWaIdRef = useRef<string>("");
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Sync selectedMode whenever the active work area changes externally
+  // (e.g. via the ?workArea= deep link from the Daily Lineup dashboard).
+  // Picks the work area's first declared mode_view so moded areas default
+  // to Hog Break instead of the stale "normal" mode.
+  useEffect(() => {
+    if (!selectedWorkAreaIdProp) return;
+    if (workAreas.length === 0) return;
+    if (lastSyncedWaIdRef.current === selectedWorkAreaIdProp) return;
+    lastSyncedWaIdRef.current = selectedWorkAreaIdProp;
+    const wa = workAreas.find((w) => w.id === selectedWorkAreaIdProp);
+    setSelectedMode(wa?.mode_views?.[0]?.mode_code ?? DEFAULT_MODE_CODE);
+  }, [selectedWorkAreaIdProp, workAreas]);
 
   const [editingShift, setEditingShift] = useState<{ code: ShiftCode; label: string; startTime: string; endTime: string } | null>(null);
   const [addingShift, setAddingShift] = useState<{ label: string; startTime: string; endTime: string } | null>(null);
@@ -702,7 +716,7 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
                   <td key={shift.code} className={`h-px border-t border-black/6 p-0 align-top ${isLast ? "border-b border-b-black/6" : ""}`}>
                     <div className="h-full px-2 py-4">
                       <AssignmentCell stationId={station.id} shiftCode={shift.code} modeCode={selectedMode} color={color}
-                        assignments={assignments} allEmployees={employees} statuses={statuses} disabledEmployeeIds={disabledEmployeeIds} onAssign={handleAssign} onRemove={handleRemove} workAreaId={selectedWorkArea.id} workAreas={workAreas} stations={stations} genderRestriction={station.gender_restriction} onEmployeeDoubleClick={onEmployeeDoubleClick} statusConfigs={statusConfigs} />
+                        assignments={assignments} allEmployees={employees} statuses={statuses} disabledEmployeeIds={disabledEmployeeIds} onAssign={handleAssign} onRemove={handleRemove} workAreaId={selectedWorkArea.id} workAreas={workAreas} stations={stations} workAreaShifts={workAreaShifts} genderRestriction={station.gender_restriction} onEmployeeDoubleClick={onEmployeeDoubleClick} statusConfigs={statusConfigs} />
                     </div>
                   </td>
                 ))}

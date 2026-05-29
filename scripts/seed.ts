@@ -15,6 +15,7 @@ import {
   mockWorkAreas,
 } from "../src/features/assignment-board/mock-data";
 import { DEFAULT_STATUS_CONFIGS } from "../src/features/assignment-board/components/status-select";
+import { buildHogIntakeMockRecords } from "../src/features/hog-intake/mock-data";
 
 type SeedClient = SupabaseClient;
 
@@ -108,6 +109,10 @@ async function verifyCount(
   if (actual !== expected) {
     throw new Error(`verification failed for ${table}: expected ${expected}, got ${actual}`);
   }
+}
+
+async function cleanupHogIntake(supabase: SeedClient) {
+  await deleteAll(supabase, "hog_intake_records", "intake_date");
 }
 
 async function cleanupSeedSlice(supabase: SeedClient) {
@@ -218,6 +223,21 @@ function buildStatusRows() {
   }));
 }
 
+function buildHogIntakeRows() {
+  return buildHogIntakeMockRecords().map((record) => ({
+    intake_date: record.date,
+    hog_counts: record.hog_counts,
+    side_orders: record.side_orders,
+    held_over: record.held_over,
+    deaths_on_arrival: record.deaths_on_arrival,
+    boars_count: record.boars_count,
+    notes: record.notes,
+    farm_records: record.farm_records,
+    next_day: record.next_day,
+    updated_by: null,
+  }));
+}
+
 function buildAssignmentRows() {
   return mockAssignments.map((assignment) => ({
     id: assignment.id,
@@ -264,6 +284,10 @@ async function seedStations(supabase: SeedClient) {
 
 async function seedEmployeeDailyStatuses(supabase: SeedClient) {
   await upsertRows(supabase, "employee_daily_statuses", buildStatusRows(), "id");
+}
+
+async function seedHogIntakeRecords(supabase: SeedClient) {
+  await upsertRows(supabase, "hog_intake_records", buildHogIntakeRows(), "intake_date");
 }
 
 async function seedStationAssignments(supabase: SeedClient) {
@@ -391,6 +415,18 @@ async function main() {
 
   await runStep("verify final row counts", async () => {
     await verifyCounts(supabase);
+  });
+
+  await runStep("cleanup existing hog_intake_records", async () => {
+    await cleanupHogIntake(supabase);
+  });
+
+  await runStep("seed hog_intake_records", async () => {
+    await seedHogIntakeRecords(supabase);
+  });
+
+  await runStep("verify hog_intake_records count", async () => {
+    await verifyCount(supabase, "hog_intake_records", buildHogIntakeMockRecords().length);
   });
 
   console.log("\n[seed] complete");

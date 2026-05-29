@@ -412,7 +412,7 @@ export function TVDisplay({
                               : isInjured
                               ? "bg-orange-400"
                               : emp.temporary
-                              ? "bg-violet-400"
+                              ? "bg-slate-900 ring-1 ring-inset ring-white"
                               : "bg-green-500";
                             return (
                               <span key={emp.id} className="flex items-center gap-1.5 px-3 py-2">
