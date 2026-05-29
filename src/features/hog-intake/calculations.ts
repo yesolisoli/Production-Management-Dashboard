@@ -18,10 +18,16 @@ export function totalHogs(counts: HogCounts): number {
   );
 }
 
-// total_hogs - side_orders. Can be negative if side_orders > total_hogs;
-// the UI surfaces that as a warning rather than blocking save.
+// One hog yields up to 2 side orders, so each pair of side orders consumes
+// one hog (rounded up for odd counts).
+export function hogsConsumedBySideOrders(sideOrders: number): number {
+  return Math.ceil(sideOrders / 2);
+}
+
+// total_hogs - hogs consumed by side orders. Can be negative when side orders
+// outstrip available hogs; the UI surfaces that as a warning rather than blocking save.
 export function forCutting(counts: HogCounts, sideOrders: number): number {
-  return totalHogs(counts) - sideOrders;
+  return totalHogs(counts) - hogsConsumedBySideOrders(sideOrders);
 }
 
 // Only JP, RWA, BK, Sow contribute. Round / Suckling / Customer excluded.
@@ -29,9 +35,8 @@ export function yieldTotal(counts: HogCounts): number {
   return YIELD_HOG_TYPES.reduce((sum, key) => sum + counts[key], 0);
 }
 
-// next_day.hog_count - next_day.side_orders.
 export function projectedForCutting(nextDay: NextDay): number {
-  return nextDay.hog_count - nextDay.side_orders;
+  return nextDay.hog_count - hogsConsumedBySideOrders(nextDay.side_orders);
 }
 
 export type HogIntakeTotals = {
@@ -44,13 +49,13 @@ export type HogIntakeTotals = {
 
 export function deriveTotals(record: HogIntakeRecord): HogIntakeTotals {
   const total = totalHogs(record.hog_counts);
-  const cutting = total - record.side_orders;
+  const consumed = hogsConsumedBySideOrders(record.side_orders);
   return {
     totalHogs: total,
-    forCutting: cutting,
+    forCutting: total - consumed,
     yieldTotal: yieldTotal(record.hog_counts),
     projectedForCutting: projectedForCutting(record.next_day),
-    overSold: record.side_orders > total,
+    overSold: consumed > total,
   };
 }
 
