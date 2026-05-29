@@ -1,9 +1,22 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import clsx from "clsx";
+import {
+  Download,
+  FileSpreadsheet,
+  FileUp,
+  Info,
+  RefreshCw,
+  SkipForward,
+  Table as TableIcon,
+  X,
+} from "lucide-react";
 import { Modal } from "@/components/shared/modal";
 import type { Employee, WorkArea } from "../../types";
 import {
+  buildEmployeeTemplateCsv,
+  downloadCsv,
   EMPLOYEE_CSV_MAX_ROWS,
   parseEmployeeCsv,
   type DuplicateStrategy,
@@ -39,6 +52,7 @@ export function RosterCsvImportModal({
   const [fileErrors, setFileErrors] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const parseResult = useMemo(() => {
@@ -114,22 +128,38 @@ export function RosterCsvImportModal({
     if (inputRef.current) inputRef.current.value = "";
   };
 
+  const handleDownloadTemplate = () => {
+    downloadCsv("employee_template.csv", buildEmployeeTemplateCsv());
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) void handleFile(file);
+  };
+
   return (
     <Modal
       title="Import Employees from CSV"
       onClose={onClose}
-      width="w-[calc(100vw-6rem)] max-w-[1100px]"
+      width="w-[calc(100vw-6rem)] max-w-[980px]"
       zIndex="z-110"
       footer={
         <div className="flex items-center justify-between gap-3">
-          <div className="text-xs text-slate-500">
-            {rows.length > 0 && (
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            {rows.length > 0 ? (
               <span>
                 <span className="font-semibold text-emerald-600">{counts.create}</span> new ·{" "}
                 <span className="font-semibold text-sky-600">{counts.update}</span> update ·{" "}
                 <span className="font-semibold text-slate-500">{counts.skip}</span> skip ·{" "}
                 <span className="font-semibold text-red-600">{counts.error}</span> error
               </span>
+            ) : (
+              <>
+                <Info size={12} />
+                <span>Rows with issues are skipped automatically</span>
+              </>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -142,18 +172,46 @@ export function RosterCsvImportModal({
             <button
               onClick={handleImport}
               disabled={!canImport}
-              className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 hover:bg-slate-700"
+              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
+              <Download size={14} />
               {isImporting ? "Importing..." : `Import ${importable.length} ${importable.length === 1 ? "row" : "rows"}`}
             </button>
           </div>
         </div>
       }
     >
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <label className="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-            {filename ? "Choose different file" : "Choose CSV file"}
+      <div className="space-y-6">
+        {/* SOURCE FILE */}
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Source File
+            </h4>
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-sky-700 hover:text-sky-800"
+            >
+              <Download size={14} />
+              Download template
+            </button>
+          </div>
+
+          <label
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            className={clsx(
+              "block cursor-pointer rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors",
+              isDragging
+                ? "border-sky-400 bg-sky-50"
+                : "border-slate-200 bg-slate-50 hover:border-sky-300 hover:bg-sky-50/60",
+            )}
+          >
             <input
               ref={inputRef}
               type="file"
@@ -164,123 +222,199 @@ export function RosterCsvImportModal({
                 if (file) void handleFile(file);
               }}
             />
+            {filename ? (
+              <div className="flex items-center justify-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center">
+                  <FileSpreadsheet size={20} className="text-sky-700" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium text-slate-900 truncate max-w-[420px]">
+                    {filename}
+                  </p>
+                  <p className="text-xs text-slate-500">Click to choose a different file</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    resetFile();
+                  }}
+                  className="ml-2 flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                  aria-label="Clear file"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center">
+                  <FileUp size={20} className="text-sky-700" />
+                </div>
+                <p className="text-sm font-medium text-slate-900">
+                  Drop your CSV here, or{" "}
+                  <span className="font-medium text-sky-700 underline underline-offset-2">browse files</span>
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  CSV up to {EMPLOYEE_CSV_MAX_ROWS.toLocaleString()} rows · UTF-8 encoding recommended
+                </p>
+              </>
+            )}
           </label>
-          {filename && (
-            <>
-              <span className="text-sm text-slate-600 truncate">{filename}</span>
-              <button onClick={resetFile} className="text-xs text-slate-400 hover:text-slate-600">
-                clear
-              </button>
-            </>
-          )}
-        </div>
+        </section>
 
-        <div className="flex items-center gap-4 text-sm">
-          <span className="font-medium text-slate-700">Duplicates (by employee_code):</span>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="duplicate-strategy"
-              checked={duplicateStrategy === "update"}
-              onChange={() => setDuplicateStrategy("update")}
-            />
-            <span className="text-slate-700">Update existing</span>
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              name="duplicate-strategy"
-              checked={duplicateStrategy === "skip"}
-              onChange={() => setDuplicateStrategy("skip")}
-            />
-            <span className="text-slate-700">Skip</span>
-          </label>
-        </div>
-
-        {combinedFileErrors.length > 0 && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            <p className="font-semibold">Cannot import this file:</p>
-            <ul className="mt-1 list-disc pl-5 text-xs">
-              {combinedFileErrors.map((err, i) => (
-                <li key={i}>{err}</li>
-              ))}
-            </ul>
+        {/* ON DUPLICATE */}
+        <section>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            On Duplicate
+          </h4>
+          <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setDuplicateStrategy("update")}
+              className={clsx(
+                "inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors",
+                duplicateStrategy === "update"
+                  ? "bg-white text-sky-700 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700",
+              )}
+            >
+              <RefreshCw size={14} />
+              Update existing
+            </button>
+            <button
+              type="button"
+              onClick={() => setDuplicateStrategy("skip")}
+              className={clsx(
+                "inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors",
+                duplicateStrategy === "skip"
+                  ? "bg-white text-sky-700 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700",
+              )}
+            >
+              <SkipForward size={14} />
+              Skip
+            </button>
           </div>
-        )}
+          <p className="mt-2 text-xs text-slate-500">
+            Matched on{" "}
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700">
+              employee_code
+            </code>
+            .{" "}
+            {duplicateStrategy === "update" ? (
+              <>
+                <span className="font-semibold text-slate-700">
+                  Existing records will be overwritten
+                </span>{" "}
+                with values from the file.
+              </>
+            ) : (
+              <span className="text-slate-600">Duplicate rows will be skipped.</span>
+            )}
+          </p>
+        </section>
 
-        {importError && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            <p className="font-semibold">Import failed:</p>
-            <p className="mt-1 text-xs">{importError}</p>
-          </div>
-        )}
+        {/* PREVIEW */}
+        <section>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Preview
+          </h4>
 
-        {rows.length > 0 && combinedFileErrors.length === 0 && (
-          <div className="max-h-[50vh] overflow-y-auto rounded-md border">
-            <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-800 text-slate-200">
-                <tr>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">#</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Action</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Code</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Name</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Home Dept</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Active</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Gender</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Level</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Temp</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Errors</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr
-                    key={r.rowNumber}
-                    className={
-                      r.action === "error"
-                        ? "border-b bg-red-50"
-                        : r.action === "skip"
-                          ? "border-b bg-slate-50 text-slate-400"
-                          : r.action === "update"
-                            ? "border-b bg-sky-50"
-                            : "border-b bg-emerald-50"
-                    }
-                  >
-                    <td className="px-3 py-1.5 text-xs text-slate-500">{r.rowNumber}</td>
-                    <td className="px-3 py-1.5 text-xs font-semibold uppercase">
-                      {r.action === "create" && <span className="text-emerald-600">New</span>}
-                      {r.action === "update" && <span className="text-sky-600">Update</span>}
-                      {r.action === "skip" && <span className="text-slate-500">Skip</span>}
-                      {r.action === "error" && <span className="text-red-600">Error</span>}
-                    </td>
-                    <td className="px-3 py-1.5 text-xs">{r.employeeCode ?? "—"}</td>
-                    <td className="px-3 py-1.5 text-xs">{r.fullName || <span className="text-slate-400">—</span>}</td>
-                    <td className="px-3 py-1.5 text-xs">{r.homeDepartmentInput || <span className="text-slate-400">—</span>}</td>
-                    <td className="px-3 py-1.5 text-xs">{r.active ? "true" : "false"}</td>
-                    <td className="px-3 py-1.5 text-xs">{r.gender ?? "—"}</td>
-                    <td className="px-3 py-1.5 text-xs">{r.level ?? "—"}</td>
-                    <td className="px-3 py-1.5 text-xs">{r.temporary ? "true" : "false"}</td>
-                    <td className="px-3 py-1.5 text-xs text-red-600">
-                      {r.errors.length > 0 ? (
-                        <ul className="list-disc pl-4">
-                          {r.errors.map((err, i) => (
-                            <li key={i}>{err}</li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </td>
-                  </tr>
+          {combinedFileErrors.length > 0 && (
+            <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="font-semibold">Cannot import this file:</p>
+              <ul className="mt-1 list-disc pl-5 text-xs">
+                {combinedFileErrors.map((err, i) => (
+                  <li key={i}>{err}</li>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              </ul>
+            </div>
+          )}
 
-        {rows.length === 0 && !filename && (
-          <div className="rounded-md border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-500">
-            Choose a CSV file to preview rows here. Maximum {EMPLOYEE_CSV_MAX_ROWS} rows. Use the Download Template button for the expected format.
-          </div>
-        )}
+          {importError && (
+            <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="font-semibold">Import failed:</p>
+              <p className="mt-1 text-xs">{importError}</p>
+            </div>
+          )}
+
+          {rows.length > 0 && combinedFileErrors.length === 0 ? (
+            <div className="max-h-[40vh] overflow-y-auto rounded-md border border-slate-200">
+              <table className="w-full border-collapse text-sm">
+                <thead className="sticky top-0 z-10 bg-slate-900 text-slate-200">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">#</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Action</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Code</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Name</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Home Dept</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Active</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Gender</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Level</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Temp</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Errors</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr
+                      key={r.rowNumber}
+                      className={
+                        r.action === "error"
+                          ? "border-b bg-red-50"
+                          : r.action === "skip"
+                            ? "border-b bg-slate-50 text-slate-400"
+                            : r.action === "update"
+                              ? "border-b bg-sky-50"
+                              : "border-b bg-emerald-50"
+                      }
+                    >
+                      <td className="px-3 py-1.5 text-xs text-slate-500">{r.rowNumber}</td>
+                      <td className="px-3 py-1.5 text-xs font-semibold uppercase">
+                        {r.action === "create" && <span className="text-emerald-600">New</span>}
+                        {r.action === "update" && <span className="text-sky-600">Update</span>}
+                        {r.action === "skip" && <span className="text-slate-500">Skip</span>}
+                        {r.action === "error" && <span className="text-red-600">Error</span>}
+                      </td>
+                      <td className="px-3 py-1.5 text-xs">{r.employeeCode ?? "—"}</td>
+                      <td className="px-3 py-1.5 text-xs">{r.fullName || <span className="text-slate-400">—</span>}</td>
+                      <td className="px-3 py-1.5 text-xs">{r.homeDepartmentInput || <span className="text-slate-400">—</span>}</td>
+                      <td className="px-3 py-1.5 text-xs">{r.active ? "true" : "false"}</td>
+                      <td className="px-3 py-1.5 text-xs">{r.gender ?? "—"}</td>
+                      <td className="px-3 py-1.5 text-xs">{r.level ?? "—"}</td>
+                      <td className="px-3 py-1.5 text-xs">{r.temporary ? "true" : "false"}</td>
+                      <td className="px-3 py-1.5 text-xs text-red-600">
+                        {r.errors.length > 0 ? (
+                          <ul className="list-disc pl-4">
+                            {r.errors.map((err, i) => (
+                              <li key={i}>{err}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : combinedFileErrors.length === 0 ? (
+            <div className="rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center">
+                <TableIcon size={20} className="text-sky-700" />
+              </div>
+              <p className="text-sm text-slate-600">
+                Choose a file to preview rows here. We&apos;ll validate up to
+              </p>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">
+                  {EMPLOYEE_CSV_MAX_ROWS.toLocaleString()} rows
+                </span>{" "}
+                and flag anything that needs a fix before importing.
+              </p>
+            </div>
+          ) : null}
+        </section>
       </div>
     </Modal>
   );
