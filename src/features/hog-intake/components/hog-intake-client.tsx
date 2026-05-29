@@ -52,7 +52,7 @@ export function HogIntakeClient() {
       />
 
       <div className="bg-slate-50">
-        <div className="mx-auto flex max-w-350 flex-col gap-4 px-5 py-5 lg:px-6 lg:py-6">
+        <div className="flex flex-col gap-4 px-5 py-5 lg:px-6 lg:py-6">
           <SummaryPanel totals={totals} sideOrders={record.side_orders} />
 
           <HogCountGrid
