@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Calendar } from "lucide-react";
+import { AppHeader } from "@/components/layout/app-header";
 import { deriveTotals } from "../calculations";
 import { useHogIntakeState } from "../hooks/use-hog-intake-state";
 import { FarmRecords } from "./farm-records";
@@ -18,63 +19,70 @@ export function HogIntakeClient() {
     status,
     setDate,
     setHogCount,
+    bumpAllHogCounts,
+    clearAllHogCounts,
     setProcessField,
     setNotes,
     setNextDayField,
     addFarmRecord,
     updateFarmRecord,
     removeFarmRecord,
+    reset,
     save,
   } = useHogIntakeState();
 
   const totals = useMemo(() => deriveTotals(record), [record]);
 
   return (
-    <div className="flex min-h-full flex-col gap-5 p-6">
-      <div className="flex flex-col gap-3 rounded-2xl border bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Intake Date
-          </p>
-          <p className="mt-1 text-sm text-slate-600">
-            Pick a date to record or review that day&apos;s intake.
-          </p>
-        </div>
+    <>
+      <AppHeader
+        eyebrow="Operations Module"
+        title="Hog Intake"
+        actions={
+          <label className="flex items-center gap-2 rounded-xl border border-white/30 bg-transparent px-3 py-2">
+            <Calendar size={16} className="text-white/70" />
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="h-7 border-0 bg-transparent text-sm font-semibold tabular-nums text-white outline-none scheme-dark"
+            />
+          </label>
+        }
+      />
 
-        <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
-          <Calendar size={16} className="text-slate-500" />
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="h-9 border-0 bg-transparent text-base font-semibold tabular-nums text-slate-900 outline-none"
+      <div className="bg-slate-50">
+        <div className="mx-auto flex max-w-350 flex-col gap-4 px-5 py-5 lg:px-6 lg:py-6">
+          <SummaryPanel totals={totals} sideOrders={record.side_orders} />
+
+          <HogCountGrid
+            counts={record.hog_counts}
+            onChange={setHogCount}
+            onBumpAll={bumpAllHogCounts}
+            onClearAll={clearAllHogCounts}
           />
-        </label>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_1fr_1fr]">
+            <FarmRecords
+              rows={record.farm_records}
+              onAdd={addFarmRecord}
+              onUpdate={updateFarmRecord}
+              onRemove={removeFarmRecord}
+            />
+            <ProcessSheet
+              record={record}
+              onChangeField={setProcessField}
+              onChangeNotes={setNotes}
+            />
+            <NextDayProjection
+              nextDay={record.next_day}
+              onChange={setNextDayField}
+            />
+          </div>
+
+          <SaveBar status={status} onSave={save} onReset={reset} />
+        </div>
       </div>
-
-      <SummaryPanel totals={totals} sideOrders={record.side_orders} />
-
-      <HogCountGrid counts={record.hog_counts} onChange={setHogCount} />
-
-      <ProcessSheet
-        record={record}
-        onChangeField={setProcessField}
-        onChangeNotes={setNotes}
-      />
-
-      <FarmRecords
-        rows={record.farm_records}
-        onAdd={addFarmRecord}
-        onUpdate={updateFarmRecord}
-        onRemove={removeFarmRecord}
-      />
-
-      <NextDayProjection
-        nextDay={record.next_day}
-        onChange={setNextDayField}
-      />
-
-      <SaveBar date={date} status={status} onSave={save} />
-    </div>
+    </>
   );
 }

@@ -7,7 +7,9 @@ import { clampNonNegativeInt } from "../calculations";
 import { clearDraft, readDraft, writeDraft } from "../draft-storage";
 import { fetchHogIntakeByDate, upsertHogIntakeRecord } from "../supabase";
 import {
+  emptyHogCounts,
   emptyHogIntakeRecord,
+  HOG_TYPES,
   type FarmRecord,
   type HogIntakeRecord,
   type HogType,
@@ -141,6 +143,20 @@ export function useHogIntakeState() {
     }));
   }, []);
 
+  const bumpAllHogCounts = useCallback((delta: number) => {
+    setRecord((prev) => {
+      const next = { ...prev.hog_counts };
+      for (const type of HOG_TYPES) {
+        next[type] = clampNonNegativeInt(next[type] + delta);
+      }
+      return { ...prev, hog_counts: next };
+    });
+  }, []);
+
+  const clearAllHogCounts = useCallback(() => {
+    setRecord((prev) => ({ ...prev, hog_counts: emptyHogCounts() }));
+  }, []);
+
   const setProcessField = useCallback(
     (
       field: "side_orders" | "held_over" | "deaths_on_arrival" | "boars_count",
@@ -211,6 +227,13 @@ export function useHogIntakeState() {
     }));
   }, []);
 
+  const reset = useCallback(() => {
+    suppressNextWrite.current = true;
+    setRecord(emptyHogIntakeRecord(date));
+    clearDraft(date);
+    setStatus({ kind: "idle" });
+  }, [date]);
+
   const save = useCallback(async () => {
     setStatus({ kind: "saving" });
     try {
@@ -236,12 +259,15 @@ export function useHogIntakeState() {
     status,
     setDate,
     setHogCount,
+    bumpAllHogCounts,
+    clearAllHogCounts,
     setProcessField,
     setNotes,
     setNextDayField,
     addFarmRecord,
     updateFarmRecord,
     removeFarmRecord,
+    reset,
     save,
   };
 }
