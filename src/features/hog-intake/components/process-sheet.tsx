@@ -1,5 +1,6 @@
 "use client";
 
+import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
 import { clampNonNegativeInt } from "../calculations";
 import type { HogIntakeRecord } from "../types";
 
@@ -47,17 +48,10 @@ export function ProcessSheet({
               {field.label}
             </label>
             <div className="flex items-center gap-2">
-              <input
+              <ProcessNumberInput
                 id={`process-${field.key}`}
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
                 value={record[field.key]}
-                onChange={(e) =>
-                  onChangeField(field.key, clampNonNegativeInt(e.target.value))
-                }
-                className="h-9 w-24 rounded-lg border border-slate-200 bg-white px-3 text-right text-sm font-semibold tabular-nums text-slate-900 outline-none focus:border-slate-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                onChange={(value) => onChangeField(field.key, value)}
               />
               <span className="w-10 text-xs text-slate-400">head</span>
             </div>
@@ -88,5 +82,29 @@ export function ProcessSheet({
         />
       </div>
     </section>
+  );
+}
+
+function ProcessNumberInput({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const blank = useBlankZeroInput(value);
+  return (
+    <input
+      id={id}
+      type="number"
+      inputMode="numeric"
+      min={0}
+      step={1}
+      {...blank}
+      onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
+      className="h-9 w-24 rounded-lg border border-slate-200 bg-white px-3 text-right text-sm font-semibold tabular-nums text-slate-900 outline-none focus:border-slate-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+    />
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
 import { clampNonNegativeInt, projectedForCutting } from "../calculations";
 import type { NextDay } from "../types";
 
@@ -80,6 +81,7 @@ type ProjectionFieldProps = {
 };
 
 function ProjectionField({ id, label, value, onChange }: ProjectionFieldProps) {
+  const blank = useBlankZeroInput(value);
   return (
     <div className="rounded-xl border border-slate-200 p-2.5">
       <label
@@ -95,7 +97,7 @@ function ProjectionField({ id, label, value, onChange }: ProjectionFieldProps) {
           inputMode="numeric"
           min={0}
           step={1}
-          value={value}
+          {...blank}
           onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
           className="h-9 min-w-0 flex-1 border-0 bg-transparent text-xl font-extrabold tabular-nums text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />

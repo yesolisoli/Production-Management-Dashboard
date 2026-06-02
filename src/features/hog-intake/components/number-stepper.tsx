@@ -1,6 +1,7 @@
 "use client";
 
 import { Minus, Plus } from "lucide-react";
+import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
 import { clampNonNegativeInt } from "../calculations";
 
 type NumberStepperProps = {
@@ -17,6 +18,7 @@ export function NumberStepper({
   disabled,
 }: NumberStepperProps) {
   const set = (next: number) => onChange(clampNonNegativeInt(next));
+  const blank = useBlankZeroInput(value);
 
   return (
     <div className="flex items-center justify-between gap-2">
@@ -34,7 +36,7 @@ export function NumberStepper({
         inputMode="numeric"
         min={0}
         step={1}
-        value={value}
+        {...blank}
         onChange={(e) => set(Number(e.target.value))}
         aria-label={ariaLabel}
         disabled={disabled}

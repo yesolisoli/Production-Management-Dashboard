@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, Trash2, Truck } from "lucide-react";
+import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
 import { clampNonNegativeInt } from "../calculations";
 import { HOG_TYPES, type FarmRecord, type HogType } from "../types";
 
@@ -93,18 +94,9 @@ export function FarmRecords({
                   />
                 </td>
                 <td className="px-2 py-1.5 text-right">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1}
+                  <CountInput
                     value={row.count}
-                    onChange={(e) =>
-                      onUpdate(row.id, {
-                        count: clampNonNegativeInt(e.target.value),
-                      })
-                    }
-                    className="h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-right text-sm tabular-nums outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    onChange={(count) => onUpdate(row.id, { count })}
                   />
                 </td>
                 <td className="px-2 py-1.5 text-right">
@@ -145,5 +137,26 @@ export function FarmRecords({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function CountInput({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (count: number) => void;
+}) {
+  const blank = useBlankZeroInput(value);
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={0}
+      step={1}
+      {...blank}
+      onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
+      className="h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-right text-sm tabular-nums outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+    />
   );
 }

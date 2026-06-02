@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import { Minus, Plus } from "lucide-react";
+import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
 import { clampNonNegativeInt } from "../calculations";
 import {
   YIELD_HOG_TYPES,
@@ -126,6 +127,7 @@ type HogCountCardProps = {
 
 function HogCountCard({ type, value, tone, onChange }: HogCountCardProps) {
   const set = (next: number) => onChange(clampNonNegativeInt(next));
+  const blank = useBlankZeroInput(value);
   const isYield = tone === "yield";
   return (
     <div
@@ -144,7 +146,7 @@ function HogCountCard({ type, value, tone, onChange }: HogCountCardProps) {
         inputMode="numeric"
         min={0}
         step={1}
-        value={value}
+        {...blank}
         onChange={(e) => set(Number(e.target.value))}
         aria-label={`${type} count`}
         className="h-8 w-full border-0 bg-transparent text-center text-2xl font-extrabold tabular-nums text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
