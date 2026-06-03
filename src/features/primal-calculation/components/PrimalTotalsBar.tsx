@@ -9,6 +9,11 @@ type PrimalTotalsBarProps = {
   pushing: boolean;
 };
 
+// Cooler Inventory integration is not built yet, so the push action is
+// hidden for now. Flip this to true once pushOverstockToCooler() does a
+// real write — the button + modal scaffolding is already in place.
+const COOLER_PUSH_ENABLED = false;
+
 // Sticky footer that always shows global totals across every category,
 // plus the Overstock → Cooler Inventory action.
 export function PrimalTotalsBar({
@@ -42,24 +47,26 @@ export function PrimalTotalsBar({
           />
         </div>
 
-        <button
-          type="button"
-          onClick={onPushOverstock}
-          disabled={pushing || !hasOverstock}
-          title={
-            hasOverstock
-              ? "Push overstock to Cooler Inventory"
-              : "No overstock to push"
-          }
-          className="flex h-12 items-center gap-2 rounded-xl bg-violet-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {pushing ? (
-            <Loader2 size={18} className="animate-spin" />
-          ) : (
-            <Boxes size={18} />
-          )}
-          Push Overstock (O/S) → Cooler Inventory
-        </button>
+        {COOLER_PUSH_ENABLED && (
+          <button
+            type="button"
+            onClick={onPushOverstock}
+            disabled={pushing || !hasOverstock}
+            title={
+              hasOverstock
+                ? "Push overstock to Cooler Inventory"
+                : "No overstock to push"
+            }
+            className="flex h-12 items-center gap-2 rounded-xl bg-violet-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pushing ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <Boxes size={18} />
+            )}
+            Push Overstock (O/S) → Cooler Inventory
+          </button>
+        )}
       </div>
     </div>
   );

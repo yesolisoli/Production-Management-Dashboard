@@ -41,6 +41,7 @@ function todayString(): string {
 export type IntakeStatus =
   | { kind: "loading" }
   | { kind: "ready" }
+  | { kind: "missing" } // no Hog Intake record exists for the selected date
   | { kind: "error"; message: string };
 
 // Transient save indicator. `scope` is a category name or "all".
@@ -84,8 +85,14 @@ export function usePrimalCalculationState() {
     try {
       const record = await loadHogIntakeForDate(nextDate);
       if (token !== activeIntakeToken.current) return; // stale
-      setIntake(record);
-      setIntakeStatus({ kind: "ready" });
+      if (record) {
+        setIntake(record);
+        setIntakeStatus({ kind: "ready" });
+      } else {
+        // No DB record for this date — zero counts, no mock substitution.
+        setIntake(emptyHogIntakeRecord(nextDate));
+        setIntakeStatus({ kind: "missing" });
+      }
     } catch (err) {
       if (token !== activeIntakeToken.current) return;
       setIntake(emptyHogIntakeRecord(nextDate));

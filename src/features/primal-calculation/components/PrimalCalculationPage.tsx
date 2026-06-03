@@ -12,13 +12,14 @@ import { AppHeader } from "@/components/layout/app-header";
 import { Modal } from "@/components/shared/modal";
 import { deriveTotals } from "@/features/hog-intake/calculations";
 import {
+  buildAvailabilityRows,
   categoryTotals,
-  deriveProductYield,
+  DEFAULT_MIN_COOLER_RESERVE,
   globalTotals,
   orderFor,
   regularHogCount,
   sowHogCount,
-  type ProductYield,
+  sumAvailability,
 } from "../calculations";
 import {
   pushOverstockToCooler,
@@ -27,7 +28,12 @@ import {
 import { specsForCategory } from "../product-specs";
 import { PRIMAL_CATEGORIES, type PrimalCategory } from "../types";
 import { usePrimalCalculationState } from "../hooks/use-primal-calculation-state";
-import { categorySlug, PrimalCategorySection } from "./PrimalCategorySection";
+import { PrimalAvailabilityChart } from "./PrimalAvailabilityChart";
+import {
+  categorySlug,
+  PrimalCategorySection,
+  type CategorySkuRow,
+} from "./PrimalCategorySection";
 import { PrimalTotalsBar } from "./PrimalTotalsBar";
 
 export function PrimalCalculationPage() {
@@ -63,17 +69,18 @@ export function PrimalCalculationPage() {
 
   const counts = intake.hog_counts;
 
-  // Per-category derived rows (expected yield + validation). Recomputed
-  // only when orders or hog counts change.
+  // Per-category order-entry rows (spec + its editable order). Recomputed
+  // only when orders change.
   const rowsByCategory = useMemo(() => {
-    const map = {} as Record<PrimalCategory, ProductYield[]>;
+    const map = {} as Record<PrimalCategory, CategorySkuRow[]>;
     for (const category of PRIMAL_CATEGORIES) {
-      map[category] = specsForCategory(category).map((spec) =>
-        deriveProductYield(spec, orderFor(orders, spec.sku), counts),
-      );
+      map[category] = specsForCategory(category).map((spec) => ({
+        spec,
+        order: orderFor(orders, spec.sku),
+      }));
     }
     return map;
-  }, [orders, counts]);
+  }, [orders]);
 
   const categoryTotalsMap = useMemo(() => {
     const map = {} as Record<PrimalCategory, ReturnType<typeof categoryTotals>>;
@@ -85,6 +92,16 @@ export function PrimalCalculationPage() {
 
   const totals = useMemo(() => globalTotals(orders), [orders]);
   const intakeTotals = useMemo(() => deriveTotals(intake), [intake]);
+
+  // Availability — derived from intake counts + orders + cooler O/S.
+  const availabilityRows = useMemo(
+    () => buildAvailabilityRows(orders, counts),
+    [orders, counts],
+  );
+  const availabilityTotals = useMemo(
+    () => sumAvailability(availabilityRows),
+    [availabilityRows],
+  );
 
   const handleToggle = (category: PrimalCategory) =>
     setExpanded((prev) => ({ ...prev, [category]: !prev[category] }));
@@ -157,31 +174,30 @@ export function PrimalCalculationPage() {
             sideOrders={intake.side_orders}
             forCutting={intakeTotals.forCutting}
             nextDayHogs={intake.next_day.hog_count}
+            updatedAt={intake.updated_at}
+          />
+
+          <PrimalAvailabilityChart
+            rows={availabilityRows}
+            totals={availabilityTotals}
+            minReserve={DEFAULT_MIN_COOLER_RESERVE}
           />
 
           {/* Category tabs */}
           <div className="flex flex-wrap gap-2">
-            {PRIMAL_CATEGORIES.map((category) => {
-              const overCount = rowsByCategory[category].filter(
-                (r) => r.overAllocated,
-              ).length;
-              return (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => handleTabClick(category)}
-                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-                >
-                  {category}
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
-                    {specsForCategory(category).length}
-                  </span>
-                  {overCount > 0 && (
-                    <span className="h-2 w-2 rounded-full bg-red-500" />
-                  )}
-                </button>
-              );
-            })}
+            {PRIMAL_CATEGORIES.map((category) => (
+              <button
+                key={category}
+                type="button"
+                onClick={() => handleTabClick(category)}
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                {category}
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
+                  {specsForCategory(category).length}
+                </span>
+              </button>
+            ))}
           </div>
 
           {/* Category sections */}
@@ -282,14 +298,16 @@ function IntakeBanner({
   sideOrders,
   forCutting,
   nextDayHogs,
+  updatedAt,
 }: {
-  status: "loading" | "ready" | "error";
+  status: "loading" | "ready" | "missing" | "error";
   errorMessage?: string;
   regular: number;
   sow: number;
   sideOrders: number;
   forCutting: number;
   nextDayHogs: number;
+  updatedAt?: string;
 }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -299,13 +317,26 @@ function IntakeBanner({
             Hog Intake → Expected Yield
           </h2>
           <p className="text-xs text-slate-500">
-            Regular cuts use JP + RWA + BK · Sow cuts use Sow
+            Regular Hogs = JP + RWA + BK · Sow Hogs shown for intake reference
           </p>
         </div>
+        {status === "ready" && (
+          <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <CheckCircle2 size={13} className="text-emerald-500" />
+            From saved Hog Intake
+            {updatedAt && ` · updated ${formatUpdatedAt(updatedAt)}`}
+          </span>
+        )}
         {status === "loading" && (
           <span className="flex items-center gap-1.5 text-xs text-slate-500">
             <Loader2 size={13} className="animate-spin" />
             Loading intake…
+          </span>
+        )}
+        {status === "missing" && (
+          <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
+            <AlertCircle size={13} />
+            No Hog Intake record for this date — Expected Production is 0
           </span>
         )}
         {status === "error" && (
@@ -324,6 +355,19 @@ function IntakeBanner({
       </div>
     </section>
   );
+}
+
+// Compact local timestamp for the "last saved" hint (e.g. "Jun 2, 14:30").
+// Falls back to the raw string if it isn't a parseable date.
+function formatUpdatedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 const STAT_TONES: Record<string, string> = {

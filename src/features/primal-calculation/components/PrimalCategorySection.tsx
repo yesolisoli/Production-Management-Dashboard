@@ -1,22 +1,27 @@
 "use client";
 
 import clsx from "clsx";
-import {
-  AlertTriangle,
-  Check,
-  ChevronDown,
-  Loader2,
-  Package,
-  Save,
-} from "lucide-react";
+import { Check, ChevronDown, Loader2, Package, Save } from "lucide-react";
 import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
-import type { OrderTotals, ProductYield } from "../calculations";
+import type { OrderTotals } from "../calculations";
 import { clampNonNegativeInt } from "../calculations";
-import type { OrderField, PrimalCategory } from "../types";
+import type {
+  OrderField,
+  PrimalCategory,
+  ProductOrder,
+  ProductSpec,
+} from "../types";
+
+// One order-entry row: a product spec paired with its editable order. No
+// per-SKU yield — order inputs only.
+export type CategorySkuRow = {
+  spec: ProductSpec;
+  order: ProductOrder;
+};
 
 type PrimalCategorySectionProps = {
   category: PrimalCategory;
-  rows: ProductYield[];
+  rows: CategorySkuRow[];
   totals: OrderTotals;
   expanded: boolean;
   onToggle: () => void;
@@ -45,8 +50,6 @@ export function PrimalCategorySection({
   saving,
   justSaved,
 }: PrimalCategorySectionProps) {
-  const overAllocatedCount = rows.filter((r) => r.overAllocated).length;
-
   return (
     <section
       id={`primal-cat-${slug(category)}`}
@@ -75,13 +78,6 @@ export function PrimalCategorySection({
           <p className="text-xs text-slate-500">{rows.length} Items</p>
         </div>
 
-        {overAllocatedCount > 0 && (
-          <span className="ml-1 flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
-            <AlertTriangle size={12} />
-            {overAllocatedCount} over yield
-          </span>
-        )}
-
         <div className="ml-auto flex items-center gap-4">
           <HeaderTotal label="Today" cases={totals.today_cases} pcs={totals.today_pcs} />
           <HeaderTotal label="Tomorrow" cases={totals.tmrw_cases} pcs={totals.tmrw_pcs} />
@@ -98,7 +94,6 @@ export function PrimalCategorySection({
                   <th className="px-4 py-2.5">SKU</th>
                   <th className="px-2 py-2.5">Item</th>
                   <th className="px-2 py-2.5">Case Pack</th>
-                  <th className="px-2 py-2.5 text-right">Yield (pcs)</th>
                   <ColGroupHead label="Today" tone="text-blue-600" />
                   <ColGroupHead label="Tomorrow" tone="text-emerald-600" />
                   <ColGroupHead label="Overstock (O/S)" tone="text-violet-600" />
@@ -117,6 +112,14 @@ export function PrimalCategorySection({
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Per-category totals */}
+          <div className="grid grid-cols-2 gap-3 border-t border-slate-100 px-4 py-3 sm:grid-cols-4">
+            <TotalStat label="Today total cases" value={totals.today_cases} tone="blue" />
+            <TotalStat label="Today total pcs" value={totals.today_pcs} tone="blue" />
+            <TotalStat label="Tmrw total cases" value={totals.tmrw_cases} tone="emerald" />
+            <TotalStat label="Tmrw total pcs" value={totals.tmrw_pcs} tone="emerald" />
           </div>
 
           {/* Bulk actions + save */}
@@ -167,24 +170,20 @@ function ProductRow({
   onBlur,
   onChangeField,
 }: {
-  row: ProductYield;
+  row: CategorySkuRow;
   active: boolean;
   onFocus: () => void;
   onBlur: () => void;
   onChangeField: (sku: string, field: OrderField, value: number) => void;
 }) {
-  const { spec, order, expectedPieces, overAllocated } = row;
+  const { spec, order } = row;
   return (
     <tr
       onFocus={onFocus}
       onBlur={onBlur}
       className={clsx(
         "transition-colors",
-        overAllocated
-          ? "bg-red-50/70"
-          : active
-            ? "bg-blue-50/50"
-            : "hover:bg-slate-50/60",
+        active ? "bg-blue-50/50" : "hover:bg-slate-50/60",
       )}
     >
       <td className="px-4 py-2 font-mono text-xs font-semibold text-slate-700">
@@ -192,46 +191,28 @@ function ProductRow({
       </td>
       <td className="px-2 py-2">
         <span className="font-medium text-slate-800">{spec.name}</span>
-        {overAllocated && (
-          <span className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-red-600">
-            <AlertTriangle size={11} />
-            Over available yield ({expectedPieces} pcs)
-          </span>
-        )}
       </td>
       <td className="px-2 py-2 text-xs text-slate-500">{spec.casePack}</td>
-      <td
-        className={clsx(
-          "px-2 py-2 text-right text-xs font-semibold tabular-nums",
-          overAllocated ? "text-red-600" : "text-slate-400",
-        )}
-      >
-        {expectedPieces.toLocaleString()}
-      </td>
 
       <NumberCell
         value={order.today_cases}
-        invalid={overAllocated}
         onChange={(v) => onChangeField(spec.sku, "today_cases", v)}
         ariaLabel={`${spec.name} today cases`}
         accent="blue"
       />
       <NumberCell
         value={order.today_pcs}
-        invalid={overAllocated}
         onChange={(v) => onChangeField(spec.sku, "today_pcs", v)}
         ariaLabel={`${spec.name} today pieces`}
       />
       <NumberCell
         value={order.tmrw_cases}
-        invalid={overAllocated}
         onChange={(v) => onChangeField(spec.sku, "tmrw_cases", v)}
         ariaLabel={`${spec.name} tomorrow cases`}
         accent="emerald"
       />
       <NumberCell
         value={order.tmrw_pcs}
-        invalid={overAllocated}
         onChange={(v) => onChangeField(spec.sku, "tmrw_pcs", v)}
         ariaLabel={`${spec.name} tomorrow pieces`}
       />
@@ -262,13 +243,11 @@ function NumberCell({
   onChange,
   ariaLabel,
   accent = "none",
-  invalid = false,
 }: {
   value: number;
   onChange: (next: number) => void;
   ariaLabel: string;
   accent?: keyof typeof ACCENTS;
-  invalid?: boolean;
 }) {
   const blank = useBlankZeroInput(value);
   return (
@@ -282,8 +261,7 @@ function NumberCell({
         aria-label={ariaLabel}
         onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
         className={clsx(
-          "h-10 w-20 rounded-lg border bg-white text-center text-sm font-semibold tabular-nums text-slate-900 outline-none transition focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
-          invalid ? "border-red-300 bg-red-50" : "border-slate-200",
+          "h-10 w-20 rounded-lg border border-slate-200 bg-white text-center text-sm font-semibold tabular-nums text-slate-900 outline-none transition focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
           ACCENTS[accent],
         )}
       />
@@ -304,6 +282,35 @@ function ColGroupHead({ label, tone }: { label: string; tone: string }) {
         <span className="block text-[9px] font-normal text-slate-400">Pieces</span>
       </th>
     </>
+  );
+}
+
+const TOTAL_TONES: Record<string, string> = {
+  blue: "text-blue-600",
+  emerald: "text-emerald-600",
+};
+
+function TotalStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: keyof typeof TOTAL_TONES;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p
+        className={clsx(
+          "text-2xl font-extrabold tabular-nums",
+          TOTAL_TONES[tone],
+        )}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
 

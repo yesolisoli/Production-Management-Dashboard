@@ -71,3 +71,20 @@ export function emptyHogIntakeRecord(date: string): HogIntakeRecord {
     next_day: { hog_count: 0, side_orders: 0 },
   };
 }
+
+// True when the record carries no operator input — every count/field is at
+// its default. Used so an empty local draft never shadows a real DB record
+// (e.g. a date opened before data existed leaves a blank draft behind).
+export function isEmptyHogIntakeRecord(record: HogIntakeRecord): boolean {
+  return (
+    HOG_TYPES.every((type) => record.hog_counts[type] === 0) &&
+    record.side_orders === 0 &&
+    record.held_over === 0 &&
+    record.deaths_on_arrival === 0 &&
+    record.boars_count === 0 &&
+    record.notes.trim() === "" &&
+    record.farm_records.length === 0 &&
+    record.next_day.hog_count === 0 &&
+    record.next_day.side_orders === 0
+  );
+}

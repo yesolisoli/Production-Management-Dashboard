@@ -17,6 +17,7 @@ export function HogIntakeClient() {
     date,
     record,
     status,
+    dirty,
     setDate,
     setHogCount,
     bumpAllHogCounts,
@@ -80,7 +81,7 @@ export function HogIntakeClient() {
             />
           </div>
 
-          <SaveBar status={status} onSave={save} onReset={reset} />
+          <SaveBar status={status} dirty={dirty} onSave={save} onReset={reset} />
         </div>
       </div>
     </>

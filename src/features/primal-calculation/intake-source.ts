@@ -1,35 +1,30 @@
 "use client";
 
 import { SUPABASE_ENABLED } from "@/lib/config";
-import { buildHogIntakeMockRecords } from "@/features/hog-intake/mock-data";
 import { fetchHogIntakeByDate } from "@/features/hog-intake/supabase";
-import {
-  emptyHogIntakeRecord,
-  type HogIntakeRecord,
-} from "@/features/hog-intake/types";
+import type { HogIntakeRecord } from "@/features/hog-intake/types";
 
 // -------------------------------------------------------------------
 // Data layer for the hog intake values the Primal Calculation screen
 // consumes (hog counts, side orders, for-cutting, next-day projection).
 //
-// This is the ONLY place that decides where intake data comes from, so
-// the backend can be swapped in later without touching the hook or UI:
-//   1. Supabase (when configured) — reuse the hog-intake loader.
-//   2. Mock records — for local/prototype work.
+// DB-only by design: Expected Production must derive from REAL Hog Intake
+// records, so there is intentionally NO mock-data fallback here.
+//   * Returns the Supabase record for the date when one exists.
+//   * Returns null when no record exists for that date (caller shows an
+//     empty state → Expected Production is 0).
+//   * Throws when the database is unavailable (Supabase not configured, or
+//     the query fails) so the caller can surface an error rather than
+//     silently substituting fabricated data.
 // Read-only: Primal Calc never writes back to hog intake.
 // -------------------------------------------------------------------
 export async function loadHogIntakeForDate(
   date: string,
-): Promise<HogIntakeRecord> {
-  if (SUPABASE_ENABLED) {
-    try {
-      const remote = await fetchHogIntakeByDate(date);
-      if (remote) return remote;
-    } catch {
-      // Fall through to mock data so the screen still renders offline.
-    }
+): Promise<HogIntakeRecord | null> {
+  if (!SUPABASE_ENABLED) {
+    throw new Error("Hog Intake database is not configured.");
   }
-
-  const mock = buildHogIntakeMockRecords().find((r) => r.date === date);
-  return mock ?? emptyHogIntakeRecord(date);
+  // fetchHogIntakeByDate returns null when no row matches the date and
+  // throws on a query error — both behaviours are passed straight through.
+  return await fetchHogIntakeByDate(date);
 }

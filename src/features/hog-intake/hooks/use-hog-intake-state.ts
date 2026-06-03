@@ -9,6 +9,7 @@ import { fetchHogIntakeByDate, upsertHogIntakeRecord } from "../supabase";
 import {
   emptyHogCounts,
   emptyHogIntakeRecord,
+  isEmptyHogIntakeRecord,
   HOG_TYPES,
   type FarmRecord,
   type HogIntakeRecord,
@@ -58,6 +59,11 @@ export function useHogIntakeState() {
     emptyHogIntakeRecord(todayString()),
   );
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
+  // True when an unsaved local draft exists for the current date — i.e. the
+  // on-screen record differs from what's committed to the DB. Downstream
+  // screens (Primal Calc) read DB-only, so this flags a divergence the
+  // operator must resolve by saving.
+  const [dirty, setDirty] = useState(false);
 
   // Gate draft writes until after we've attempted to hydrate — otherwise
   // the empty initial state would overwrite a saved draft on first render.
@@ -76,13 +82,17 @@ export function useHogIntakeState() {
     const token = ++activeFetchToken.current;
 
     const draft = readDraft(nextDate);
-    if (draft) {
-      // Draft represents unsaved input — it always wins.
+    if (draft && !isEmptyHogIntakeRecord(draft)) {
+      // A non-empty draft represents unsaved input — it always wins.
       suppressNextWrite.current = true;
       setRecord(draft);
+      setDirty(true);
       setStatus({ kind: "idle" });
       return;
     }
+    // An empty draft (e.g. a date opened before data existed) must not
+    // shadow the DB — drop it and load from the server instead.
+    if (draft) clearDraft(nextDate);
 
     setStatus({ kind: "loading" });
     try {
@@ -90,11 +100,13 @@ export function useHogIntakeState() {
       if (token !== activeFetchToken.current) return; // stale
       suppressNextWrite.current = true;
       setRecord(remote ?? emptyHogIntakeRecord(nextDate));
+      setDirty(false);
       setStatus({ kind: "idle" });
     } catch (err) {
       if (token !== activeFetchToken.current) return;
       suppressNextWrite.current = true;
       setRecord(emptyHogIntakeRecord(nextDate));
+      setDirty(false);
       setStatus({
         kind: "error",
         message: err instanceof Error ? err.message : "Failed to load",
@@ -121,7 +133,15 @@ export function useHogIntakeState() {
       suppressNextWrite.current = false;
       return;
     }
+    // Never persist an empty draft — it would shadow the DB record on the
+    // next load. Clear any leftover instead.
+    if (isEmptyHogIntakeRecord(record)) {
+      clearDraft(date);
+      setDirty(false);
+      return;
+    }
     writeDraft(date, record);
+    setDirty(true);
   }, [date, record]);
 
   const setDate = useCallback(
@@ -231,6 +251,7 @@ export function useHogIntakeState() {
     suppressNextWrite.current = true;
     setRecord(emptyHogIntakeRecord(date));
     clearDraft(date);
+    setDirty(false);
     setStatus({ kind: "idle" });
   }, [date]);
 
@@ -244,6 +265,7 @@ export function useHogIntakeState() {
       // we just cleared.
       suppressNextWrite.current = true;
       setRecord(saved);
+      setDirty(false);
       setStatus({ kind: "saved", at: Date.now() });
     } catch (err) {
       setStatus({
@@ -257,6 +279,7 @@ export function useHogIntakeState() {
     date,
     record,
     status,
+    dirty,
     setDate,
     setHogCount,
     bumpAllHogCounts,

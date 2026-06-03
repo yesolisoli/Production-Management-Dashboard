@@ -1,4 +1,8 @@
-import type { ProductOrdersForDate } from "./types";
+import {
+  PRIMAL_CATEGORIES,
+  type PrimalCategory,
+  type ProductOrdersForDate,
+} from "./types";
 import { PRODUCT_SPECS } from "./product-specs";
 
 // -------------------------------------------------------------------
@@ -42,6 +46,30 @@ export function collectOverstockLines(
     }
   }
   return lines;
+}
+
+// -------------------------------------------------------------------
+// Cooler O/S read source (placeholder).
+//
+// The Availability Chart needs current cooler overstock per category.
+// Until the Cooler Inventory module exists, this is backed by the
+// operator's O/S (overstock) inputs on the order grid. Keeping the read
+// isolated here means the chart can later point at real cooler inventory
+// by swapping only this function — the calculations and UI stay the same.
+// -------------------------------------------------------------------
+export function readCoolerOverstockByCategory(
+  orders: ProductOrdersForDate,
+): Record<PrimalCategory, number> {
+  const byCategory = Object.fromEntries(
+    PRIMAL_CATEGORIES.map((category) => [category, 0]),
+  ) as Record<PrimalCategory, number>;
+
+  for (const spec of PRODUCT_SPECS) {
+    const order = orders[spec.sku];
+    if (!order) continue;
+    byCategory[spec.category] += order.overstock_pcs;
+  }
+  return byCategory;
 }
 
 export async function pushOverstockToCooler(

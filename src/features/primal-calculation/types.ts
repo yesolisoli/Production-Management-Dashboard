@@ -17,11 +17,6 @@ export const PRIMAL_CATEGORIES = [
 
 export type PrimalCategory = (typeof PRIMAL_CATEGORIES)[number];
 
-// Which pool of hogs a product is cut from.
-//   REGULAR — drawn from JP + RWA + BK counts
-//   SOW     — drawn from the Sow count
-export type HogSource = "REGULAR" | "SOW";
-
 // Centralized product definition. Lives in product-specs.ts; the UI never
 // hardcodes any of these values.
 export type ProductSpec = {
@@ -30,8 +25,6 @@ export type ProductSpec = {
   category: PrimalCategory;
   casePack: string; // human label shown in the table, e.g. "6 (20-22 KG)"
   piecesPerCase: number; // numeric divisor for cases <-> pieces conversion
-  yieldPerHog: number; // expected pieces produced per source hog
-  hogSource: HogSource;
 };
 
 // The six editable values a supervisor enters per product.
@@ -75,3 +68,34 @@ export function emptyProductOrder(): ProductOrder {
 //   { "YYYY-MM-DD": { "<sku>": { today_cases, today_pcs, ... } } }
 export type ProductOrdersForDate = Record<string, ProductOrder>;
 export type PrimalOrdersByDate = Record<string, ProductOrdersForDate>;
+
+// -------------------------------------------------------------------
+// Availability — combines expected production with cooler overstock and
+// compares against customer orders. Like everything else here this is a
+// DERIVED view: never persisted, always recomputed from intake counts +
+// orders + cooler O/S. Ending O/S and Shortage are computed, never typed
+// in by an operator.
+// -------------------------------------------------------------------
+export type AvailabilityStatus = "OK" | "Short" | "Low Reserve";
+
+export type CategoryAvailability = {
+  category: PrimalCategory;
+  expectedProduction: number; // expected pieces from today's hog intake
+  coolerOverstock: number; // existing cooler O/S pieces
+  availableStock: number; // production + cooler O/S
+  customerOrders: number; // today + tomorrow order pieces
+  availableToShip: number; // available stock minus the minimum reserve
+  adjustedShip: number; // min(customer orders, available to ship)
+  endingOverstock: number; // available stock minus adjusted ship
+  shortage: number; // unfulfilled customer orders
+  status: AvailabilityStatus;
+};
+
+export type AvailabilityTotals = {
+  expectedProduction: number;
+  coolerOverstock: number;
+  availableStock: number;
+  customerOrders: number;
+  adjustedShip: number;
+  shortage: number;
+};
