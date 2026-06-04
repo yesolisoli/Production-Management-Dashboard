@@ -5,13 +5,14 @@ import {
   type NextDay,
 } from "./types";
 
-// Sum of every hog_counts value (all types).
+// Sum of the hog_counts that count toward intake. Sow is excluded — it's a
+// reference-only figure and never feeds Total Hogs (and therefore not For
+// Cutting either).
 export function totalHogs(counts: HogCounts): number {
   return (
     counts.JP +
     counts.RWA +
     counts.BK +
-    counts.Sow +
     counts.Round +
     counts.Suckling +
     counts.Customer
@@ -30,13 +31,33 @@ export function forCutting(counts: HogCounts, sideOrders: number): number {
   return totalHogs(counts) - hogsConsumedBySideOrders(sideOrders);
 }
 
-// Only JP, RWA, BK, Sow contribute. Round / Suckling / Customer excluded.
+// Only JP, RWA, BK contribute. Sow / Round / Suckling / Customer excluded.
 export function yieldTotal(counts: HogCounts): number {
   return YIELD_HOG_TYPES.reduce((sum, key) => sum + counts[key], 0);
 }
 
 export function projectedForCutting(nextDay: NextDay): number {
   return nextDay.hog_count - hogsConsumedBySideOrders(nextDay.side_orders);
+}
+
+// Pieces produced per yield hog (one hog → 2 of each primal piece, e.g.
+// 2 loins). Canonical home for the factor — primal-calc reuses it so the
+// "× 2" rule lives in exactly one place.
+export const PIECES_PER_HOG = 2;
+
+// Loins produced from a yield-hog count.
+export function expectedLoins(yieldCount: number): number {
+  return yieldCount * PIECES_PER_HOG;
+}
+
+// Loins available tomorrow = today's expected loin production plus loins
+// already held in the cooler. Sales uses this to decide how many orders
+// tomorrow can absorb.
+export function loinsAvailableTomorrow(
+  yieldCount: number,
+  coolerOverstock: number,
+): number {
+  return expectedLoins(yieldCount) + coolerOverstock;
 }
 
 export type HogIntakeTotals = {

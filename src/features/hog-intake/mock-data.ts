@@ -30,7 +30,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
         { id: "fr-d4-4", farm: "Happy Field Farm", type: "Sow", tattoo: "2468", count: 10 },
         { id: "fr-d4-5", farm: "Golden Farm", type: "Round", tattoo: "1122", count: 20 },
       ],
-      next_day: { hog_count: 220, side_orders: 18 },
+      next_day: { hog_count: 220, side_orders: 18, cooler_overstock: 0 },
     },
     {
       date: dateDaysAgo(3),
@@ -47,7 +47,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
         { id: "fr-d3-3", farm: "Sunrise Farm", type: "BK", tattoo: "9120", count: 18 },
         { id: "fr-d3-4", farm: "Hilltop Farm", type: "Customer", tattoo: "3355", count: 14 },
       ],
-      next_day: { hog_count: 210, side_orders: 16 },
+      next_day: { hog_count: 210, side_orders: 16, cooler_overstock: 0 },
     },
     {
       date: dateDaysAgo(2),
@@ -64,7 +64,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
         { id: "fr-d2-3", farm: "Sunrise Farm", type: "BK", tattoo: "9133", count: 18 },
         { id: "fr-d2-4", farm: "Happy Field Farm", type: "Sow", tattoo: "2480", count: 14 },
       ],
-      next_day: { hog_count: 195, side_orders: 15 },
+      next_day: { hog_count: 195, side_orders: 15, cooler_overstock: 0 },
     },
     {
       date: dateDaysAgo(1),
@@ -83,7 +83,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
         { id: "fr-d1-5", farm: "Golden Farm", type: "Round", tattoo: "1133", count: 20 },
         { id: "fr-d1-6", farm: "Hilltop Farm", type: "Customer", tattoo: "3366", count: 16 },
       ],
-      next_day: { hog_count: 205, side_orders: 19 },
+      next_day: { hog_count: 205, side_orders: 19, cooler_overstock: 0 },
     },
     {
       date: dateDaysAgo(0),
@@ -100,7 +100,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
         { id: "fr-d0-3", farm: "Sunrise Farm", type: "BK", tattoo: "9155", count: 14 },
         { id: "fr-d0-4", farm: "Happy Field Farm", type: "Sow", tattoo: "2502", count: 12 },
       ],
-      next_day: { hog_count: 210, side_orders: 17 },
+      next_day: { hog_count: 210, side_orders: 17, cooler_overstock: 0 },
     },
   ];
 }

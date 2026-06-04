@@ -2,20 +2,34 @@
 
 import clsx from "clsx";
 import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
-import { clampNonNegativeInt, projectedForCutting } from "../calculations";
+import {
+  clampNonNegativeInt,
+  expectedLoins,
+  loinsAvailableTomorrow,
+  projectedForCutting,
+} from "../calculations";
 import type { NextDay } from "../types";
 
 type NextDayProjectionProps = {
   nextDay: NextDay;
-  onChange: (field: "hog_count" | "side_orders", value: number) => void;
+  // Today's yield total (JP + RWA + BK) — drives expected loin production.
+  yieldTotal: number;
+  onChange: (
+    field: "hog_count" | "side_orders" | "cooler_overstock",
+    value: number,
+  ) => void;
 };
 
 export function NextDayProjection({
   nextDay,
+  yieldTotal,
   onChange,
 }: NextDayProjectionProps) {
   const projected = projectedForCutting(nextDay);
   const negative = projected < 0;
+
+  const expected = expectedLoins(yieldTotal);
+  const available = loinsAvailableTomorrow(yieldTotal, nextDay.cooler_overstock);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -38,6 +52,13 @@ export function NextDayProjection({
           label="NEXT DAY SIDE ORDERS"
           value={nextDay.side_orders}
           onChange={(v) => onChange("side_orders", v)}
+        />
+        <ProjectionField
+          id="cooler-overstock"
+          label="COOLER OVERSTOCK"
+          unit="loins"
+          value={nextDay.cooler_overstock}
+          onChange={(v) => onChange("cooler_overstock", v)}
         />
       </div>
 
@@ -69,6 +90,23 @@ export function NextDayProjection({
           <span className="text-xs font-medium text-slate-400">head</span>
         </p>
       </div>
+
+      <div className="mt-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-2.5">
+        <p className="text-xs font-medium text-slate-600">
+          Loins Available Tomorrow
+        </p>
+        <p className="mt-0.5 flex items-baseline gap-1.5">
+          <span className="text-xl font-extrabold tabular-nums leading-none text-emerald-700">
+            {available.toLocaleString()}
+          </span>
+          <span className="text-xs font-medium text-slate-400">loins</span>
+        </p>
+        <p className="mt-1 text-[11px] text-slate-500 tabular-nums">
+          {expected.toLocaleString()} expected (yield × 2)
+          <span className="mx-1 text-slate-300">+</span>
+          {nextDay.cooler_overstock.toLocaleString()} cooler overstock
+        </p>
+      </div>
     </section>
   );
 }
@@ -77,10 +115,17 @@ type ProjectionFieldProps = {
   id: string;
   label: string;
   value: number;
+  unit?: string;
   onChange: (next: number) => void;
 };
 
-function ProjectionField({ id, label, value, onChange }: ProjectionFieldProps) {
+function ProjectionField({
+  id,
+  label,
+  value,
+  unit = "head",
+  onChange,
+}: ProjectionFieldProps) {
   const blank = useBlankZeroInput(value);
   return (
     <div className="rounded-xl border border-slate-200 p-2.5">
@@ -101,7 +146,7 @@ function ProjectionField({ id, label, value, onChange }: ProjectionFieldProps) {
           onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
           className="h-9 min-w-0 flex-1 border-0 bg-transparent text-xl font-extrabold tabular-nums text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
-        <span className="text-xs font-medium text-slate-400">head</span>
+        <span className="text-xs font-medium text-slate-400">{unit}</span>
       </div>
     </div>
   );

@@ -13,17 +13,15 @@ import {
 type HogCountGridProps = {
   counts: HogCounts;
   onChange: (type: HogType, value: number) => void;
-  onBumpAll: (delta: number) => void;
   onClearAll: () => void;
 };
 
-const YIELD_TYPES: HogType[] = ["JP", "RWA", "BK", "Sow"];
+const YIELD_TYPES: HogType[] = ["JP", "RWA", "BK"];
 const EXCLUDE_TYPES: HogType[] = ["Round", "Suckling", "Customer"];
 
 export function HogCountGrid({
   counts,
   onChange,
-  onBumpAll,
   onClearAll,
 }: HogCountGridProps) {
   return (
@@ -37,12 +35,6 @@ export function HogCountGrid({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Quick Actions
-          </span>
-          <QuickActionButton onClick={() => onBumpAll(10)}>+10 to All</QuickActionButton>
-          <QuickActionButton onClick={() => onBumpAll(50)}>+50 to All</QuickActionButton>
-          <QuickActionButton onClick={() => onBumpAll(100)}>+100 to All</QuickActionButton>
           <button
             type="button"
             onClick={onClearAll}
@@ -70,7 +62,15 @@ export function HogCountGrid({
                 onChange={(v) => onChange(type, v)}
               />
             ))}
+            <SowReferenceCard
+              value={counts.Sow}
+              onChange={(v) => onChange("Sow", v)}
+            />
           </div>
+          <p className="mt-1.5 text-xs text-slate-400">
+            Sow is tracked for reference only — it is not counted in Total Hogs,
+            Yield Total, or For Cutting.
+          </p>
         </div>
 
         <div className="lg:col-span-3 lg:border-l lg:border-slate-100 lg:pl-4">
@@ -174,20 +174,52 @@ function HogCountCard({ type, value, tone, onChange }: HogCountCardProps) {
   );
 }
 
-function QuickActionButton({
-  onClick,
-  children,
+// Sow input, styled as a reference card. Identical mechanics to
+// HogCountCard but visually set apart (violet) to signal it never feeds a
+// total — it's intake reference only.
+function SowReferenceCard({
+  value,
+  onChange,
 }: {
-  onClick: () => void;
-  children: React.ReactNode;
+  value: number;
+  onChange: (next: number) => void;
 }) {
+  const set = (next: number) => onChange(clampNonNegativeInt(next));
+  const blank = useBlankZeroInput(value);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-600 transition hover:bg-blue-50"
-    >
-      {children}
-    </button>
+    <div className="flex flex-col items-stretch gap-1.5 rounded-xl border border-violet-200 bg-violet-50/60 p-2.5">
+      <span className="text-center text-xs font-semibold text-violet-700">
+        Sow
+      </span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        step={1}
+        {...blank}
+        onChange={(e) => set(Number(e.target.value))}
+        aria-label="Sow count"
+        className="h-8 w-full border-0 bg-transparent text-center text-2xl font-extrabold tabular-nums text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+      <div className="flex items-center justify-between gap-1.5">
+        <button
+          type="button"
+          onClick={() => set(value - 1)}
+          disabled={value <= 0}
+          aria-label="Sow decrement"
+          className="flex h-7 flex-1 items-center justify-center rounded-lg border border-violet-200 bg-white text-violet-600 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Minus size={13} />
+        </button>
+        <button
+          type="button"
+          onClick={() => set(value + 1)}
+          aria-label="Sow increment"
+          className="flex h-7 flex-1 items-center justify-center rounded-lg border border-violet-200 bg-white text-violet-600 transition hover:bg-violet-50"
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+    </div>
   );
 }

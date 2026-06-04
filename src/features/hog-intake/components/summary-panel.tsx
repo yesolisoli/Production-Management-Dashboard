@@ -97,7 +97,6 @@ function SummaryCard({ card }: { card: Card }) {
         <span className={clsx("text-2xl font-extrabold tabular-nums leading-none", valueClass)}>
           {card.value.toLocaleString()}
         </span>
-        <span className="text-xs font-medium text-slate-400">head</span>
       </p>
     </div>
   );

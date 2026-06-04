@@ -10,7 +10,6 @@ import {
   emptyHogCounts,
   emptyHogIntakeRecord,
   isEmptyHogIntakeRecord,
-  HOG_TYPES,
   type FarmRecord,
   type HogIntakeRecord,
   type HogType,
@@ -163,16 +162,6 @@ export function useHogIntakeState() {
     }));
   }, []);
 
-  const bumpAllHogCounts = useCallback((delta: number) => {
-    setRecord((prev) => {
-      const next = { ...prev.hog_counts };
-      for (const type of HOG_TYPES) {
-        next[type] = clampNonNegativeInt(next[type] + delta);
-      }
-      return { ...prev, hog_counts: next };
-    });
-  }, []);
-
   const clearAllHogCounts = useCallback(() => {
     setRecord((prev) => ({ ...prev, hog_counts: emptyHogCounts() }));
   }, []);
@@ -195,7 +184,7 @@ export function useHogIntakeState() {
   }, []);
 
   const setNextDayField = useCallback(
-    (field: "hog_count" | "side_orders", value: number) => {
+    (field: "hog_count" | "side_orders" | "cooler_overstock", value: number) => {
       setRecord((prev) => ({
         ...prev,
         next_day: { ...prev.next_day, [field]: clampNonNegativeInt(value) },
@@ -282,7 +271,6 @@ export function useHogIntakeState() {
     dirty,
     setDate,
     setHogCount,
-    bumpAllHogCounts,
     clearAllHogCounts,
     setProcessField,
     setNotes,

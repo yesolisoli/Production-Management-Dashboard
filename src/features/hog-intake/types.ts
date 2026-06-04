@@ -12,8 +12,9 @@ export const HOG_TYPES = [
 export type HogType = (typeof HOG_TYPES)[number];
 
 // Subset of HOG_TYPES that contribute to yield_total.
-// Round / Suckling / Customer are intentionally excluded.
-export const YIELD_HOG_TYPES = ["JP", "RWA", "BK", "Sow"] as const;
+// Sow / Round / Suckling / Customer are intentionally excluded — Sow is
+// tracked for reference only and never counts toward any total.
+export const YIELD_HOG_TYPES = ["JP", "RWA", "BK"] as const;
 export type YieldHogType = (typeof YIELD_HOG_TYPES)[number];
 
 export type HogCounts = Record<HogType, number>;
@@ -29,6 +30,9 @@ export type FarmRecord = {
 export type NextDay = {
   hog_count: number;
   side_orders: number;
+  // Loins (pieces) already sitting in the cooler, carried into tomorrow's
+  // availability. Added on top of expected production from today's yield.
+  cooler_overstock: number;
 };
 
 // Persisted shape — only raw inputs. Computed values are never stored.
@@ -68,7 +72,7 @@ export function emptyHogIntakeRecord(date: string): HogIntakeRecord {
     boars_count: 0,
     notes: "",
     farm_records: [],
-    next_day: { hog_count: 0, side_orders: 0 },
+    next_day: { hog_count: 0, side_orders: 0, cooler_overstock: 0 },
   };
 }
 
@@ -85,6 +89,7 @@ export function isEmptyHogIntakeRecord(record: HogIntakeRecord): boolean {
     record.notes.trim() === "" &&
     record.farm_records.length === 0 &&
     record.next_day.hog_count === 0 &&
-    record.next_day.side_orders === 0
+    record.next_day.side_orders === 0 &&
+    record.next_day.cooler_overstock === 0
   );
 }

@@ -187,6 +187,17 @@ export function usePrimalCalculationState() {
     [],
   );
 
+  // Apply a CSV import: merge the imported per-SKU orders over the
+  // current working copy. Imported SKUs overwrite; untouched SKUs are
+  // preserved. Treated as a normal edit, so the draft auto-persists and
+  // the operator can review before hitting Save.
+  const applyImportedOrders = useCallback(
+    (imported: ProductOrdersForDate) => {
+      setOrders((prev) => ({ ...prev, ...imported }));
+    },
+    [],
+  );
+
   // Bulk: clear every order field for all products in a category.
   const clearCategory = useCallback((category: PrimalCategory) => {
     setOrders((prev) => {
@@ -249,6 +260,7 @@ export function usePrimalCalculationState() {
     clearCategory,
     saveCategory,
     saveAll,
+    applyImportedOrders,
   };
 }
 

@@ -35,7 +35,8 @@ function coerceCounts(raw: unknown) {
 }
 
 function coerceNextDay(raw: unknown) {
-  if (!raw || typeof raw !== "object") return { hog_count: 0, side_orders: 0 };
+  const fallback = { hog_count: 0, side_orders: 0, cooler_overstock: 0 };
+  if (!raw || typeof raw !== "object") return fallback;
   const obj = raw as Record<string, unknown>;
   return {
     hog_count:
@@ -45,6 +46,10 @@ function coerceNextDay(raw: unknown) {
     side_orders:
       typeof obj.side_orders === "number" && obj.side_orders >= 0
         ? obj.side_orders
+        : 0,
+    cooler_overstock:
+      typeof obj.cooler_overstock === "number" && obj.cooler_overstock >= 0
+        ? obj.cooler_overstock
         : 0,
   };
 }

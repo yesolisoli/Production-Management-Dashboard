@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckCircle2,
   Loader2,
+  Upload,
 } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { Modal } from "@/components/shared/modal";
@@ -29,6 +30,7 @@ import { specsForCategory } from "../product-specs";
 import { PRIMAL_CATEGORIES, type PrimalCategory } from "../types";
 import { usePrimalCalculationState } from "../hooks/use-primal-calculation-state";
 import { PrimalAvailabilityChart } from "./PrimalAvailabilityChart";
+import { PrimalCsvImportModal } from "./PrimalCsvImportModal";
 import {
   categorySlug,
   PrimalCategorySection,
@@ -49,6 +51,7 @@ export function PrimalCalculationPage() {
     clearCategory,
     saveCategory,
     saveAll,
+    applyImportedOrders,
   } = usePrimalCalculationState();
 
   // Butts open by default (matches the reference); others collapsed.
@@ -57,6 +60,7 @@ export function PrimalCalculationPage() {
   });
   const [activeSku, setActiveSku] = useState<string | null>(null);
   const [confirmPush, setConfirmPush] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -198,6 +202,15 @@ export function PrimalCalculationPage() {
                 </span>
               </button>
             ))}
+
+            <button
+              type="button"
+              onClick={() => setImporting(true)}
+              className="ml-auto flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+            >
+              <Upload size={16} />
+              Import CSV
+            </button>
           </div>
 
           {/* Category sections */}
@@ -233,6 +246,19 @@ export function PrimalCalculationPage() {
           />
         </div>
       </div>
+
+      {importing && (
+        <PrimalCsvImportModal
+          date={date}
+          onClose={() => setImporting(false)}
+          onApply={(imported) => {
+            applyImportedOrders(imported);
+            setToast(
+              `Imported ${Object.keys(imported).length} products — review and Save to commit.`,
+            );
+          }}
+        />
+      )}
 
       {confirmPush && (
         <Modal

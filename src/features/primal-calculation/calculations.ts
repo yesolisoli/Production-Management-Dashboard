@@ -1,4 +1,8 @@
-import { clampNonNegativeInt, yieldTotal } from "@/features/hog-intake/calculations";
+import {
+  clampNonNegativeInt,
+  PIECES_PER_HOG,
+  yieldTotal,
+} from "@/features/hog-intake/calculations";
 import type { HogCounts } from "@/features/hog-intake/types";
 import {
   PRODUCT_SPECS,
@@ -27,10 +31,10 @@ export { clampNonNegativeInt };
 // display-only splits of the same yield hogs that feed Expected
 // Production (yieldTotal); no calculation branches on them.
 //
-//   Regular = JP + RWA + BK · Sow = the Sow count.
+//   Regular = JP + RWA + BK · Sow = the Sow count (reference only).
 //
-// Round / Suckling / Customer are excluded from yield entirely, matching
-// the YIELD_HOG_TYPES contract in the hog-intake module.
+// Sow / Round / Suckling / Customer are excluded from yield entirely,
+// matching the YIELD_HOG_TYPES contract in the hog-intake module.
 // -------------------------------------------------------------------
 export function regularHogCount(counts: HogCounts): number {
   return counts.JP + counts.RWA + counts.BK;
@@ -114,14 +118,15 @@ export function globalTotals(orders: ProductOrdersForDate): OrderTotals {
 export const DEFAULT_MIN_COOLER_RESERVE = 100;
 
 // Sides produced per yield hog (the spec's "base hog count × 2").
-export const PRIMAL_PIECES_PER_HOG = 2;
+// Aliases the canonical hog-intake constant so the factor lives in one place.
+export const PRIMAL_PIECES_PER_HOG = PIECES_PER_HOG;
 
 // Expected production for a whole category, derived straight from hog
 // intake. The single source of truth is the intake's yieldTotal
-// (JP + RWA + BK + Sow) — the same figure the Hog Intake screen reports —
-// so the chart never recomputes availability separately from regular/sow
-// counts. Every category therefore starts at yieldTotal × pieces-per-hog
-// (e.g. 136 × 2 = 272).
+// (JP + RWA + BK) — the same figure the Hog Intake screen reports — so the
+// chart never recomputes availability separately from the regular counts.
+// Sow is excluded from yield, so it never affects production. Every category
+// therefore starts at yieldTotal × pieces-per-hog (e.g. 136 × 2 = 272).
 //
 // `category` is accepted so a future business rule can exclude a category
 // from a hog pool; with no such rule today, every category shares the base.
