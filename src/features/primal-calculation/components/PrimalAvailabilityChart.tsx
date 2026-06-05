@@ -1,12 +1,64 @@
 "use client";
 
+import { useState } from "react";
 import clsx from "clsx";
-import { AlertTriangle, CheckCircle2, PackageCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  BarChart3,
+  Boxes,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  Layers,
+  type LucideIcon,
+} from "lucide-react";
 import type {
   AvailabilityStatus,
   AvailabilityTotals,
   CategoryAvailability,
 } from "../types";
+
+// Top-of-page KPI strip — the four headline figures from the availability
+// footer totals. Standalone so the page can show them above everything while
+// the detailed chart stays collapsed.
+export function PrimalAvailabilityKpis({
+  totals,
+}: {
+  totals: AvailabilityTotals;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <KpiCard
+        label="Available"
+        value={totals.availableStock}
+        negative={totals.availableStock < 0}
+        tone="emerald"
+        icon={Boxes}
+      />
+      <KpiCard
+        label="Orders"
+        value={totals.customerOrders}
+        tone="blue"
+        icon={ClipboardList}
+      />
+      <KpiCard
+        label="Shortage"
+        value={totals.shortage}
+        negative={totals.shortage > 0}
+        tone="rose"
+        icon={AlertTriangle}
+      />
+      <KpiCard
+        label="Today's O/S"
+        value={totals.todaysOverstock}
+        negative={totals.todaysOverstock < 0}
+        tone="violet"
+        icon={Layers}
+      />
+    </div>
+  );
+}
 
 type PrimalAvailabilityChartProps = {
   rows: CategoryAvailability[];
@@ -14,31 +66,50 @@ type PrimalAvailabilityChartProps = {
   minReserve: number;
 };
 
-// Read-only summary of what's actually available to ship after combining
-// today's expected production with existing cooler overstock, compared
-// against customer orders. Sits above the order accordions so sales can
-// see shortages before drilling into SKUs.
+// Read-only summary of what's actually available to ship after subtracting
+// customer orders from today's expected production plus existing cooler
+// overstock. Available Stock here is the NET figure (gross − orders), so it
+// matches the Customer Availability chart's "Remaining" row directly.
 export function PrimalAvailabilityChart({
   rows,
   totals,
   minReserve,
 }: PrimalAvailabilityChartProps) {
+  // Collapsed by default — the headline figures live in the top KPI strip;
+  // this detailed table is opened on demand.
+  const [open, setOpen] = useState(false);
   const shortCount = rows.filter((r) => r.status === "Short").length;
   const lowReserveCount = rows.filter((r) => r.status === "Low Reserve").length;
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">
-            Availability Chart for Today
-          </h2>
-          <p className="text-xs text-slate-500">
-            Expected production + cooler O/S vs. customer orders · minimum
-            reserve{" "}
-            <span className="font-semibold tabular-nums">{minReserve} pcs</span>
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-3 text-left"
+        >
+          {open ? (
+            <ChevronDown size={18} className="text-slate-400" />
+          ) : (
+            <ChevronRight size={18} className="text-slate-400" />
+          )}
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-white">
+            <BarChart3 size={16} />
+          </span>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">
+              Availability Chart for Today
+            </h2>
+            <p className="text-xs text-slate-500">
+              Exp. production + yesterday O/S − customer reservations = Available
+              Stock; − customer orders = Today&apos;s O/S · minimum reserve{" "}
+              <span className="font-semibold tabular-nums">
+                {minReserve} pcs
+              </span>
+            </p>
+          </div>
+        </button>
         <div className="flex items-center gap-2">
           {shortCount > 0 && (
             <span className="flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600">
@@ -61,53 +132,20 @@ export function PrimalAvailabilityChart({
         </div>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-        <SummaryCard
-          label="Expected Production"
-          value={totals.expectedProduction}
-          tone="blue"
-        />
-        <SummaryCard
-          label="Cooler O/S"
-          value={totals.coolerOverstock}
-          tone="violet"
-        />
-        <SummaryCard
-          label="Available Stock"
-          value={totals.availableStock}
-          tone="emerald"
-        />
-        <SummaryCard
-          label="Customer Orders"
-          value={totals.customerOrders}
-          tone="slate"
-        />
-        <SummaryCard
-          label="Adjusted Ship"
-          value={totals.adjustedShip}
-          tone="blue"
-        />
-        <SummaryCard
-          label="Shortage"
-          value={totals.shortage}
-          tone={totals.shortage > 0 ? "red" : "emerald"}
-        />
-      </div>
-
-      {/* Availability table */}
+      {/* Availability table — only when expanded */}
+      {open && (
       <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
-        <table className="w-full min-w-[820px] border-collapse text-sm">
+        <table className="w-full min-w-225 border-collapse text-sm">
           <thead>
             <tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               <th className="px-4 py-2.5">Category</th>
               <th className="px-2 py-2.5 text-right">Exp. Production</th>
-              <th className="px-2 py-2.5 text-right">Cooler O/S</th>
+              <th className="px-2 py-2.5 text-right">Yesterday O/S</th>
+              <th className="px-2 py-2.5 text-right">Customer Reservations</th>
               <th className="px-2 py-2.5 text-right">Available Stock</th>
               <th className="px-2 py-2.5 text-right">Customer Orders</th>
-              <th className="px-2 py-2.5 text-right">Adjusted Ship</th>
-              <th className="px-2 py-2.5 text-right">Ending O/S</th>
               <th className="px-2 py-2.5 text-right">Shortage</th>
+              <th className="px-2 py-2.5 text-right">Today&apos;s O/S</th>
               <th className="px-4 py-2.5 text-center">Status</th>
             </tr>
           </thead>
@@ -125,18 +163,22 @@ export function PrimalAvailabilityChart({
                 {totals.expectedProduction.toLocaleString()}
               </td>
               <td className="px-2 py-2.5">
-                {totals.coolerOverstock.toLocaleString()}
+                {totals.yesterdayOverstock.toLocaleString()}
               </td>
               <td className="px-2 py-2.5">
+                {totals.specialCustomerOrders.toLocaleString()}
+              </td>
+              <td
+                className={clsx(
+                  "px-2 py-2.5",
+                  totals.availableStock < 0 ? "text-red-600" : "text-slate-800",
+                )}
+              >
                 {totals.availableStock.toLocaleString()}
               </td>
               <td className="px-2 py-2.5">
                 {totals.customerOrders.toLocaleString()}
               </td>
-              <td className="px-2 py-2.5">
-                {totals.adjustedShip.toLocaleString()}
-              </td>
-              <td className="px-2 py-2.5 text-slate-400">—</td>
               <td
                 className={clsx(
                   "px-2 py-2.5",
@@ -145,12 +187,69 @@ export function PrimalAvailabilityChart({
               >
                 {totals.shortage.toLocaleString()}
               </td>
+              <td
+                className={clsx(
+                  "px-2 py-2.5",
+                  totals.todaysOverstock < 0 ? "text-red-600" : "text-slate-800",
+                )}
+              >
+                {totals.todaysOverstock.toLocaleString()}
+              </td>
               <td className="px-4 py-2.5" />
             </tr>
           </tfoot>
         </table>
       </div>
+      )}
     </section>
+  );
+}
+
+const KPI_TONES = {
+  emerald: { chipBg: "bg-emerald-50", chipFg: "text-emerald-500" },
+  blue: { chipBg: "bg-blue-50", chipFg: "text-blue-500" },
+  rose: { chipBg: "bg-rose-50", chipFg: "text-rose-500" },
+  violet: { chipBg: "bg-violet-50", chipFg: "text-violet-500" },
+} as const;
+
+function KpiCard({
+  label,
+  value,
+  negative = false,
+  tone = "blue",
+  icon: Icon,
+}: {
+  label: string;
+  value: number;
+  negative?: boolean;
+  tone?: keyof typeof KPI_TONES;
+  icon: LucideIcon;
+}) {
+  const chip = KPI_TONES[tone];
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          {label}
+        </p>
+        <span
+          className={clsx(
+            "flex h-6 w-6 items-center justify-center rounded-md",
+            chip.chipBg,
+          )}
+        >
+          <Icon size={13} className={chip.chipFg} strokeWidth={2} />
+        </span>
+      </div>
+      <p
+        className={clsx(
+          "mt-1 text-xl font-bold tabular-nums",
+          negative ? "text-red-600" : "text-slate-900",
+        )}
+      >
+        {value.toLocaleString()}
+      </p>
+    </div>
   );
 }
 
@@ -175,24 +274,21 @@ function AvailabilityRow({ row }: { row: CategoryAvailability }) {
         {row.expectedProduction.toLocaleString()}
       </td>
       <td className="px-2 py-2.5 text-violet-600">
-        {row.coolerOverstock.toLocaleString()}
+        {row.yesterdayOverstock.toLocaleString()}
       </td>
-      <td className="px-2 py-2.5 font-semibold text-slate-800">
+      <td className="px-2 py-2.5 text-slate-600">
+        {row.specialCustomerOrders.toLocaleString()}
+      </td>
+      <td
+        className={clsx(
+          "px-2 py-2.5 font-semibold",
+          row.availableStock < 0 ? "text-red-600" : "text-slate-800",
+        )}
+      >
         {row.availableStock.toLocaleString()}
       </td>
       <td className="px-2 py-2.5 text-slate-600">
         {row.customerOrders.toLocaleString()}
-      </td>
-      <td className="px-2 py-2.5 font-semibold text-blue-600">
-        {row.adjustedShip.toLocaleString()}
-      </td>
-      <td
-        className={clsx(
-          "px-2 py-2.5",
-          lowReserve ? "font-semibold text-amber-600" : "text-slate-600",
-        )}
-      >
-        {row.endingOverstock.toLocaleString()}
       </td>
       <td
         className={clsx(
@@ -201,6 +297,14 @@ function AvailabilityRow({ row }: { row: CategoryAvailability }) {
         )}
       >
         {row.shortage.toLocaleString()}
+      </td>
+      <td
+        className={clsx(
+          "px-2 py-2.5 font-semibold",
+          row.todaysOverstock < 0 ? "text-red-600" : "text-emerald-600",
+        )}
+      >
+        {row.todaysOverstock.toLocaleString()}
       </td>
       <td className="px-4 py-2.5 text-center">
         <StatusBadge status={row.status} />
@@ -227,36 +331,5 @@ function StatusBadge({ status }: { status: AvailabilityStatus }) {
       <Icon size={12} />
       {status}
     </span>
-  );
-}
-
-const CARD_TONES: Record<string, string> = {
-  blue: "border-blue-200 bg-blue-50/60 text-blue-700",
-  violet: "border-violet-200 bg-violet-50/60 text-violet-700",
-  emerald: "border-emerald-200 bg-emerald-50/60 text-emerald-700",
-  slate: "border-slate-200 bg-slate-50 text-slate-700",
-  red: "border-red-200 bg-red-50/70 text-red-700",
-};
-
-function SummaryCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: keyof typeof CARD_TONES;
-}) {
-  return (
-    <div className={clsx("rounded-xl border p-3", CARD_TONES[tone])}>
-      <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide opacity-70">
-        <PackageCheck size={11} />
-        {label}
-      </p>
-      <p className="text-2xl font-extrabold tabular-nums">
-        {value.toLocaleString()}
-      </p>
-      <p className="text-[10px] font-medium opacity-60">pcs</p>
-    </div>
   );
 }

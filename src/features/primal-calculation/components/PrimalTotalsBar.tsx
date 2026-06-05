@@ -5,6 +5,9 @@ import type { OrderTotals } from "../calculations";
 
 type PrimalTotalsBarProps = {
   totals: OrderTotals;
+  // Calculated Today's O/S across all categories, in pieces (derived,
+  // read-only — the Availability Chart's total Today's O/S).
+  calculatedOverstockPcs: number;
   onPushOverstock: () => void;
   pushing: boolean;
 };
@@ -18,10 +21,11 @@ const COOLER_PUSH_ENABLED = false;
 // plus the Overstock → Cooler Inventory action.
 export function PrimalTotalsBar({
   totals,
+  calculatedOverstockPcs,
   onPushOverstock,
   pushing,
 }: PrimalTotalsBarProps) {
-  const hasOverstock = totals.overstock_cases > 0 || totals.overstock_pcs > 0;
+  const hasOverstock = calculatedOverstockPcs > 0;
 
   return (
     <div className="sticky bottom-0 z-10 border-t border-slate-200 bg-white/95 px-5 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:px-6">
@@ -33,18 +37,7 @@ export function PrimalTotalsBar({
             pcs={totals.today_pcs}
             tone="blue"
           />
-          <TotalBlock
-            label="Tomorrow Total"
-            cases={totals.tmrw_cases}
-            pcs={totals.tmrw_pcs}
-            tone="emerald"
-          />
-          <TotalBlock
-            label="O/S Total"
-            cases={totals.overstock_cases}
-            pcs={totals.overstock_pcs}
-            tone="violet"
-          />
+          <OverstockBlock label="Calculated O/S Total" pcs={calculatedOverstockPcs} />
         </div>
 
         {COOLER_PUSH_ENABLED && (
@@ -74,9 +67,27 @@ export function PrimalTotalsBar({
 
 const TONES: Record<string, string> = {
   blue: "text-blue-600",
-  emerald: "text-emerald-600",
   violet: "text-violet-600",
 };
+
+// Calculated O/S total — pieces only (category-level figure; "cases" is
+// undefined across mixed case packs).
+function OverstockBlock({ label, pcs }: { label: string; pcs: number }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p
+        className={`text-sm font-bold tabular-nums ${
+          pcs < 0 ? "text-red-600" : "text-violet-600"
+        }`}
+      >
+        {pcs.toLocaleString()} pcs
+      </p>
+    </div>
+  );
+}
 
 function TotalBlock({
   label,

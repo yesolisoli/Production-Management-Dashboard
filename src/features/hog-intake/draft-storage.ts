@@ -73,6 +73,7 @@ function coerceDraft(raw: unknown, date: string): HogIntakeRecord | null {
     held_over: num("held_over"),
     deaths_on_arrival: num("deaths_on_arrival"),
     boars_count: num("boars_count"),
+    sow_scheduled: num("sow_scheduled"),
     notes: typeof r.notes === "string" ? r.notes : "",
     farm_records,
     next_day,

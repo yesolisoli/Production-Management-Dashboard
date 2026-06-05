@@ -1,103 +1,248 @@
+"use client";
+
 import clsx from "clsx";
 import {
   Award,
   ClipboardList,
+  Minus,
   PiggyBank,
-  Wrench,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
+import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
+import { clampNonNegativeInt } from "../calculations";
 import type { HogIntakeTotals } from "../calculations";
 
 type SummaryPanelProps = {
   totals: HogIntakeTotals;
   sideOrders: number;
+  sowAvailable: number;
+  sowScheduled: number;
+  onChangeSowAvailable: (value: number) => void;
+  onChangeSowScheduled: (value: number) => void;
 };
 
-type Tone = "blue" | "amber" | "emerald" | "violet" | "red";
+type Tone = "blue" | "violet" | "rose";
 
-type Card = {
-  label: string;
-  value: number;
-  tone: Tone;
-  icon: LucideIcon;
-};
-
-const ICON_TONES: Record<
-  Tone,
-  { chipBg: string; chipFg: string }
-> = {
+const TONES: Record<Tone, { chipBg: string; chipFg: string }> = {
   blue: { chipBg: "bg-blue-50", chipFg: "text-blue-500" },
-  amber: { chipBg: "bg-amber-50", chipFg: "text-amber-500" },
-  emerald: { chipBg: "bg-emerald-50", chipFg: "text-emerald-500" },
   violet: { chipBg: "bg-violet-50", chipFg: "text-violet-500" },
-  red: { chipBg: "bg-red-50", chipFg: "text-red-500" },
+  rose: { chipBg: "bg-rose-50", chipFg: "text-rose-500" },
 };
 
-export function SummaryPanel({ totals, sideOrders }: SummaryPanelProps) {
-  const forCuttingTone: Tone = totals.overSold ? "red" : "emerald";
-
-  const cards: Card[] = [
-    {
-      label: "TOTAL HOGS",
-      value: totals.totalHogs,
-      tone: "blue",
-      icon: PiggyBank,
-    },
-    {
-      label: "SIDE ORDERS",
-      value: sideOrders,
-      tone: "amber",
-      icon: ClipboardList,
-    },
-    {
-      label: "FOR CUTTING (TODAY)",
-      value: totals.forCutting,
-      tone: forCuttingTone,
-      icon: Wrench,
-    },
-    {
-      label: "YIELD TOTAL",
-      value: totals.yieldTotal,
-      tone: "violet",
-      icon: Award,
-    },
-  ];
-
+export function SummaryPanel({
+  totals,
+  sideOrders,
+  sowAvailable,
+  sowScheduled,
+  onChangeSowAvailable,
+  onChangeSowScheduled,
+}: SummaryPanelProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {cards.map((card) => (
-        <SummaryCard key={card.label} card={card} />
-      ))}
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <IntakeSummaryCard
+        totalIntake={totals.totalHogs}
+        sideOrders={sideOrders}
+        forCutting={totals.forCutting}
+        overSold={totals.overSold}
+      />
+      <PrimalCalcCard value={totals.yieldTotal} />
+      <SowProcessingCard
+        available={sowAvailable}
+        scheduled={sowScheduled}
+        onChangeAvailable={onChangeSowAvailable}
+        onChangeScheduled={onChangeSowScheduled}
+      />
     </div>
   );
 }
 
-function SummaryCard({ card }: { card: Card }) {
-  const Icon = card.icon;
-  const tone = ICON_TONES[card.tone];
-  const valueClass =
-    card.tone === "red" ? "text-red-700" : "text-slate-900";
-
+function CardShell({
+  label,
+  tone,
+  icon: Icon,
+  children,
+}: {
+  label: string;
+  tone: Tone;
+  icon: LucideIcon;
+  children: React.ReactNode;
+}) {
+  const t = TONES[tone];
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          {card.label}
+          {label}
         </p>
         <span
           className={clsx(
             "flex h-6 w-6 items-center justify-center rounded-md",
-            tone.chipBg,
+            t.chipBg,
           )}
         >
-          <Icon size={13} className={tone.chipFg} strokeWidth={2} />
+          <Icon size={13} className={t.chipFg} strokeWidth={2} />
         </span>
       </div>
-      <p className="mt-1.5 flex items-baseline gap-1.5">
-        <span className={clsx("text-2xl font-extrabold tabular-nums leading-none", valueClass)}>
-          {card.value.toLocaleString()}
-        </span>
+      {children}
+    </div>
+  );
+}
+
+// Total Intake → Side Orders → For Cutting Today, presented as one grouped
+// flow since the three values are directly related (the third is derived
+// from the first two).
+function IntakeSummaryCard({
+  totalIntake,
+  sideOrders,
+  forCutting,
+  overSold,
+}: {
+  totalIntake: number;
+  sideOrders: number;
+  forCutting: number;
+  overSold: boolean;
+}) {
+  return (
+    <CardShell label="Intake Summary" tone="blue" icon={ClipboardList}>
+      <dl className="mt-2 space-y-1.5">
+        <FlowRow label="Total Intake" value={totalIntake} />
+        <FlowRow label="Side Orders" value={sideOrders} />
+        <FlowRow label="For Cutting Today" value={forCutting} danger={overSold} />
+      </dl>
+    </CardShell>
+  );
+}
+
+function FlowRow({
+  label,
+  value,
+  muted,
+  emphasis,
+  danger,
+  prefix,
+}: {
+  label: string;
+  value: number;
+  muted?: boolean;
+  emphasis?: boolean;
+  danger?: boolean;
+  prefix?: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt
+        className={clsx(
+          "text-sm",
+          emphasis ? "font-semibold text-slate-700" : "text-slate-500",
+        )}
+      >
+        {label}
+      </dt>
+      <dd
+        className={clsx(
+          "tabular-nums",
+          emphasis ? "text-2xl font-extrabold leading-none" : "text-lg font-bold",
+          danger
+            ? "text-rose-600"
+            : muted
+              ? "text-slate-400"
+              : "text-slate-900",
+        )}
+      >
+        {prefix}
+        {value.toLocaleString()}
+      </dd>
+    </div>
+  );
+}
+
+function PrimalCalcCard({ value }: { value: number }) {
+  return (
+    <CardShell label="Primal Calc (JP + RWA + BK)" tone="violet" icon={Award}>
+      <p className="mt-2 text-3xl font-extrabold tabular-nums leading-none text-slate-900">
+        {value.toLocaleString()}
       </p>
+      <p className="mt-2 text-[11px] leading-snug text-slate-400">
+        JP + RWA + BK only. Sow, Round, Suckling, and Customer hogs excluded.
+      </p>
+    </CardShell>
+  );
+}
+
+// Sow is its own operational track — editable here rather than in Hog Counts.
+function SowProcessingCard({
+  available,
+  scheduled,
+  onChangeAvailable,
+  onChangeScheduled,
+}: {
+  available: number;
+  scheduled: number;
+  onChangeAvailable: (value: number) => void;
+  onChangeScheduled: (value: number) => void;
+}) {
+  return (
+    <CardShell label="Sow Availability" tone="rose" icon={PiggyBank}>
+      <div className="mt-2 space-y-2">
+        <SowStepperRow
+          label="Available This Week"
+          value={available}
+          onChange={onChangeAvailable}
+        />
+        <SowStepperRow
+          label="Scheduled For Today"
+          value={scheduled}
+          onChange={onChangeScheduled}
+        />
+      </div>
+    </CardShell>
+  );
+}
+
+function SowStepperRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  const set = (next: number) => onChange(clampNonNegativeInt(next));
+  const blank = useBlankZeroInput(value);
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-sm text-slate-500">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => set(value - 1)}
+          disabled={value <= 0}
+          aria-label={`${label} decrement`}
+          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Minus size={13} />
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          step={1}
+          {...blank}
+          onChange={(e) => set(Number(e.target.value))}
+          aria-label={label}
+          className="h-8 w-12 border-0 bg-transparent text-center text-xl font-extrabold tabular-nums text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+        <button
+          type="button"
+          onClick={() => set(value + 1)}
+          aria-label={`${label} increment`}
+          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+        >
+          <Plus size={13} />
+        </button>
+      </div>
     </div>
   );
 }

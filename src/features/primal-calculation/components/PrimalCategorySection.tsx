@@ -23,6 +23,9 @@ type PrimalCategorySectionProps = {
   category: PrimalCategory;
   rows: CategorySkuRow[];
   totals: OrderTotals;
+  // Calculated Today's O/S for this category, in pieces (Available Stock −
+  // Customer Orders from the Availability Chart). Read-only / derived.
+  calculatedOverstockPcs: number;
   expanded: boolean;
   onToggle: () => void;
   activeSku: string | null;
@@ -39,6 +42,7 @@ export function PrimalCategorySection({
   category,
   rows,
   totals,
+  calculatedOverstockPcs,
   expanded,
   onToggle,
   activeSku,
@@ -80,7 +84,7 @@ export function PrimalCategorySection({
 
         <div className="ml-auto flex items-center gap-4">
           <HeaderTotal label="Today" cases={totals.today_cases} pcs={totals.today_pcs} />
-          <HeaderTotal label="Tomorrow" cases={totals.tmrw_cases} pcs={totals.tmrw_pcs} />
+          <HeaderOverstock pcs={calculatedOverstockPcs} />
         </div>
       </button>
 
@@ -88,15 +92,13 @@ export function PrimalCategorySection({
         <div className="border-t border-slate-100">
           {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] border-collapse text-sm">
+            <table className="w-full min-w-150 border-collapse text-sm">
               <thead>
                 <tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-4 py-2.5">SKU</th>
                   <th className="px-2 py-2.5">Item</th>
                   <th className="px-2 py-2.5">Case Pack</th>
                   <ColGroupHead label="Today" tone="text-blue-600" />
-                  <ColGroupHead label="Tomorrow" tone="text-emerald-600" />
-                  <ColGroupHead label="Overstock (O/S)" tone="text-violet-600" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -114,12 +116,16 @@ export function PrimalCategorySection({
             </table>
           </div>
 
-          {/* Per-category totals */}
-          <div className="grid grid-cols-2 gap-3 border-t border-slate-100 px-4 py-3 sm:grid-cols-4">
+          {/* Per-category totals — today's manual inputs, then the derived
+              Calculated O/S (pieces; category-level, read-only). */}
+          <div className="grid grid-cols-2 gap-3 border-t border-slate-100 px-4 py-3 sm:grid-cols-3">
             <TotalStat label="Today total cases" value={totals.today_cases} tone="blue" />
             <TotalStat label="Today total pcs" value={totals.today_pcs} tone="blue" />
-            <TotalStat label="Tmrw total cases" value={totals.tmrw_cases} tone="emerald" />
-            <TotalStat label="Tmrw total pcs" value={totals.tmrw_pcs} tone="emerald" />
+            <TotalStat
+              label="Calculated O/S pcs"
+              value={calculatedOverstockPcs}
+              tone="violet"
+            />
           </div>
 
           {/* Bulk actions + save */}
@@ -205,28 +211,6 @@ function ProductRow({
         onChange={(v) => onChangeField(spec.sku, "today_pcs", v)}
         ariaLabel={`${spec.name} today pieces`}
       />
-      <NumberCell
-        value={order.tmrw_cases}
-        onChange={(v) => onChangeField(spec.sku, "tmrw_cases", v)}
-        ariaLabel={`${spec.name} tomorrow cases`}
-        accent="emerald"
-      />
-      <NumberCell
-        value={order.tmrw_pcs}
-        onChange={(v) => onChangeField(spec.sku, "tmrw_pcs", v)}
-        ariaLabel={`${spec.name} tomorrow pieces`}
-      />
-      <NumberCell
-        value={order.overstock_cases}
-        onChange={(v) => onChangeField(spec.sku, "overstock_cases", v)}
-        ariaLabel={`${spec.name} overstock cases`}
-        accent="violet"
-      />
-      <NumberCell
-        value={order.overstock_pcs}
-        onChange={(v) => onChangeField(spec.sku, "overstock_pcs", v)}
-        ariaLabel={`${spec.name} overstock pieces`}
-      />
     </tr>
   );
 }
@@ -287,7 +271,7 @@ function ColGroupHead({ label, tone }: { label: string; tone: string }) {
 
 const TOTAL_TONES: Record<string, string> = {
   blue: "text-blue-600",
-  emerald: "text-emerald-600",
+  violet: "text-violet-600",
 };
 
 function TotalStat({
@@ -330,6 +314,26 @@ function HeaderTotal({
       </p>
       <p className="text-xs font-bold tabular-nums text-slate-700">
         {cases} cases · {pcs} pcs
+      </p>
+    </div>
+  );
+}
+
+// Calculated Today's O/S summary in the section header — pieces only, since
+// O/S is category-level (mixed case packs make "cases" undefined here).
+function HeaderOverstock({ pcs }: { pcs: number }) {
+  return (
+    <div className="hidden text-right sm:block">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        Calc O/S
+      </p>
+      <p
+        className={clsx(
+          "text-xs font-bold tabular-nums",
+          pcs < 0 ? "text-red-600" : "text-violet-600",
+        )}
+      >
+        {pcs.toLocaleString()} pcs
       </p>
     </div>
   );

@@ -1,5 +1,13 @@
 import {
+  emptyCustomerCategoryOrders,
+  emptyOverstockByCategory,
   emptyProductOrder,
+  PRIMAL_CATEGORIES,
+  type CustomerCategoryOrders,
+  type CustomerOrdersByDate,
+  type CustomerOrdersForDate,
+  type OverstockByCategory,
+  type OverstockByDate,
   type PrimalOrdersByDate,
   type ProductOrder,
   type ProductOrdersForDate,
@@ -20,6 +28,8 @@ import {
 
 const COMMITTED_KEY = "primal-calc.orders";
 const DRAFT_KEY_PREFIX = "primal-calc.draft.";
+const CUSTOMER_KEY = "primal-calc.customer-orders";
+const OVERSTOCK_KEY = "primal-calc.overstock";
 
 function draftKey(date: string): string {
   return `${DRAFT_KEY_PREFIX}${date}`;
@@ -121,4 +131,146 @@ export function clearDraft(date: string): void {
   } catch {
     // ignore
   }
+}
+
+// ------------------------- Customer orders --------------------------
+// Per-date customer × category order matrix. Auto-persisted on every
+// edit (no separate draft/commit split — the chart is informational and
+// always reflects the latest typed values), keyed identically to the
+// product store: { "YYYY-MM-DD": { "<customer>": { Butts: n, ... } } }.
+
+function coerceCustomerCategoryOrders(raw: unknown): CustomerCategoryOrders {
+  const orders = emptyCustomerCategoryOrders();
+  if (!raw || typeof raw !== "object") return orders;
+  const obj = raw as Record<string, unknown>;
+  for (const category of PRIMAL_CATEGORIES) {
+    const v = obj[category];
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
+      orders[category] = Math.floor(v);
+    }
+  }
+  return orders;
+}
+
+function coerceCustomerOrdersForDate(raw: unknown): CustomerOrdersForDate {
+  if (!raw || typeof raw !== "object") return {};
+  const out: CustomerOrdersForDate = {};
+  for (const [customer, value] of Object.entries(
+    raw as Record<string, unknown>,
+  )) {
+    out[customer] = coerceCustomerCategoryOrders(value);
+  }
+  return out;
+}
+
+function readCustomerOrders(): CustomerOrdersByDate {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(CUSTOMER_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: CustomerOrdersByDate = {};
+    for (const [date, orders] of Object.entries(
+      parsed as Record<string, unknown>,
+    )) {
+      out[date] = coerceCustomerOrdersForDate(orders);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function readCustomerOrdersForDate(date: string): CustomerOrdersForDate {
+  return readCustomerOrders()[date] ?? {};
+}
+
+export function saveCustomerOrdersForDate(
+  date: string,
+  orders: CustomerOrdersForDate,
+): void {
+  if (typeof window === "undefined") return;
+  const all = readCustomerOrders();
+  all[date] = orders;
+  try {
+    window.localStorage.setItem(CUSTOMER_KEY, JSON.stringify(all));
+  } catch {
+    // ignore quota / access errors
+  }
+}
+
+// ---------------------- Calculated Today's O/S ----------------------
+// Per-date, per-category calculated overstock (in pieces). Written on
+// Save from the Availability Chart's Today's O/S; read back as the next
+// production date's Yesterday O/S (the carry-over). Keyed:
+//   { "YYYY-MM-DD": { "<category>": pcs } }
+
+function coerceOverstockByCategory(raw: unknown): OverstockByCategory {
+  const out = emptyOverstockByCategory();
+  if (!raw || typeof raw !== "object") return out;
+  const obj = raw as Record<string, unknown>;
+  for (const category of PRIMAL_CATEGORIES) {
+    const v = obj[category];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      out[category] = Math.floor(v);
+    }
+  }
+  return out;
+}
+
+function readOverstock(): OverstockByDate {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(OVERSTOCK_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: OverstockByDate = {};
+    for (const [date, byCategory] of Object.entries(
+      parsed as Record<string, unknown>,
+    )) {
+      out[date] = coerceOverstockByCategory(byCategory);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function readOverstockForDate(date: string): OverstockByCategory {
+  return readOverstock()[date] ?? emptyOverstockByCategory();
+}
+
+// Merge the given per-category O/S into the store for a date and persist.
+// Merging (rather than replacing) lets a per-category Save write just its
+// own category without clobbering the others.
+export function saveOverstockForDate(
+  date: string,
+  byCategory: Partial<OverstockByCategory>,
+): void {
+  if (typeof window === "undefined") return;
+  const all = readOverstock();
+  all[date] = { ...(all[date] ?? emptyOverstockByCategory()), ...byCategory };
+  try {
+    window.localStorage.setItem(OVERSTOCK_KEY, JSON.stringify(all));
+  } catch {
+    // ignore quota / access errors
+  }
+}
+
+// The carry-over source: the most recent saved date strictly before
+// `beforeDate`. Dates are "YYYY-MM-DD" so a lexicographic compare is a
+// correct chronological compare. Returns zeros when nothing precedes it
+// (e.g. the very first production date), and skips gaps (weekends) by
+// taking the latest prior date rather than calendar −1.
+export function readPreviousOverstock(beforeDate: string): OverstockByCategory {
+  const all = readOverstock();
+  let latest: string | null = null;
+  for (const date of Object.keys(all)) {
+    if (date < beforeDate && (latest === null || date > latest)) {
+      latest = date;
+    }
+  }
+  return latest === null ? emptyOverstockByCategory() : all[latest];
 }

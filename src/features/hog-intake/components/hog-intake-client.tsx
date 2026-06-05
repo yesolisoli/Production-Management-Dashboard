@@ -23,6 +23,7 @@ export function HogIntakeClient() {
     setHogCount,
     clearAllHogCounts,
     setProcessField,
+    setSowScheduled,
     setNotes,
     setNextDayField,
     addFarmRecord,
@@ -69,7 +70,14 @@ export function HogIntakeClient() {
 
       <div className="bg-slate-50">
         <div className="flex flex-col gap-4 px-5 py-5 lg:px-6 lg:py-6">
-          <SummaryPanel totals={totals} sideOrders={record.side_orders} />
+          <SummaryPanel
+            totals={totals}
+            sideOrders={record.side_orders}
+            sowAvailable={record.hog_counts.Sow}
+            sowScheduled={record.sow_scheduled}
+            onChangeSowAvailable={(v) => setHogCount("Sow", v)}
+            onChangeSowScheduled={setSowScheduled}
+          />
 
           <HogCountGrid
             counts={record.hog_counts}
@@ -93,7 +101,6 @@ export function HogIntakeClient() {
             />
             <NextDayProjection
               nextDay={record.next_day}
-              yieldTotal={totals.yieldTotal}
               onChange={setNextDayField}
             />
           </div>

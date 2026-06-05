@@ -7,12 +7,13 @@
 // owns merging the result into the orders map.
 //
 // Expected shape — one row per SKU, header-driven (column order free):
-//   sku,today_cases,tmrw_cases,overstock_cases
-//   10005,10,5,2
+//   sku,today_cases
+//   10005,10
 //
-// Only RAW case inputs are read from the file; the paired *_pcs values
-// are derived from each product's case pack, exactly like manual entry.
-// Quantity columns are optional and default to 0 when absent.
+// Only today's RAW case input is read from the file; the paired today_pcs
+// is derived from each product's case pack, exactly like manual entry.
+// Tomorrow / overstock are no longer entered per SKU — O/S is calculated.
+// Older templates with extra columns still import (extras are ignored).
 // -------------------------------------------------------------------
 
 import { casesToPieces, clampNonNegativeInt } from "./calculations";
@@ -22,17 +23,14 @@ import { emptyProductOrder, type ProductOrder, type ProductOrdersForDate } from 
 // Header written by the template and recognized on import. The `name`
 // column is for human reference only — the parser maps rows by SKU and
 // ignores it.
-export const CSV_TEMPLATE_HEADER =
-  "sku,name,today_cases,tmrw_cases,overstock_cases";
+export const CSV_TEMPLATE_HEADER = "sku,name,today_cases";
 
 // Build a ready-to-fill template listing every catalog product with zero
-// quantities, in catalog (category) order. Operators fill the case
-// columns and re-import. Names are quoted since they can't contain commas
+// quantities, in catalog (category) order. Operators fill the today_cases
+// column and re-import. Names are quoted since they can't contain commas
 // today, but quoting keeps it safe if that ever changes.
 export function buildOrdersCsvTemplate(): string {
-  const rows = PRODUCT_SPECS.map(
-    (spec) => `${spec.sku},"${spec.name}",0,0,0`,
-  );
+  const rows = PRODUCT_SPECS.map((spec) => `${spec.sku},"${spec.name}",0`);
   return [CSV_TEMPLATE_HEADER, ...rows].join("\r\n") + "\r\n";
 }
 
@@ -41,8 +39,6 @@ export function buildOrdersCsvTemplate(): string {
 const COLUMN_ALIASES: Record<string, readonly string[]> = {
   sku: ["sku", "material", "materialno", "item", "itemno", "productcode"],
   today_cases: ["todaycases", "today", "todaycase", "todayqty"],
-  tmrw_cases: ["tmrwcases", "tomorrowcases", "tomorrow", "tmrw", "tomorrowqty"],
-  overstock_cases: ["overstockcases", "overstock", "os", "oscases", "overstockqty"],
 };
 
 type RowStatus = "ok" | "unknown-sku" | "invalid";
@@ -108,8 +104,6 @@ function splitCsvLine(line: string): string[] {
 function mapColumns(header: string[]): {
   sku: number | null;
   today_cases: number | null;
-  tmrw_cases: number | null;
-  overstock_cases: number | null;
 } {
   const normalized = header.map(normalizeHeader);
   const find = (key: keyof typeof COLUMN_ALIASES) => {
@@ -119,8 +113,6 @@ function mapColumns(header: string[]): {
   return {
     sku: find("sku"),
     today_cases: find("today_cases"),
-    tmrw_cases: find("tmrw_cases"),
-    overstock_cases: find("overstock_cases"),
   };
 }
 
@@ -161,16 +153,10 @@ export function parsePrimalOrdersCsv(text: string): CsvImportResult {
       ],
     };
   }
-  if (
-    cols.today_cases === null &&
-    cols.tmrw_cases === null &&
-    cols.overstock_cases === null
-  ) {
+  if (cols.today_cases === null) {
     return {
       ...empty,
-      errors: [
-        'No quantity columns found. Include at least one of "today_cases", "tmrw_cases", or "overstock_cases".',
-      ],
+      errors: ['No quantity column found. Include a "today_cases" column.'],
     };
   }
 
@@ -210,19 +196,11 @@ export function parsePrimalOrdersCsv(text: string): CsvImportResult {
 
     const today_cases =
       cols.today_cases === null ? 0 : parseQty(fields[cols.today_cases]);
-    const tmrw_cases =
-      cols.tmrw_cases === null ? 0 : parseQty(fields[cols.tmrw_cases]);
-    const overstock_cases =
-      cols.overstock_cases === null ? 0 : parseQty(fields[cols.overstock_cases]);
 
     const order: ProductOrder = {
       ...emptyProductOrder(),
       today_cases,
       today_pcs: casesToPieces(spec, today_cases),
-      tmrw_cases,
-      tmrw_pcs: casesToPieces(spec, tmrw_cases),
-      overstock_cases,
-      overstock_pcs: casesToPieces(spec, overstock_cases),
     };
 
     // Last row wins on duplicate SKUs; flag it so the operator notices.

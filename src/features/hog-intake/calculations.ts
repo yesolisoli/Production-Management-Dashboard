@@ -37,7 +37,11 @@ export function yieldTotal(counts: HogCounts): number {
 }
 
 export function projectedForCutting(nextDay: NextDay): number {
-  return nextDay.hog_count - hogsConsumedBySideOrders(nextDay.side_orders);
+  return (
+    nextDay.hog_count -
+    hogsConsumedBySideOrders(nextDay.side_orders) +
+    nextDay.cooler_overstock
+  );
 }
 
 // Pieces produced per yield hog (one hog → 2 of each primal piece, e.g.

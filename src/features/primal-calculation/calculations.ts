@@ -8,14 +8,16 @@ import {
   PRODUCT_SPECS,
   specsForCategory,
 } from "./product-specs";
-import { readCoolerOverstockByCategory } from "./cooler-inventory";
 import {
   emptyProductOrder,
   PRIMAL_CATEGORIES,
   type AvailabilityStatus,
   type AvailabilityTotals,
   type CategoryAvailability,
+  type CustomerAvailabilityColumn,
+  type CustomerOrdersForDate,
   type OrderField,
+  type OverstockByCategory,
   type PrimalCategory,
   type ProductOrder,
   type ProductOrdersForDate,
@@ -66,14 +68,7 @@ export function casesToPieces(spec: ProductSpec, cases: number): number {
 // -------------------------------------------------------------------
 export type OrderTotals = ProductOrder;
 
-const ORDER_FIELDS: OrderField[] = [
-  "today_cases",
-  "today_pcs",
-  "tmrw_cases",
-  "tmrw_pcs",
-  "overstock_cases",
-  "overstock_pcs",
-];
+const ORDER_FIELDS: OrderField[] = ["today_cases", "today_pcs"];
 
 export function sumOrders(orders: ProductOrder[]): OrderTotals {
   const totals = emptyProductOrder();
@@ -146,104 +141,109 @@ export function calculateAvailableStock(
   return expectedProduction + coolerOverstock;
 }
 
-// Available to ship = stock left after holding back the minimum reserve,
-// floored at zero.
-export function calculateAvailableToShip(
-  availableStock: number,
-  minReserve: number,
-): number {
-  return Math.max(availableStock - minReserve, 0);
-}
-
-// Adjusted ship = the most we can ship without dipping below the reserve.
-export function calculateAdjustedShip(
-  customerOrders: number,
-  availableToShip: number,
-): number {
-  return Math.min(customerOrders, availableToShip);
-}
-
-// Ending O/S = whatever stock remains after the adjusted shipment.
-export function calculateEndingOverstock(
-  availableStock: number,
-  adjustedShip: number,
-): number {
-  return availableStock - adjustedShip;
-}
-
-// Shortage = customer orders that could not be fulfilled.
-export function calculateShortage(
-  customerOrders: number,
-  adjustedShip: number,
-): number {
-  return Math.max(customerOrders - adjustedShip, 0);
-}
-
-// Status precedence: a shortage outranks a low reserve.
+// Status from today's ending overstock: negative means total demand
+// couldn't be met (Short); positive-but-thin drops below the reserve.
 export function calculateAvailabilityStatus(
-  shortage: number,
-  endingOverstock: number,
+  todaysOverstock: number,
   minReserve: number,
 ): AvailabilityStatus {
-  if (shortage > 0) return "Short";
-  if (endingOverstock < minReserve) return "Low Reserve";
+  if (todaysOverstock < 0) return "Short";
+  if (todaysOverstock < minReserve) return "Low Reserve";
   return "OK";
 }
 
 // -------------------------------------------------------------------
 // Availability builders — compose the primitives above into the rows and
 // totals the chart renders. All derived; nothing here is stored.
+//
+// Two order streams are subtracted in sequence from the gross supply
+// (expected production + yesterday's overstock):
+//   1. Special Customer Orders — from the Customer Availability chart
+//      (the per-customer matrix above) → leaves Available Stock.
+//   2. Customer Orders — today's pieces from the per-SKU sections below
+//      → leaves Today's Overstock (carries into tomorrow).
 // -------------------------------------------------------------------
 export function buildCategoryAvailability(
   category: PrimalCategory,
-  orders: ProductOrdersForDate,
+  specialCustomerOrders: number,
+  customerOrders: number,
   counts: HogCounts,
-  coolerOverstock: number,
+  yesterdayOverstock: number,
   minReserve: number,
 ): CategoryAvailability {
   const expectedProduction = categoryExpectedProduction(category, counts);
-  const availableStock = calculateAvailableStock(
-    expectedProduction,
-    coolerOverstock,
-  );
-  // Customer orders = today's order pieces only. Tomorrow's pieces are
-  // tracked separately so the chart reflects today's shipping decision and
-  // doesn't conflate the two days' demand.
-  const orderTotals = categoryTotals(category, orders);
-  const customerOrders = orderTotals.today_pcs;
-  const availableToShip = calculateAvailableToShip(availableStock, minReserve);
-  const adjustedShip = calculateAdjustedShip(customerOrders, availableToShip);
-  const endingOverstock = calculateEndingOverstock(availableStock, adjustedShip);
-  const shortage = calculateShortage(customerOrders, adjustedShip);
+  const availableStock =
+    expectedProduction + yesterdayOverstock - specialCustomerOrders;
+  const todaysOverstock = availableStock - customerOrders;
   return {
     category,
     expectedProduction,
-    coolerOverstock,
+    yesterdayOverstock,
+    specialCustomerOrders,
     availableStock,
     customerOrders,
-    availableToShip,
-    adjustedShip,
-    endingOverstock,
-    shortage,
-    status: calculateAvailabilityStatus(shortage, endingOverstock, minReserve),
+    todaysOverstock,
+    shortage: Math.max(-todaysOverstock, 0),
+    status: calculateAvailabilityStatus(todaysOverstock, minReserve),
   };
 }
 
 export function buildAvailabilityRows(
   orders: ProductOrdersForDate,
   counts: HogCounts,
+  customerOrders: CustomerOrdersForDate,
+  // Yesterday's O/S carried in per category — the previous saved date's
+  // calculated O/S (see readPreviousOverstock). Supplied by the hook so
+  // this stays a pure derivation with no storage reads.
+  yesterdayOverstock: OverstockByCategory,
   minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
 ): CategoryAvailability[] {
-  const coolerByCategory = readCoolerOverstockByCategory(orders);
+  const specialByCategory = sumCustomerOrdersByCategory(customerOrders);
   return PRIMAL_CATEGORIES.map((category) =>
     buildCategoryAvailability(
       category,
-      orders,
+      specialByCategory[category],
+      categoryTotals(category, orders).today_pcs,
       counts,
-      coolerByCategory[category],
+      yesterdayOverstock[category],
       minReserve,
     ),
   );
+}
+
+// -------------------------------------------------------------------
+// Customer availability — sum each category's customer orders and
+// subtract from that category's Available Stock. Pure derivation from
+// the Availability Chart rows + the raw customer-order matrix.
+// -------------------------------------------------------------------
+export function sumCustomerOrdersByCategory(
+  customerOrders: CustomerOrdersForDate,
+): Record<PrimalCategory, number> {
+  const totals = {} as Record<PrimalCategory, number>;
+  for (const category of PRIMAL_CATEGORIES) totals[category] = 0;
+  for (const perCategory of Object.values(customerOrders)) {
+    for (const category of PRIMAL_CATEGORIES) {
+      totals[category] += clampNonNegativeInt(perCategory?.[category] ?? 0);
+    }
+  }
+  return totals;
+}
+
+// Build one column per category: its Available Stock and the total
+// ordered across all customers (already summed into the availability
+// row's customerOrders), and the remaining stock after subtracting.
+// Remaining may go negative when orders exceed stock — the chart
+// surfaces that as a shortfall.
+export function buildCustomerAvailability(
+  availabilityRows: CategoryAvailability[],
+): CustomerAvailabilityColumn[] {
+  return availabilityRows.map((row) => ({
+    category: row.category,
+    // Totals Available (gross) = expected production + yesterday's overstock.
+    availableStock: row.expectedProduction + row.yesterdayOverstock,
+    ordered: row.specialCustomerOrders,
+    remaining: row.availableStock, // gross − special customer orders
+  }));
 }
 
 export function sumAvailability(
@@ -252,18 +252,21 @@ export function sumAvailability(
   return rows.reduce<AvailabilityTotals>(
     (acc, row) => ({
       expectedProduction: acc.expectedProduction + row.expectedProduction,
-      coolerOverstock: acc.coolerOverstock + row.coolerOverstock,
+      yesterdayOverstock: acc.yesterdayOverstock + row.yesterdayOverstock,
+      specialCustomerOrders:
+        acc.specialCustomerOrders + row.specialCustomerOrders,
       availableStock: acc.availableStock + row.availableStock,
       customerOrders: acc.customerOrders + row.customerOrders,
-      adjustedShip: acc.adjustedShip + row.adjustedShip,
+      todaysOverstock: acc.todaysOverstock + row.todaysOverstock,
       shortage: acc.shortage + row.shortage,
     }),
     {
       expectedProduction: 0,
-      coolerOverstock: 0,
+      yesterdayOverstock: 0,
+      specialCustomerOrders: 0,
       availableStock: 0,
       customerOrders: 0,
-      adjustedShip: 0,
+      todaysOverstock: 0,
       shortage: 0,
     },
   );

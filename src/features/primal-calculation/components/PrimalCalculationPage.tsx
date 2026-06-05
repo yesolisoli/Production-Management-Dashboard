@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertCircle,
   Boxes,
   Calendar,
   CheckCircle2,
@@ -14,6 +13,7 @@ import { Modal } from "@/components/shared/modal";
 import { deriveTotals } from "@/features/hog-intake/calculations";
 import {
   buildAvailabilityRows,
+  buildCustomerAvailability,
   categoryTotals,
   DEFAULT_MIN_COOLER_RESERVE,
   globalTotals,
@@ -29,8 +29,12 @@ import {
 import { specsForCategory } from "../product-specs";
 import { PRIMAL_CATEGORIES, type PrimalCategory } from "../types";
 import { usePrimalCalculationState } from "../hooks/use-primal-calculation-state";
-import { PrimalAvailabilityChart } from "./PrimalAvailabilityChart";
+import {
+  PrimalAvailabilityChart,
+  PrimalAvailabilityKpis,
+} from "./PrimalAvailabilityChart";
 import { PrimalCsvImportModal } from "./PrimalCsvImportModal";
+import { PrimalCustomerChart } from "./PrimalCustomerChart";
 import {
   categorySlug,
   PrimalCategorySection,
@@ -52,6 +56,9 @@ export function PrimalCalculationPage() {
     saveCategory,
     saveAll,
     applyImportedOrders,
+    customerOrders,
+    yesterdayOverstock,
+    setCustomerOrder,
   } = usePrimalCalculationState();
 
   // Butts open by default (matches the reference); others collapsed.
@@ -97,13 +104,30 @@ export function PrimalCalculationPage() {
   const totals = useMemo(() => globalTotals(orders), [orders]);
   const intakeTotals = useMemo(() => deriveTotals(intake), [intake]);
 
-  // Availability — derived from intake counts + orders + cooler O/S.
+  // Availability — derived from intake counts + today's orders + customer
+  // orders + yesterday's carried-in O/S.
   const availabilityRows = useMemo(
-    () => buildAvailabilityRows(orders, counts),
-    [orders, counts],
+    () =>
+      buildAvailabilityRows(orders, counts, customerOrders, yesterdayOverstock),
+    [orders, counts, customerOrders, yesterdayOverstock],
   );
   const availabilityTotals = useMemo(
     () => sumAvailability(availabilityRows),
+    [availabilityRows],
+  );
+
+  // Calculated Today's O/S per category (pieces) — the figure shown read-only
+  // in each SKU section and pushed to the cooler.
+  const overstockByCategory = useMemo(() => {
+    const map = {} as Record<PrimalCategory, number>;
+    for (const row of availabilityRows) map[row.category] = row.todaysOverstock;
+    return map;
+  }, [availabilityRows]);
+
+  // Customer chart columns — each category's Available Stock minus the
+  // summed customer orders against it.
+  const customerColumns = useMemo(
+    () => buildCustomerAvailability(availabilityRows),
     [availabilityRows],
   );
 
@@ -125,13 +149,13 @@ export function PrimalCalculationPage() {
     try {
       const result: OverstockPushResult = await pushOverstockToCooler(
         date,
-        orders,
+        overstockByCategory,
       );
       setConfirmPush(false);
       setToast(
         result.lines.length === 0
           ? "No overstock to push."
-          : `Pushed ${result.totalCases} cases (${result.totalPcs} pcs) across ${result.lines.length} products to Cooler Inventory.`,
+          : `Pushed ${result.totalPcs} pcs across ${result.lines.length} categories to Cooler Inventory.`,
       );
     } finally {
       setPushing(false);
@@ -144,7 +168,19 @@ export function PrimalCalculationPage() {
         eyebrow="Operations Module"
         title="Primal Calculation"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            <IntakeHeaderStats
+              status={intakeStatus.kind}
+              regular={regularHogCount(counts)}
+              sow={sowHogCount(counts)}
+              sideOrders={intake.side_orders}
+              forCutting={intakeTotals.forCutting}
+              nextDayHogs={intake.next_day.hog_count}
+              updatedAt={intake.updated_at}
+            />
+
+            <div className="hidden h-9 w-px bg-white/15 lg:block" />
+
             <button
               type="button"
               onClick={() => void saveAll()}
@@ -168,17 +204,12 @@ export function PrimalCalculationPage() {
 
       <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
         <div className="flex flex-col gap-4 px-5 py-5 lg:px-6">
-          <IntakeBanner
-            status={intakeStatus.kind}
-            errorMessage={
-              intakeStatus.kind === "error" ? intakeStatus.message : undefined
-            }
-            regular={regularHogCount(counts)}
-            sow={sowHogCount(counts)}
-            sideOrders={intake.side_orders}
-            forCutting={intakeTotals.forCutting}
-            nextDayHogs={intake.next_day.hog_count}
-            updatedAt={intake.updated_at}
+          <PrimalAvailabilityKpis totals={availabilityTotals} />
+
+          <PrimalCustomerChart
+            columns={customerColumns}
+            customerOrders={customerOrders}
+            onChange={setCustomerOrder}
           />
 
           <PrimalAvailabilityChart
@@ -209,7 +240,7 @@ export function PrimalCalculationPage() {
               className="ml-auto flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
             >
               <Upload size={16} />
-              Import CSV
+              Import SAP Orders
             </button>
           </div>
 
@@ -220,6 +251,7 @@ export function PrimalCalculationPage() {
               category={category}
               rows={rowsByCategory[category]}
               totals={categoryTotalsMap[category]}
+              calculatedOverstockPcs={overstockByCategory[category]}
               expanded={!!expanded[category]}
               onToggle={() => handleToggle(category)}
               activeSku={activeSku}
@@ -241,6 +273,7 @@ export function PrimalCalculationPage() {
         <div className="mt-auto">
           <PrimalTotalsBar
             totals={totals}
+            calculatedOverstockPcs={availabilityTotals.todaysOverstock}
             onPushOverstock={() => setConfirmPush(true)}
             pushing={pushing}
           />
@@ -289,12 +322,12 @@ export function PrimalCalculationPage() {
           }
         >
           <p className="text-sm text-slate-600">
-            This will move all overstock (O/S) quantities for{" "}
+            This will move the calculated Today&apos;s O/S for{" "}
             <span className="font-semibold tabular-nums">{date}</span> into
             Cooler Inventory.
           </p>
           <p className="mt-2 text-sm font-semibold text-slate-800 tabular-nums">
-            {totals.overstock_cases} cases · {totals.overstock_pcs} pcs
+            {availabilityTotals.todaysOverstock.toLocaleString()} pcs
           </p>
           <p className="mt-2 text-xs text-slate-400">
             Cooler Inventory integration is pending — this is a safe preview
@@ -315,10 +348,10 @@ export function PrimalCalculationPage() {
   );
 }
 
-// Read-only banner summarizing the hog intake values that drive yield.
-function IntakeBanner({
+// Compact hog-intake summary rendered inline in the page header. Shows the
+// five intake values that drive yield, plus a small load-status indicator.
+function IntakeHeaderStats({
   status,
-  errorMessage,
   regular,
   sow,
   sideOrders,
@@ -327,7 +360,6 @@ function IntakeBanner({
   updatedAt,
 }: {
   status: "loading" | "ready" | "missing" | "error";
-  errorMessage?: string;
   regular: number;
   sow: number;
   sideOrders: number;
@@ -335,52 +367,55 @@ function IntakeBanner({
   nextDayHogs: number;
   updatedAt?: string;
 }) {
+  const stats = [
+    { label: "Regular", value: regular },
+    { label: "Sow", value: sow },
+    { label: "Side", value: sideOrders },
+    { label: "Cutting", value: forCutting },
+    { label: "Next-day", value: nextDayHogs },
+  ];
+
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">
-            Hog Intake → Expected Yield
-          </h2>
-          <p className="text-xs text-slate-500">
-            Regular Hogs = JP + RWA + BK · Sow Hogs shown for intake reference
-          </p>
+    <div className="group relative hidden items-center gap-5 lg:flex">
+      {stats.map((s) => (
+        <div key={s.label} className="flex flex-col items-start leading-none">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+            {s.label}
+          </span>
+          <span className="mt-1 text-lg font-bold tabular-nums text-white">
+            {s.value.toLocaleString()}
+          </span>
         </div>
-        {status === "ready" && (
-          <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-            <CheckCircle2 size={13} className="text-emerald-500" />
-            From saved Hog Intake
-            {updatedAt && ` · updated ${formatUpdatedAt(updatedAt)}`}
-          </span>
-        )}
-        {status === "loading" && (
-          <span className="flex items-center gap-1.5 text-xs text-slate-500">
-            <Loader2 size={13} className="animate-spin" />
-            Loading intake…
-          </span>
-        )}
-        {status === "missing" && (
-          <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
-            <AlertCircle size={13} />
-            No Hog Intake record for this date — Expected Production is 0
-          </span>
-        )}
-        {status === "error" && (
-          <span className="flex items-center gap-1.5 text-xs text-red-600">
-            <AlertCircle size={13} />
-            {errorMessage ?? "Failed to load intake"}
-          </span>
-        )}
+      ))}
+
+      {/* Custom light tooltip — appears on hover over the stat group. */}
+      <div className="pointer-events-none absolute right-0 top-full z-30 mt-3 flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 opacity-0 shadow-xl ring-1 ring-slate-200 transition-opacity duration-150 group-hover:opacity-100">
+        <span className="absolute -top-1 right-6 h-2 w-2 rotate-45 bg-white ring-1 ring-slate-200" />
+        <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
+        {intakeStatusTooltip(status, updatedAt)}
       </div>
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-        <IntakeStat label="Regular Hogs" value={regular} tone="emerald" />
-        <IntakeStat label="Sow Hogs" value={sow} tone="violet" />
-        <IntakeStat label="Side Orders" value={sideOrders} tone="amber" />
-        <IntakeStat label="For Cutting" value={forCutting} tone="blue" />
-        <IntakeStat label="Next-Day Hogs" value={nextDayHogs} tone="slate" />
-      </div>
-    </section>
+    </div>
   );
+}
+
+// Hover-tooltip text describing where the intake numbers come from / their
+// load state.
+function intakeStatusTooltip(
+  status: "loading" | "ready" | "missing" | "error",
+  updatedAt?: string,
+): string {
+  switch (status) {
+    case "loading":
+      return "Loading Hog Intake…";
+    case "missing":
+      return "No Hog Intake record for this date — Expected yield is 0";
+    case "error":
+      return "Failed to load Hog Intake";
+    default:
+      return updatedAt
+        ? `From saved Hog Intake · updated ${formatUpdatedAt(updatedAt)}`
+        : "From saved Hog Intake";
+  }
 }
 
 // Compact local timestamp for the "last saved" hint (e.g. "Jun 2, 14:30").
@@ -396,31 +431,3 @@ function formatUpdatedAt(iso: string): string {
   });
 }
 
-const STAT_TONES: Record<string, string> = {
-  emerald: "border-emerald-200 bg-emerald-50/60 text-emerald-700",
-  violet: "border-violet-200 bg-violet-50/60 text-violet-700",
-  amber: "border-amber-200 bg-amber-50/60 text-amber-700",
-  blue: "border-blue-200 bg-blue-50/60 text-blue-700",
-  slate: "border-slate-200 bg-slate-50 text-slate-700",
-};
-
-function IntakeStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: keyof typeof STAT_TONES;
-}) {
-  return (
-    <div className={`rounded-xl border p-3 ${STAT_TONES[tone]}`}>
-      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
-        {label}
-      </p>
-      <p className="text-2xl font-extrabold tabular-nums">
-        {value.toLocaleString()}
-      </p>
-    </div>
-  );
-}

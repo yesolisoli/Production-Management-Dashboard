@@ -6,6 +6,7 @@ import {
   type HogIntakeRecord,
 } from "@/features/hog-intake/types";
 import {
+  buildAvailabilityRows,
   casesToPieces,
   clampNonNegativeInt,
 } from "../calculations";
@@ -17,14 +18,22 @@ import {
 import {
   clearDraft,
   readCommittedForDate,
+  readCustomerOrdersForDate,
   readDraft,
+  readPreviousOverstock,
+  saveCustomerOrdersForDate,
   saveOrdersForDate,
+  saveOverstockForDate,
   writeDraft,
 } from "../primal-storage";
 import {
   CASE_TO_PCS,
+  emptyCustomerCategoryOrders,
+  emptyOverstockByCategory,
   emptyProductOrder,
+  type CustomerOrdersForDate,
   type OrderField,
+  type OverstockByCategory,
   type PrimalCategory,
   type ProductOrder,
   type ProductOrdersForDate,
@@ -71,6 +80,14 @@ export function usePrimalCalculationState() {
     kind: "loading",
   });
   const [orders, setOrders] = useState<ProductOrdersForDate>({});
+  const [customerOrders, setCustomerOrders] = useState<CustomerOrdersForDate>(
+    {},
+  );
+  // Yesterday's O/S carried in per category — the previous saved date's
+  // calculated O/S. Loaded from storage on every date change; feeds the
+  // Availability Chart's "Yesterday O/S" column.
+  const [yesterdayOverstock, setYesterdayOverstock] =
+    useState<OverstockByCategory>(emptyOverstockByCategory);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   const hasHydrated = useRef(false);
@@ -107,6 +124,9 @@ export function usePrimalCalculationState() {
     const resolved = readDraft(nextDate) ?? readCommittedForDate(nextDate);
     suppressNextWrite.current = true;
     setOrders(resolved);
+    setCustomerOrders(readCustomerOrdersForDate(nextDate));
+    // Carry the previous saved date's calculated O/S in as Yesterday O/S.
+    setYesterdayOverstock(readPreviousOverstock(nextDate));
   }, []);
 
   // Mount — load today's intake + orders.
@@ -198,6 +218,24 @@ export function usePrimalCalculationState() {
     [],
   );
 
+  // Set one customer's order for one category (pieces). Auto-persisted —
+  // the customer chart is informational, so there's no draft/save split.
+  const setCustomerOrder = useCallback(
+    (customer: string, category: PrimalCategory, value: number) => {
+      const clamped = clampNonNegativeInt(value);
+      setCustomerOrders((prev) => {
+        const current = prev[customer] ?? emptyCustomerCategoryOrders();
+        const next: CustomerOrdersForDate = {
+          ...prev,
+          [customer]: { ...current, [category]: clamped },
+        };
+        saveCustomerOrdersForDate(date, next);
+        return next;
+      });
+    },
+    [date],
+  );
+
   // Bulk: clear every order field for all products in a category.
   const clearCategory = useCallback((category: PrimalCategory) => {
     setOrders((prev) => {
@@ -209,7 +247,25 @@ export function usePrimalCalculationState() {
     });
   }, []);
 
-  // Commit a category's orders to the persistent store.
+  // Per-category calculated Today's O/S (pieces) — the Availability Chart's
+  // todaysOverstock, derived from today's orders + intake + customer orders
+  // + yesterday's carry-in. Persisted on Save so it becomes the next
+  // production date's Yesterday O/S.
+  const computeOverstockByCategory =
+    useCallback((): OverstockByCategory => {
+      const rows = buildAvailabilityRows(
+        orders,
+        intake.hog_counts,
+        customerOrders,
+        yesterdayOverstock,
+      );
+      const out = emptyOverstockByCategory();
+      for (const row of rows) out[row.category] = row.todaysOverstock;
+      return out;
+    }, [orders, intake, customerOrders, yesterdayOverstock]);
+
+  // Commit a category's orders to the persistent store, plus its
+  // calculated O/S.
   const saveCategory = useCallback(
     async (category: PrimalCategory) => {
       setSaveState({ kind: "saving", scope: category });
@@ -219,6 +275,9 @@ export function usePrimalCalculationState() {
           subset[spec.sku] = orders[spec.sku] ?? emptyProductOrder();
         }
         saveOrdersForDate(date, subset);
+        saveOverstockForDate(date, {
+          [category]: computeOverstockByCategory()[category],
+        });
         setSaveState({ kind: "saved", scope: category, at: Date.now() });
       } catch (err) {
         setSaveState({
@@ -228,15 +287,16 @@ export function usePrimalCalculationState() {
         });
       }
     },
-    [date, orders],
+    [date, orders, computeOverstockByCategory],
   );
 
-  // Commit every category at once. Clears the draft since committed and
-  // working copy now match.
+  // Commit every category at once, plus all calculated O/S. Clears the
+  // draft since committed and working copy now match.
   const saveAll = useCallback(async () => {
     setSaveState({ kind: "saving", scope: "all" });
     try {
       saveOrdersForDate(date, orders);
+      saveOverstockForDate(date, computeOverstockByCategory());
       clearDraft(date);
       setSaveState({ kind: "saved", scope: "all", at: Date.now() });
     } catch (err) {
@@ -246,16 +306,19 @@ export function usePrimalCalculationState() {
         message: err instanceof Error ? err.message : "Failed to save",
       });
     }
-  }, [date, orders]);
+  }, [date, orders, computeOverstockByCategory]);
 
   return {
     date,
     intake,
     intakeStatus,
     orders,
+    customerOrders,
+    yesterdayOverstock,
     saveState,
     setDate,
     setOrderField,
+    setCustomerOrder,
     bumpCategoryCases,
     clearCategory,
     saveCategory,

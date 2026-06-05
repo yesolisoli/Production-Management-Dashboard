@@ -53,7 +53,6 @@ export function ProcessSheet({
                 value={record[field.key]}
                 onChange={(value) => onChangeField(field.key, value)}
               />
-              <span className="w-10 text-xs text-slate-400">head</span>
             </div>
           </div>
         ))}

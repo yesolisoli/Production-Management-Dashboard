@@ -82,6 +82,9 @@ function rowToRecord(row: HogIntakeRow): HogIntakeRecord {
     held_over: row.held_over,
     deaths_on_arrival: row.deaths_on_arrival,
     boars_count: row.boars_count,
+    // sow_scheduled has no DB column yet (draft-only); always defaults to 0
+    // when loading from the server.
+    sow_scheduled: 0,
     notes: row.notes ?? "",
     farm_records: coerceFarmRecords(row.farm_records),
     next_day: coerceNextDay(row.next_day),

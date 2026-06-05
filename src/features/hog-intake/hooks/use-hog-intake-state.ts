@@ -179,6 +179,13 @@ export function useHogIntakeState() {
     [],
   );
 
+  const setSowScheduled = useCallback((value: number) => {
+    setRecord((prev) => ({
+      ...prev,
+      sow_scheduled: clampNonNegativeInt(value),
+    }));
+  }, []);
+
   const setNotes = useCallback((notes: string) => {
     setRecord((prev) => ({ ...prev, notes }));
   }, []);
@@ -273,6 +280,7 @@ export function useHogIntakeState() {
     setHogCount,
     clearAllHogCounts,
     setProcessField,
+    setSowScheduled,
     setNotes,
     setNextDayField,
     addFarmRecord,

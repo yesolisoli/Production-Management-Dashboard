@@ -122,7 +122,7 @@ export function PrimalCsvImportModal({
             <p className="text-xs text-slate-400">
               Expected columns:{" "}
               <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-600">
-                sku, today_cases, tmrw_cases, overstock_cases
+                sku, today_cases
               </code>{" "}
               — pieces are computed from each product&apos;s case pack.
             </p>
@@ -161,8 +161,6 @@ export function PrimalCsvImportModal({
                     <th className="px-3 py-2">SKU</th>
                     <th className="px-3 py-2">Item</th>
                     <th className="px-2 py-2 text-center text-blue-600">Today</th>
-                    <th className="px-2 py-2 text-center text-emerald-600">Tmrw</th>
-                    <th className="px-2 py-2 text-center text-violet-600">O/S</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -191,12 +189,6 @@ export function PrimalCsvImportModal({
                       </td>
                       <td className="px-2 py-1.5 text-center tabular-nums">
                         {row.order ? row.order.today_cases : ""}
-                      </td>
-                      <td className="px-2 py-1.5 text-center tabular-nums">
-                        {row.order ? row.order.tmrw_cases : ""}
-                      </td>
-                      <td className="px-2 py-1.5 text-center tabular-nums">
-                        {row.order ? row.order.overstock_cases : ""}
                       </td>
                     </tr>
                   ))}
