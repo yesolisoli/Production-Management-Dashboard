@@ -1,37 +1,59 @@
 import {
+  FARM_DERIVED_HOG_TYPES,
+  HOG_TYPES,
   YIELD_HOG_TYPES,
+  type FarmDerivedHogType,
+  type FarmRecord,
   type HogCounts,
   type HogIntakeRecord,
   type NextDay,
 } from "./types";
 
-// Sum of the hog_counts that count toward intake. Sow is excluded — it's a
-// reference-only figure and never feeds Total Hogs (and therefore not For
-// Cutting either).
-export function totalHogs(counts: HogCounts): number {
-  return (
-    counts.JP +
-    counts.RWA +
-    counts.BK +
-    counts.Round +
-    counts.Suckling +
-    counts.Customer
-  );
+const FARM_DERIVED_SET = new Set<string>(FARM_DERIVED_HOG_TYPES);
+
+// Farm Delivery Records are the single entry point for delivered primal hogs —
+// JP / RWA roll up from the rows and are read-only in the grid. Every other
+// type (BK / Sow / Round / Suckling / Customer) is entered manually on its own
+// card. JP / RWA are also the only types that feed Primal Calc (see yieldTotal).
+export function derivedCountsFromFarmRecords(
+  records: FarmRecord[],
+): Record<FarmDerivedHogType, number> {
+  const counts = Object.fromEntries(
+    FARM_DERIVED_HOG_TYPES.map((type) => [type, 0]),
+  ) as Record<FarmDerivedHogType, number>;
+  for (const row of records) {
+    if (row.type && FARM_DERIVED_SET.has(row.type)) {
+      counts[row.type as FarmDerivedHogType] += row.count;
+    }
+  }
+  return counts;
 }
 
-// One hog yields up to 2 side orders, so each pair of side orders consumes
-// one hog (rounded up for odd counts).
+// Total Hog — the sum of every hog type, including Sow. Side orders are NOT
+// part of this figure; they are cut out of it to get For Cutting Today.
+export function totalHogs(counts: HogCounts): number {
+  return HOG_TYPES.reduce((sum, type) => sum + counts[type], 0);
+}
+
+// Two side orders come from one hog, so each pair consumes one hog (rounded
+// up for an odd count).
 export function hogsConsumedBySideOrders(sideOrders: number): number {
   return Math.ceil(sideOrders / 2);
 }
 
-// total_hogs - hogs consumed by side orders. Can be negative when side orders
-// outstrip available hogs; the UI surfaces that as a warning rather than blocking save.
-export function forCutting(counts: HogCounts, sideOrders: number): number {
-  return totalHogs(counts) - hogsConsumedBySideOrders(sideOrders);
+// Total Intake is the all-in Total Hog figure (all types incl. Sow). Side
+// orders do not add to it. Broader than Primal Calc (yield: JP + RWA only).
+export function totalIntake(counts: HogCounts): number {
+  return totalHogs(counts);
 }
 
-// Only JP, RWA, BK contribute. Sow / Round / Suckling / Customer excluded.
+// Total Hog minus the hogs consumed by side orders (2 side orders = 1 hog) —
+// e.g. 109 hogs with 28 side orders leaves 109 - 14 = 95 to cut.
+export function forCutting(counts: HogCounts, sideOrders: number): number {
+  return totalIntake(counts) - hogsConsumedBySideOrders(sideOrders);
+}
+
+// Only JP, RWA contribute. BK / Sow / Round / Suckling / Customer excluded.
 export function yieldTotal(counts: HogCounts): number {
   return YIELD_HOG_TYPES.reduce((sum, key) => sum + counts[key], 0);
 }
@@ -65,20 +87,23 @@ export function loinsAvailableTomorrow(
 }
 
 export type HogIntakeTotals = {
+  totalIntake: number; // Total Hog: all hog types incl. Sow (no side orders)
   totalHogs: number;
   forCutting: number;
   yieldTotal: number;
   projectedForCutting: number;
-  overSold: boolean; // side_orders > total_hogs
+  overSold: boolean; // hogs consumed by side orders exceed total intake
 };
 
 export function deriveTotals(record: HogIntakeRecord): HogIntakeTotals {
-  const total = totalHogs(record.hog_counts);
+  const counts = record.hog_counts;
+  const total = totalIntake(counts);
   const consumed = hogsConsumedBySideOrders(record.side_orders);
   return {
+    totalIntake: total,
     totalHogs: total,
     forCutting: total - consumed,
-    yieldTotal: yieldTotal(record.hog_counts),
+    yieldTotal: yieldTotal(counts),
     projectedForCutting: projectedForCutting(record.next_day),
     overSold: consumed > total,
   };

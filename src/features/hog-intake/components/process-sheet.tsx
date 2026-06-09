@@ -1,8 +1,7 @@
 "use client";
 
-import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
-import { clampNonNegativeInt } from "../calculations";
 import type { HogIntakeRecord } from "../types";
+import { NumberStepper } from "./number-stepper";
 
 type ProcessField = "side_orders" | "held_over" | "deaths_on_arrival" | "boars_count";
 
@@ -13,7 +12,6 @@ type ProcessSheetProps = {
 };
 
 const FIELDS: { key: ProcessField; label: string }[] = [
-  { key: "side_orders", label: "Side Orders" },
   { key: "held_over", label: "Held Over" },
   { key: "deaths_on_arrival", label: "Deaths on Arrival" },
   { key: "boars_count", label: "Boars Count" },
@@ -41,15 +39,10 @@ export function ProcessSheet({
             key={field.key}
             className="flex items-center justify-between gap-3"
           >
-            <label
-              htmlFor={`process-${field.key}`}
-              className="text-sm text-slate-700"
-            >
-              {field.label}
-            </label>
-            <div className="flex items-center gap-2">
-              <ProcessNumberInput
-                id={`process-${field.key}`}
+            <span className="text-sm text-slate-700">{field.label}</span>
+            <div className="w-32">
+              <NumberStepper
+                ariaLabel={field.label}
                 value={record[field.key]}
                 onChange={(value) => onChangeField(field.key, value)}
               />
@@ -81,29 +74,5 @@ export function ProcessSheet({
         />
       </div>
     </section>
-  );
-}
-
-function ProcessNumberInput({
-  id,
-  value,
-  onChange,
-}: {
-  id: string;
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  const blank = useBlankZeroInput(value);
-  return (
-    <input
-      id={id}
-      type="number"
-      inputMode="numeric"
-      min={0}
-      step={1}
-      {...blank}
-      onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
-      className="h-9 w-24 rounded-lg border border-slate-200 bg-white px-3 text-right text-sm font-semibold tabular-nums text-slate-900 outline-none focus:border-slate-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-    />
   );
 }

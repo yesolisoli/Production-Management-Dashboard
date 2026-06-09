@@ -1,6 +1,6 @@
 import {
-  PRIMAL_CATEGORIES,
-  type OverstockByCategory,
+  PRIMAL_GROUPS,
+  type OverstockByGroup,
 } from "./types";
 
 // -------------------------------------------------------------------
@@ -11,13 +11,13 @@ import {
 // body of pushOverstockToCooler() with the real write — nothing else in
 // the feature needs to change.
 //
-// The source is the calculated Today's O/S per category (in pieces) from
-// the Availability Chart — not a manual input. O/S lives at the category
-// level because production comes from whole hogs, not per SKU.
+// The source is the calculated Today's O/S per group (in pieces) from the
+// Availability Chart — not a manual input. O/S lives at the group level
+// because production comes from whole hogs, not per SKU.
 // -------------------------------------------------------------------
 
 export type OverstockLine = {
-  category: string;
+  group: string;
   pcs: number;
 };
 
@@ -27,21 +27,21 @@ export type OverstockPushResult = {
   totalPcs: number;
 };
 
-// Collect every category that has positive calculated O/S for the date.
+// Collect every group that has positive calculated O/S for the date.
 export function collectOverstockLines(
-  overstock: OverstockByCategory,
+  overstock: OverstockByGroup,
 ): OverstockLine[] {
   const lines: OverstockLine[] = [];
-  for (const category of PRIMAL_CATEGORIES) {
-    const pcs = overstock[category];
-    if (pcs > 0) lines.push({ category, pcs });
+  for (const group of PRIMAL_GROUPS) {
+    const pcs = overstock[group.key];
+    if (pcs > 0) lines.push({ group: group.label, pcs });
   }
   return lines;
 }
 
 export async function pushOverstockToCooler(
   date: string,
-  overstock: OverstockByCategory,
+  overstock: OverstockByGroup,
 ): Promise<OverstockPushResult> {
   const lines = collectOverstockLines(overstock);
   // TODO: replace with a real write into the Cooler Inventory module.

@@ -7,7 +7,6 @@ import { deriveTotals } from "../calculations";
 import { useHogIntakeState } from "../hooks/use-hog-intake-state";
 import { FarmRecords } from "./farm-records";
 import { HogCountGrid } from "./hog-count-grid";
-import { NextDayProjection } from "./next-day-projection";
 import { ProcessSheet } from "./process-sheet";
 import { SaveBar } from "./save-bar";
 import { SummaryPanel } from "./summary-panel";
@@ -17,15 +16,14 @@ export function HogIntakeClient() {
   const {
     date,
     record,
+    hogCounts,
     status,
     dirty,
     setDate,
     setHogCount,
-    clearAllHogCounts,
     setProcessField,
     setSowScheduled,
     setNotes,
-    setNextDayField,
     addFarmRecord,
     updateFarmRecord,
     removeFarmRecord,
@@ -33,7 +31,12 @@ export function HogIntakeClient() {
     save,
   } = useHogIntakeState();
 
-  const totals = useMemo(() => deriveTotals(record), [record]);
+  // hog_counts are derived from Farm Delivery Records, so totals flow from the
+  // derived counts rather than the record's stored (input-only) field.
+  const totals = useMemo(
+    () => deriveTotals({ ...record, hog_counts: hogCounts }),
+    [record, hogCounts],
+  );
 
   return (
     <>
@@ -73,21 +76,18 @@ export function HogIntakeClient() {
           <SummaryPanel
             totals={totals}
             sideOrders={record.side_orders}
+            onChangeSideOrders={(v) => setProcessField("side_orders", v)}
             sowAvailable={record.hog_counts.Sow}
             sowScheduled={record.sow_scheduled}
             onChangeSowAvailable={(v) => setHogCount("Sow", v)}
             onChangeSowScheduled={setSowScheduled}
           />
 
-          <HogCountGrid
-            counts={record.hog_counts}
-            onChange={setHogCount}
-            onClearAll={clearAllHogCounts}
-          />
+          <HogCountGrid counts={hogCounts} onChangeCount={setHogCount} />
 
           <WeeklyHogSchedule />
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.25fr_1fr_1fr]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.5fr_1fr]">
             <FarmRecords
               rows={record.farm_records}
               onAdd={addFarmRecord}
@@ -98,10 +98,6 @@ export function HogIntakeClient() {
               record={record}
               onChangeField={setProcessField}
               onChangeNotes={setNotes}
-            />
-            <NextDayProjection
-              nextDay={record.next_day}
-              onChange={setNextDayField}
             />
           </div>
 

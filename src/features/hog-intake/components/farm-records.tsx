@@ -1,9 +1,13 @@
 "use client";
 
-import { Plus, Trash2, Truck } from "lucide-react";
+import { Minus, Plus, Trash2, Truck } from "lucide-react";
 import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
 import { clampNonNegativeInt } from "../calculations";
-import { HOG_TYPES, type FarmRecord, type HogType } from "../types";
+import {
+  FARM_DERIVED_HOG_TYPES,
+  type FarmRecord,
+  type HogType,
+} from "../types";
 
 type FarmRecordsProps = {
   rows: FarmRecord[];
@@ -42,10 +46,10 @@ export function FarmRecords({
       <table className="w-full table-fixed text-sm">
         <thead>
           <tr className="border-b border-slate-100 text-left text-[10px] font-medium uppercase tracking-wide text-slate-400">
-            <th className="w-[38%] px-2 py-2">Farm</th>
-            <th className="w-[22%] px-2 py-2">Type</th>
-            <th className="w-[20%] px-2 py-2">Tattoo / Tag</th>
-            <th className="w-[15%] px-2 py-2 text-right">Count</th>
+            <th className="w-[32%] px-2 py-2">Farm</th>
+            <th className="w-[18%] px-2 py-2">Type</th>
+            <th className="w-[16%] px-2 py-2">Tattoo / Tag</th>
+            <th className="w-[26%] px-2 py-2 text-center">Count</th>
             {!isEmpty ? <th className="w-12 px-2 py-2" /> : null}
           </tr>
         </thead>
@@ -75,7 +79,7 @@ export function FarmRecords({
                     className="h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-sm outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white"
                   >
                     <option value="">—</option>
-                    {HOG_TYPES.map((t) => (
+                    {FARM_DERIVED_HOG_TYPES.map((t) => (
                       <option key={t} value={t}>
                         {t}
                       </option>
@@ -93,7 +97,7 @@ export function FarmRecords({
                     className="h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-sm outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white"
                   />
                 </td>
-                <td className="px-2 py-1.5 text-right">
+                <td className="px-2 py-1.5">
                   <CountInput
                     value={row.count}
                     onChange={(count) => onUpdate(row.id, { count })}
@@ -147,16 +151,37 @@ function CountInput({
   value: number;
   onChange: (count: number) => void;
 }) {
+  const set = (next: number) => onChange(clampNonNegativeInt(next));
   const blank = useBlankZeroInput(value);
   return (
-    <input
-      type="number"
-      inputMode="numeric"
-      min={0}
-      step={1}
-      {...blank}
-      onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
-      className="h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-right text-sm tabular-nums outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-    />
+    <div className="flex items-center justify-center gap-1">
+      <button
+        type="button"
+        onClick={() => set(value - 1)}
+        disabled={value <= 0}
+        aria-label="Count decrement"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <Minus size={13} />
+      </button>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        step={1}
+        {...blank}
+        onChange={(e) => set(Number(e.target.value))}
+        aria-label="Count"
+        className="h-8 w-10 rounded-lg border border-transparent bg-transparent px-1 text-center text-sm tabular-nums outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+      <button
+        type="button"
+        onClick={() => set(value + 1)}
+        aria-label="Count increment"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+      >
+        <Plus size={13} />
+      </button>
+    </div>
   );
 }

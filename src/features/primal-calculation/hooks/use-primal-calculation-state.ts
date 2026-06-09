@@ -10,7 +10,7 @@ import {
   casesToPieces,
   clampNonNegativeInt,
 } from "../calculations";
-import { loadHogIntakeForDate } from "../intake-source";
+import { loadHogIntakeForDate, saveHogIntakeRecord } from "../intake-source";
 import {
   PRODUCT_SPEC_BY_SKU,
   specsForCategory,
@@ -28,13 +28,14 @@ import {
 } from "../primal-storage";
 import {
   CASE_TO_PCS,
-  emptyCustomerCategoryOrders,
-  emptyOverstockByCategory,
+  emptyCustomerGroupOrders,
+  emptyOverstockByGroup,
   emptyProductOrder,
   type CustomerOrdersForDate,
   type OrderField,
-  type OverstockByCategory,
-  type PrimalCategory,
+  type OverstockByGroup,
+  type PrimalGroup,
+  type PrimalGroupKey,
   type ProductOrder,
   type ProductOrdersForDate,
 } from "../types";
@@ -83,11 +84,11 @@ export function usePrimalCalculationState() {
   const [customerOrders, setCustomerOrders] = useState<CustomerOrdersForDate>(
     {},
   );
-  // Yesterday's O/S carried in per category — the previous saved date's
+  // Yesterday's O/S carried in per group — the previous saved date's
   // calculated O/S. Loaded from storage on every date change; feeds the
   // Availability Chart's "Yesterday O/S" column.
   const [yesterdayOverstock, setYesterdayOverstock] =
-    useState<OverstockByCategory>(emptyOverstockByCategory);
+    useState<OverstockByGroup>(emptyOverstockByGroup);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   const hasHydrated = useRef(false);
@@ -95,6 +96,14 @@ export function usePrimalCalculationState() {
   // Set before any non-user-driven setOrders so the draft-write effect
   // doesn't persist a freshly loaded value back as a new draft.
   const suppressNextWrite = useRef(false);
+
+  // Live mirror of `intake` plus a debounce timer, used to persist Next Day
+  // Projection edits back to the hog_intake row without re-saving on load.
+  const intakeRef = useRef(intake);
+  const nextDaySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    intakeRef.current = intake;
+  }, [intake]);
 
   const loadIntakeForDate = useCallback(async (nextDate: string) => {
     const token = ++activeIntakeToken.current;
@@ -158,12 +167,39 @@ export function usePrimalCalculationState() {
   const setDate = useCallback(
     (nextDate: string) => {
       if (!nextDate) return;
+      // Drop any pending Next Day save so it can't land on the new date.
+      if (nextDaySaveTimer.current) clearTimeout(nextDaySaveTimer.current);
       setSaveState({ kind: "idle" });
       setDateState(nextDate);
       loadOrdersForDate(nextDate);
       void loadIntakeForDate(nextDate);
     },
     [loadIntakeForDate, loadOrdersForDate],
+  );
+
+  // Edit the Next Day Projection (owned by Hog Intake, but entered here).
+  // Updates the in-memory intake immediately and debounce-persists the whole
+  // record back to the hog_intake row so the value survives a refresh.
+  const setNextDayField = useCallback(
+    (field: "hog_count" | "side_orders" | "cooler_overstock", value: number) => {
+      const clamped = clampNonNegativeInt(value);
+      setIntake((prev) => ({
+        ...prev,
+        next_day: { ...prev.next_day, [field]: clamped },
+      }));
+      if (nextDaySaveTimer.current) clearTimeout(nextDaySaveTimer.current);
+      nextDaySaveTimer.current = setTimeout(() => {
+        void saveHogIntakeRecord(intakeRef.current).catch(() => {
+          // Persisted-data integrity matters; surface failures to the user.
+          setSaveState({
+            kind: "error",
+            scope: "next_day",
+            message: "Failed to save Next Day Projection",
+          });
+        });
+      }, 600);
+    },
+    [],
   );
 
   // Edit one field of one product's order. Editing a *_cases field also
@@ -186,12 +222,12 @@ export function usePrimalCalculationState() {
     [],
   );
 
-  // Bulk: add `delta` cases to every product's Today column in a category
-  // and re-derive Today pieces.
-  const bumpCategoryCases = useCallback(
-    (category: PrimalCategory, delta: number) => {
-      setOrders((prev) => {
-        const next = { ...prev };
+  // Bulk: add `delta` cases to every product's Today column across all of a
+  // group's categories and re-derive Today pieces.
+  const bumpGroupCases = useCallback((group: PrimalGroup, delta: number) => {
+    setOrders((prev) => {
+      const next = { ...prev };
+      for (const category of group.categories) {
         for (const spec of specsForCategory(category)) {
           const current = next[spec.sku] ?? emptyProductOrder();
           const today_cases = clampNonNegativeInt(current.today_cases + delta);
@@ -201,11 +237,10 @@ export function usePrimalCalculationState() {
             today_pcs: casesToPieces(spec, today_cases),
           };
         }
-        return next;
-      });
-    },
-    [],
-  );
+      }
+      return next;
+    });
+  }, []);
 
   // Apply a CSV import: merge the imported per-SKU orders over the
   // current working copy. Imported SKUs overwrite; untouched SKUs are
@@ -218,16 +253,16 @@ export function usePrimalCalculationState() {
     [],
   );
 
-  // Set one customer's order for one category (pieces). Auto-persisted —
-  // the customer chart is informational, so there's no draft/save split.
+  // Set one customer's order for one group (pieces). Auto-persisted — the
+  // customer chart is informational, so there's no draft/save split.
   const setCustomerOrder = useCallback(
-    (customer: string, category: PrimalCategory, value: number) => {
+    (customer: string, group: PrimalGroupKey, value: number) => {
       const clamped = clampNonNegativeInt(value);
       setCustomerOrders((prev) => {
-        const current = prev[customer] ?? emptyCustomerCategoryOrders();
+        const current = prev[customer] ?? emptyCustomerGroupOrders();
         const next: CustomerOrdersForDate = {
           ...prev,
-          [customer]: { ...current, [category]: clamped },
+          [customer]: { ...current, [group]: clamped },
         };
         saveCustomerOrdersForDate(date, next);
         return next;
@@ -236,67 +271,71 @@ export function usePrimalCalculationState() {
     [date],
   );
 
-  // Bulk: clear every order field for all products in a category.
-  const clearCategory = useCallback((category: PrimalCategory) => {
+  // Bulk: clear every order field for all products across a group's categories.
+  const clearGroup = useCallback((group: PrimalGroup) => {
     setOrders((prev) => {
       const next = { ...prev };
-      for (const spec of specsForCategory(category)) {
-        next[spec.sku] = emptyProductOrder();
+      for (const category of group.categories) {
+        for (const spec of specsForCategory(category)) {
+          next[spec.sku] = emptyProductOrder();
+        }
       }
       return next;
     });
   }, []);
 
-  // Per-category calculated Today's O/S (pieces) — the Availability Chart's
+  // Per-group calculated Today's O/S (pieces) — the Availability Chart's
   // todaysOverstock, derived from today's orders + intake + customer orders
   // + yesterday's carry-in. Persisted on Save so it becomes the next
   // production date's Yesterday O/S.
-  const computeOverstockByCategory =
-    useCallback((): OverstockByCategory => {
-      const rows = buildAvailabilityRows(
-        orders,
-        intake.hog_counts,
-        customerOrders,
-        yesterdayOverstock,
-      );
-      const out = emptyOverstockByCategory();
-      for (const row of rows) out[row.category] = row.todaysOverstock;
-      return out;
-    }, [orders, intake, customerOrders, yesterdayOverstock]);
+  const computeOverstockByGroup = useCallback((): OverstockByGroup => {
+    const rows = buildAvailabilityRows(
+      orders,
+      intake.hog_counts,
+      customerOrders,
+      yesterdayOverstock,
+    );
+    const out = emptyOverstockByGroup();
+    for (const row of rows) out[row.group] = row.todaysOverstock;
+    return out;
+  }, [orders, intake, customerOrders, yesterdayOverstock]);
 
-  // Commit a category's orders to the persistent store, plus its
-  // calculated O/S.
-  const saveCategory = useCallback(
-    async (category: PrimalCategory) => {
-      setSaveState({ kind: "saving", scope: category });
+  // Commit a group's orders (every SKU across its categories) to the
+  // persistent store, plus its calculated O/S.
+  const saveGroup = useCallback(
+    async (group: PrimalGroup) => {
+      const groupKey = group.key as PrimalGroupKey;
+      setSaveState({ kind: "saving", scope: groupKey });
       try {
         const subset: ProductOrdersForDate = {};
-        for (const spec of specsForCategory(category)) {
-          subset[spec.sku] = orders[spec.sku] ?? emptyProductOrder();
+        for (const category of group.categories) {
+          for (const spec of specsForCategory(category)) {
+            subset[spec.sku] = orders[spec.sku] ?? emptyProductOrder();
+          }
         }
         saveOrdersForDate(date, subset);
         saveOverstockForDate(date, {
-          [category]: computeOverstockByCategory()[category],
+          [groupKey]: computeOverstockByGroup()[groupKey],
         });
-        setSaveState({ kind: "saved", scope: category, at: Date.now() });
+        setSaveState({ kind: "saved", scope: group.key, at: Date.now() });
       } catch (err) {
         setSaveState({
           kind: "error",
-          scope: category,
+          scope: group.key,
           message: err instanceof Error ? err.message : "Failed to save",
         });
       }
     },
-    [date, orders, computeOverstockByCategory],
+    [date, orders, computeOverstockByGroup],
   );
 
-  // Commit every category at once, plus all calculated O/S. Clears the
-  // draft since committed and working copy now match.
+  // Commit every group at once, plus all calculated O/S. Clears the draft
+  // since committed and working copy now match.
   const saveAll = useCallback(async () => {
     setSaveState({ kind: "saving", scope: "all" });
     try {
       saveOrdersForDate(date, orders);
-      saveOverstockForDate(date, computeOverstockByCategory());
+      saveOverstockForDate(date, computeOverstockByGroup());
       clearDraft(date);
       setSaveState({ kind: "saved", scope: "all", at: Date.now() });
     } catch (err) {
@@ -306,7 +345,7 @@ export function usePrimalCalculationState() {
         message: err instanceof Error ? err.message : "Failed to save",
       });
     }
-  }, [date, orders, computeOverstockByCategory]);
+  }, [date, orders, computeOverstockByGroup]);
 
   return {
     date,
@@ -318,10 +357,11 @@ export function usePrimalCalculationState() {
     saveState,
     setDate,
     setOrderField,
+    setNextDayField,
     setCustomerOrder,
-    bumpCategoryCases,
-    clearCategory,
-    saveCategory,
+    bumpGroupCases,
+    clearGroup,
+    saveGroup,
     saveAll,
     applyImportedOrders,
   };

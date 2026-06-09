@@ -8,6 +8,7 @@ import { clampNonNegativeInt } from "../calculations";
 import type {
   OrderField,
   PrimalCategory,
+  PrimalGroup,
   ProductOrder,
   ProductSpec,
 } from "../types";
@@ -19,11 +20,20 @@ export type CategorySkuRow = {
   order: ProductOrder;
 };
 
-type PrimalCategorySectionProps = {
+// A group renders one section. Each of its categories is a labeled subgroup so
+// the types stay distinguishable, while the quantity (Calc O/S) is shared.
+export type GroupCategoryRows = {
   category: PrimalCategory;
   rows: CategorySkuRow[];
   totals: OrderTotals;
-  // Calculated Today's O/S for this category, in pieces (Available Stock −
+};
+
+type PrimalGroupSectionProps = {
+  group: PrimalGroup;
+  categoryRows: GroupCategoryRows[];
+  // Combined Today totals across every category in the group.
+  groupTotals: OrderTotals;
+  // Calculated Today's O/S for this group, in pieces (Available Stock −
   // Customer Orders from the Availability Chart). Read-only / derived.
   calculatedOverstockPcs: number;
   expanded: boolean;
@@ -38,10 +48,10 @@ type PrimalCategorySectionProps = {
   justSaved: boolean;
 };
 
-export function PrimalCategorySection({
-  category,
-  rows,
-  totals,
+export function PrimalGroupSection({
+  group,
+  categoryRows,
+  groupTotals,
   calculatedOverstockPcs,
   expanded,
   onToggle,
@@ -53,10 +63,15 @@ export function PrimalCategorySection({
   onSave,
   saving,
   justSaved,
-}: PrimalCategorySectionProps) {
+}: PrimalGroupSectionProps) {
+  // Only label per-type subgroups when the group pools more than one type
+  // (e.g. Ribs); single-type groups don't need the redundant header.
+  const showTypeHeaders = group.categories.length > 1;
+  const itemCount = categoryRows.reduce((sum, c) => sum + c.rows.length, 0);
+
   return (
     <section
-      id={`primal-cat-${slug(category)}`}
+      id={`primal-group-${groupSlug(group.key)}`}
       className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
     >
       {/* Header — click to expand/collapse */}
@@ -77,13 +92,17 @@ export function PrimalCategorySection({
         </span>
         <div className="min-w-0">
           <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">
-            {category}
+            {group.label}
           </h3>
-          <p className="text-xs text-slate-500">{rows.length} Items</p>
+          <p className="text-xs text-slate-500">{itemCount} Items</p>
         </div>
 
         <div className="ml-auto flex items-center gap-4">
-          <HeaderTotal label="Today" cases={totals.today_cases} pcs={totals.today_pcs} />
+          <HeaderTotal
+            label="Today"
+            cases={groupTotals.today_cases}
+            pcs={groupTotals.today_pcs}
+          />
           <HeaderOverstock pcs={calculatedOverstockPcs} />
         </div>
       </button>
@@ -101,26 +120,55 @@ export function PrimalCategorySection({
                   <ColGroupHead label="Today" tone="text-blue-600" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((row) => (
-                  <ProductRow
-                    key={row.spec.sku}
-                    row={row}
-                    active={activeSku === row.spec.sku}
-                    onFocus={() => onRowFocus(row.spec.sku)}
-                    onBlur={() => onRowFocus(null)}
-                    onChangeField={onChangeField}
-                  />
-                ))}
-              </tbody>
+              {categoryRows.map(({ category, rows, totals }) => (
+                <tbody
+                  key={category}
+                  className="divide-y divide-slate-100 border-t border-slate-100"
+                >
+                  {showTypeHeaders && (
+                    <tr className="bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      <td className="px-4 py-1.5" colSpan={3}>
+                        {category}
+                        <span className="ml-2 font-normal normal-case text-slate-400">
+                          {rows.length} items
+                        </span>
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center tabular-nums text-blue-600">
+                        {totals.today_cases}
+                      </td>
+                      <td className="px-1.5 py-1.5 text-center tabular-nums text-slate-400">
+                        {totals.today_pcs}
+                      </td>
+                    </tr>
+                  )}
+                  {rows.map((row) => (
+                    <ProductRow
+                      key={row.spec.sku}
+                      row={row}
+                      active={activeSku === row.spec.sku}
+                      onFocus={() => onRowFocus(row.spec.sku)}
+                      onBlur={() => onRowFocus(null)}
+                      onChangeField={onChangeField}
+                    />
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
 
-          {/* Per-category totals — today's manual inputs, then the derived
-              Calculated O/S (pieces; category-level, read-only). */}
+          {/* Group totals — today's manual inputs, then the derived
+              Calculated O/S (pieces; group-level, read-only). */}
           <div className="grid grid-cols-2 gap-3 border-t border-slate-100 px-4 py-3 sm:grid-cols-3">
-            <TotalStat label="Today total cases" value={totals.today_cases} tone="blue" />
-            <TotalStat label="Today total pcs" value={totals.today_pcs} tone="blue" />
+            <TotalStat
+              label="Today total cases"
+              value={groupTotals.today_cases}
+              tone="blue"
+            />
+            <TotalStat
+              label="Today total pcs"
+              value={groupTotals.today_pcs}
+              tone="blue"
+            />
             <TotalStat
               label="Calculated O/S pcs"
               value={calculatedOverstockPcs}
@@ -159,7 +207,7 @@ export function PrimalCategorySection({
               ) : (
                 <Save size={14} />
               )}
-              {saving ? "Saving…" : justSaved ? "Saved" : `Save ${category}`}
+              {saving ? "Saving…" : justSaved ? "Saved" : `Save ${group.label}`}
             </button>
           </div>
         </div>
@@ -320,7 +368,7 @@ function HeaderTotal({
 }
 
 // Calculated Today's O/S summary in the section header — pieces only, since
-// O/S is category-level (mixed case packs make "cases" undefined here).
+// O/S is group-level (mixed case packs make "cases" undefined here).
 function HeaderOverstock({ pcs }: { pcs: number }) {
   return (
     <div className="hidden text-right sm:block">
@@ -357,10 +405,10 @@ function BulkButton({
   );
 }
 
-function slug(category: PrimalCategory): string {
-  return category.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+function groupSlug(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
 
-export function categorySlug(category: PrimalCategory): string {
-  return slug(category);
+export function primalGroupSlug(key: string): string {
+  return groupSlug(key);
 }

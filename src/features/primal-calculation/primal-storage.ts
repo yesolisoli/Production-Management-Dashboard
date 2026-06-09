@@ -1,13 +1,13 @@
 import {
-  emptyCustomerCategoryOrders,
-  emptyOverstockByCategory,
+  emptyCustomerGroupOrders,
+  emptyOverstockByGroup,
   emptyProductOrder,
-  PRIMAL_CATEGORIES,
-  type CustomerCategoryOrders,
+  PRIMAL_GROUPS,
+  type CustomerGroupOrders,
   type CustomerOrdersByDate,
   type CustomerOrdersForDate,
-  type OverstockByCategory,
   type OverstockByDate,
+  type OverstockByGroup,
   type PrimalOrdersByDate,
   type ProductOrder,
   type ProductOrdersForDate,
@@ -139,14 +139,14 @@ export function clearDraft(date: string): void {
 // always reflects the latest typed values), keyed identically to the
 // product store: { "YYYY-MM-DD": { "<customer>": { Butts: n, ... } } }.
 
-function coerceCustomerCategoryOrders(raw: unknown): CustomerCategoryOrders {
-  const orders = emptyCustomerCategoryOrders();
+function coerceCustomerGroupOrders(raw: unknown): CustomerGroupOrders {
+  const orders = emptyCustomerGroupOrders();
   if (!raw || typeof raw !== "object") return orders;
   const obj = raw as Record<string, unknown>;
-  for (const category of PRIMAL_CATEGORIES) {
-    const v = obj[category];
+  for (const group of PRIMAL_GROUPS) {
+    const v = obj[group.key];
     if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
-      orders[category] = Math.floor(v);
+      orders[group.key] = Math.floor(v);
     }
   }
   return orders;
@@ -158,7 +158,7 @@ function coerceCustomerOrdersForDate(raw: unknown): CustomerOrdersForDate {
   for (const [customer, value] of Object.entries(
     raw as Record<string, unknown>,
   )) {
-    out[customer] = coerceCustomerCategoryOrders(value);
+    out[customer] = coerceCustomerGroupOrders(value);
   }
   return out;
 }
@@ -201,19 +201,19 @@ export function saveCustomerOrdersForDate(
 }
 
 // ---------------------- Calculated Today's O/S ----------------------
-// Per-date, per-category calculated overstock (in pieces). Written on
-// Save from the Availability Chart's Today's O/S; read back as the next
+// Per-date, per-group calculated overstock (in pieces). Written on Save
+// from the Availability Chart's Today's O/S; read back as the next
 // production date's Yesterday O/S (the carry-over). Keyed:
-//   { "YYYY-MM-DD": { "<category>": pcs } }
+//   { "YYYY-MM-DD": { "<group>": pcs } }
 
-function coerceOverstockByCategory(raw: unknown): OverstockByCategory {
-  const out = emptyOverstockByCategory();
+function coerceOverstockByGroup(raw: unknown): OverstockByGroup {
+  const out = emptyOverstockByGroup();
   if (!raw || typeof raw !== "object") return out;
   const obj = raw as Record<string, unknown>;
-  for (const category of PRIMAL_CATEGORIES) {
-    const v = obj[category];
+  for (const group of PRIMAL_GROUPS) {
+    const v = obj[group.key];
     if (typeof v === "number" && Number.isFinite(v)) {
-      out[category] = Math.floor(v);
+      out[group.key] = Math.floor(v);
     }
   }
   return out;
@@ -227,10 +227,10 @@ function readOverstock(): OverstockByDate {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return {};
     const out: OverstockByDate = {};
-    for (const [date, byCategory] of Object.entries(
+    for (const [date, byGroup] of Object.entries(
       parsed as Record<string, unknown>,
     )) {
-      out[date] = coerceOverstockByCategory(byCategory);
+      out[date] = coerceOverstockByGroup(byGroup);
     }
     return out;
   } catch {
@@ -238,20 +238,20 @@ function readOverstock(): OverstockByDate {
   }
 }
 
-export function readOverstockForDate(date: string): OverstockByCategory {
-  return readOverstock()[date] ?? emptyOverstockByCategory();
+export function readOverstockForDate(date: string): OverstockByGroup {
+  return readOverstock()[date] ?? emptyOverstockByGroup();
 }
 
-// Merge the given per-category O/S into the store for a date and persist.
-// Merging (rather than replacing) lets a per-category Save write just its
-// own category without clobbering the others.
+// Merge the given per-group O/S into the store for a date and persist.
+// Merging (rather than replacing) lets a per-group Save write just its own
+// group without clobbering the others.
 export function saveOverstockForDate(
   date: string,
-  byCategory: Partial<OverstockByCategory>,
+  byGroup: Partial<OverstockByGroup>,
 ): void {
   if (typeof window === "undefined") return;
   const all = readOverstock();
-  all[date] = { ...(all[date] ?? emptyOverstockByCategory()), ...byCategory };
+  all[date] = { ...(all[date] ?? emptyOverstockByGroup()), ...byGroup };
   try {
     window.localStorage.setItem(OVERSTOCK_KEY, JSON.stringify(all));
   } catch {
@@ -264,7 +264,7 @@ export function saveOverstockForDate(
 // correct chronological compare. Returns zeros when nothing precedes it
 // (e.g. the very first production date), and skips gaps (weekends) by
 // taking the latest prior date rather than calendar −1.
-export function readPreviousOverstock(beforeDate: string): OverstockByCategory {
+export function readPreviousOverstock(beforeDate: string): OverstockByGroup {
   const all = readOverstock();
   let latest: string | null = null;
   for (const date of Object.keys(all)) {
@@ -272,5 +272,5 @@ export function readPreviousOverstock(beforeDate: string): OverstockByCategory {
       latest = date;
     }
   }
-  return latest === null ? emptyOverstockByCategory() : all[latest];
+  return latest === null ? emptyOverstockByGroup() : all[latest];
 }

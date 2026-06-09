@@ -7,16 +7,16 @@ import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
 import { clampNonNegativeInt } from "../calculations";
 import {
   PRIMAL_CUSTOMERS,
-  emptyCustomerCategoryOrders,
+  emptyCustomerGroupOrders,
   type CustomerAvailabilityColumn,
   type CustomerOrdersForDate,
-  type PrimalCategory,
+  type PrimalGroupKey,
 } from "../types";
 
 type PrimalCustomerChartProps = {
   columns: CustomerAvailabilityColumn[];
   customerOrders: CustomerOrdersForDate;
-  onChange: (customer: string, category: PrimalCategory, value: number) => void;
+  onChange: (customer: string, group: PrimalGroupKey, value: number) => void;
 };
 
 // Customer × category order matrix (mirrors the operations spreadsheet).
@@ -79,7 +79,7 @@ export function PrimalCustomerChart({
             <colgroup>
               <col className="w-60" />
               {columns.map((col) => (
-                <col key={col.category} />
+                <col key={col.group} />
               ))}
             </colgroup>
             <thead>
@@ -88,18 +88,18 @@ export function PrimalCustomerChart({
                   Customer
                 </th>
                 {columns.map((col) => (
-                  <th key={col.category} className="px-2 py-2.5 text-center">
-                    {col.category}
+                  <th key={col.group} className="px-2 py-2.5 text-center">
+                    {col.label}
                   </th>
                 ))}
               </tr>
-              {/* Totals Available — read-only, per category */}
+              {/* Totals Available — read-only, per group */}
               <tr className="border-y border-slate-200 bg-slate-100/70 text-center text-xs font-bold tabular-nums text-slate-700">
                 <th className="sticky left-0 z-10 bg-slate-100/70 px-4 py-2 text-left text-[11px] uppercase tracking-wide text-slate-500">
                   Totals Available
                 </th>
                 {columns.map((col) => (
-                  <td key={col.category} className="px-2 py-2">
+                  <td key={col.group} className="px-2 py-2">
                     {col.availableStock.toLocaleString()}
                   </td>
                 ))}
@@ -109,7 +109,7 @@ export function PrimalCustomerChart({
             <tbody className="divide-y divide-slate-100">
               {PRIMAL_CUSTOMERS.map((customer) => {
                 const orders =
-                  customerOrders[customer] ?? emptyCustomerCategoryOrders();
+                  customerOrders[customer] ?? emptyCustomerGroupOrders();
                 return (
                   <tr
                     key={customer}
@@ -120,10 +120,10 @@ export function PrimalCustomerChart({
                     </td>
                     {columns.map((col) => (
                       <OrderCell
-                        key={col.category}
-                        value={orders[col.category]}
-                        ariaLabel={`${customer} ${col.category} order`}
-                        onChange={(v) => onChange(customer, col.category, v)}
+                        key={col.group}
+                        value={orders[col.group]}
+                        ariaLabel={`${customer} ${col.label} order`}
+                        onChange={(v) => onChange(customer, col.group, v)}
                       />
                     ))}
                   </tr>
@@ -138,7 +138,7 @@ export function PrimalCustomerChart({
                 </td>
                 {columns.map((col) => (
                   <td
-                    key={col.category}
+                    key={col.group}
                     className={clsx(
                       "px-2 py-2.5",
                       col.remaining < 0 ? "text-red-600" : "text-emerald-600",

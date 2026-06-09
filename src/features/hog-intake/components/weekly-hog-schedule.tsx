@@ -181,7 +181,7 @@ export function WeeklyHogSchedule() {
                           Math.max(0, Math.floor(Number(e.target.value) || 0)),
                         )
                       }
-                      className="w-20 rounded-md border border-transparent bg-transparent px-2 py-1 text-center font-bold tabular-nums text-slate-900 hover:border-slate-200 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="w-20 appearance-none rounded-md border border-transparent bg-transparent px-2 py-1 text-center font-bold tabular-nums text-slate-900 hover:border-slate-200 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"
                     />
                   </td>
                 ))}

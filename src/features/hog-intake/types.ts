@@ -11,11 +11,18 @@ export const HOG_TYPES = [
 
 export type HogType = (typeof HOG_TYPES)[number];
 
-// Subset of HOG_TYPES that contribute to yield_total.
-// Sow / Round / Suckling / Customer are intentionally excluded — Sow is
-// tracked for reference only and never counts toward any total.
-export const YIELD_HOG_TYPES = ["JP", "RWA", "BK"] as const;
+// Subset of HOG_TYPES that contribute to yield_total (Primal Calc).
+// BK / Sow / Round / Suckling / Customer are intentionally excluded — they are
+// tracked but never count toward the yield total.
+export const YIELD_HOG_TYPES = ["JP", "RWA"] as const;
 export type YieldHogType = (typeof YIELD_HOG_TYPES)[number];
+
+// Hog types whose grid counts roll up from Farm Delivery Records (read-only).
+// Only the Primal Calc hogs (JP / RWA) are tracked per-farm with tattoos, so
+// deliveries are their single entry point. Every other type (BK / Sow / Round /
+// Suckling / Customer) is entered manually on its own card.
+export const FARM_DERIVED_HOG_TYPES = ["JP", "RWA"] as const;
+export type FarmDerivedHogType = (typeof FARM_DERIVED_HOG_TYPES)[number];
 
 export type HogCounts = Record<HogType, number>;
 

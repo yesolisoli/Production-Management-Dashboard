@@ -17,6 +17,39 @@ export const PRIMAL_CATEGORIES = [
 
 export type PrimalCategory = (typeof PRIMAL_CATEGORIES)[number];
 
+// -------------------------------------------------------------------
+// Production groups — categories that come off the same primal cut share
+// ONE production pool, so quantity (expected production, availability,
+// Calculated O/S, carry-over, customer reservations) is computed per group,
+// never per category. Order entry and per-type display stay at the category
+// level. Most groups are a single category; Spareribs + Ribbons/Ribs come
+// off the same rib cut, so they form one "Ribs" group.
+// -------------------------------------------------------------------
+export type PrimalGroup = {
+  key: string;
+  label: string;
+  categories: readonly PrimalCategory[];
+};
+
+export const PRIMAL_GROUPS = [
+  { key: "Butts", label: "Butts", categories: ["Butts"] },
+  { key: "Legs", label: "Legs", categories: ["Legs"] },
+  { key: "Loins", label: "Loins", categories: ["Loins"] },
+  { key: "Ribs", label: "Ribs", categories: ["Spareribs", "Ribbons/Ribs"] },
+  { key: "Picnic", label: "Picnic", categories: ["Picnic"] },
+] as const satisfies readonly PrimalGroup[];
+
+export type PrimalGroupKey = (typeof PRIMAL_GROUPS)[number]["key"];
+
+// The group a category belongs to. Every category is in exactly one group.
+export function groupForCategory(category: PrimalCategory): PrimalGroup {
+  const group = PRIMAL_GROUPS.find((g) =>
+    (g.categories as readonly PrimalCategory[]).includes(category),
+  );
+  if (!group) throw new Error(`No primal group for category ${category}`);
+  return group;
+}
+
 // Centralized product definition. Lives in product-specs.ts; the UI never
 // hardcodes any of these values.
 export type ProductSpec = {
@@ -58,21 +91,22 @@ export type ProductOrdersForDate = Record<string, ProductOrder>;
 export type PrimalOrdersByDate = Record<string, ProductOrdersForDate>;
 
 // -------------------------------------------------------------------
-// Calculated Today's O/S — saved per date, per category (in pieces).
+// Calculated Today's O/S — saved per date, per production group (pieces).
 //
 // O/S is DERIVED from the Availability Chart (Available Stock − Customer
-// Orders) at the category level — production comes from whole hogs, not
-// per SKU, so there is no per-SKU O/S. On Save the computed figure is
-// persisted here; opening the next production date loads the previous
-// saved date's values as that day's Yesterday O/S (the carry-over).
-//   { "YYYY-MM-DD": { "<category>": pcs } }
+// Orders) at the group level — production comes from whole hogs, not per
+// SKU, so there is no per-SKU O/S, and pooled cuts (Ribs) share one figure.
+// On Save the computed figure is persisted here; opening the next
+// production date loads the previous saved date's values as that day's
+// Yesterday O/S (the carry-over).
+//   { "YYYY-MM-DD": { "<group>": pcs } }
 // -------------------------------------------------------------------
-export type OverstockByCategory = Record<PrimalCategory, number>;
-export type OverstockByDate = Record<string, OverstockByCategory>;
+export type OverstockByGroup = Record<PrimalGroupKey, number>;
+export type OverstockByDate = Record<string, OverstockByGroup>;
 
-export function emptyOverstockByCategory(): OverstockByCategory {
-  const out = {} as OverstockByCategory;
-  for (const category of PRIMAL_CATEGORIES) out[category] = 0;
+export function emptyOverstockByGroup(): OverstockByGroup {
+  const out = {} as OverstockByGroup;
+  for (const group of PRIMAL_GROUPS) out[group.key] = 0;
   return out;
 }
 
@@ -85,9 +119,11 @@ export function emptyOverstockByCategory(): OverstockByCategory {
 // -------------------------------------------------------------------
 export type AvailabilityStatus = "OK" | "Short" | "Low Reserve";
 
-export type CategoryAvailability = {
-  category: PrimalCategory;
-  expectedProduction: number; // expected pieces from today's hog intake
+export type GroupAvailability = {
+  group: PrimalGroupKey;
+  label: string;
+  categories: readonly PrimalCategory[];
+  expectedProduction: number; // expected pieces from today's hog intake (per group, once)
   yesterdayOverstock: number; // cooler O/S carried in from yesterday
   specialCustomerOrders: number; // orders from the Customer Availability chart (above)
   availableStock: number; // expProd + yesterdayOverstock − specialCustomerOrders
@@ -135,29 +171,27 @@ export const PRIMAL_CUSTOMERS = [
 
 export type PrimalCustomer = (typeof PRIMAL_CUSTOMERS)[number];
 
-// One customer's order pieces per category.
-export type CustomerCategoryOrders = Record<PrimalCategory, number>;
+// One customer's order pieces per production group. Pooled cuts (Ribs) take a
+// single reservation rather than one per type, matching how production is
+// shared.
+export type CustomerGroupOrders = Record<PrimalGroupKey, number>;
 
 // Persisted save shape: { "YYYY-MM-DD": { "<customer>": { Butts: n, ... } } }
-export type CustomerOrdersForDate = Record<string, CustomerCategoryOrders>;
+export type CustomerOrdersForDate = Record<string, CustomerGroupOrders>;
 export type CustomerOrdersByDate = Record<string, CustomerOrdersForDate>;
 
-export function emptyCustomerCategoryOrders(): CustomerCategoryOrders {
-  return {
-    Butts: 0,
-    Legs: 0,
-    Loins: 0,
-    Spareribs: 0,
-    "Ribbons/Ribs": 0,
-    Picnic: 0,
-  };
+export function emptyCustomerGroupOrders(): CustomerGroupOrders {
+  const out = {} as CustomerGroupOrders;
+  for (const group of PRIMAL_GROUPS) out[group.key] = 0;
+  return out;
 }
 
-// Derived per-category column for the customer chart: Available Stock,
-// the summed customer orders against it, and what remains after subtracting.
+// Derived per-group column for the customer chart: Available Stock, the summed
+// customer orders against it, and what remains after subtracting.
 export type CustomerAvailabilityColumn = {
-  category: PrimalCategory;
+  group: PrimalGroupKey;
+  label: string;
   availableStock: number; // from the Availability Chart (production + cooler O/S)
-  ordered: number; // sum of all customers' orders for this category
+  ordered: number; // sum of all customers' orders for this group
   remaining: number; // availableStock - ordered (may go negative)
 };

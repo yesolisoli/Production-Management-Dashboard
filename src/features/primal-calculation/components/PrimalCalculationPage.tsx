@@ -27,7 +27,13 @@ import {
   type OverstockPushResult,
 } from "../cooler-inventory";
 import { specsForCategory } from "../product-specs";
-import { PRIMAL_CATEGORIES, type PrimalCategory } from "../types";
+import {
+  PRIMAL_CATEGORIES,
+  PRIMAL_GROUPS,
+  type PrimalCategory,
+  type PrimalGroup,
+  type PrimalGroupKey,
+} from "../types";
 import { usePrimalCalculationState } from "../hooks/use-primal-calculation-state";
 import {
   PrimalAvailabilityChart,
@@ -35,11 +41,13 @@ import {
 } from "./PrimalAvailabilityChart";
 import { PrimalCsvImportModal } from "./PrimalCsvImportModal";
 import { PrimalCustomerChart } from "./PrimalCustomerChart";
+import { PrimalNextDayProjection } from "./PrimalNextDayProjection";
 import {
-  categorySlug,
-  PrimalCategorySection,
+  primalGroupSlug,
+  PrimalGroupSection,
   type CategorySkuRow,
-} from "./PrimalCategorySection";
+  type GroupCategoryRows,
+} from "./PrimalGroupSection";
 import { PrimalTotalsBar } from "./PrimalTotalsBar";
 
 export function PrimalCalculationPage() {
@@ -51,9 +59,10 @@ export function PrimalCalculationPage() {
     saveState,
     setDate,
     setOrderField,
-    bumpCategoryCases,
-    clearCategory,
-    saveCategory,
+    setNextDayField,
+    bumpGroupCases,
+    clearGroup,
+    saveGroup,
     saveAll,
     applyImportedOrders,
     customerOrders,
@@ -101,6 +110,30 @@ export function PrimalCalculationPage() {
     return map;
   }, [orders]);
 
+  // Per-group view model: each group's per-category subgroups (rows + per-type
+  // totals) plus the combined Today totals shown in the group header.
+  const groupData = useMemo(
+    () =>
+      PRIMAL_GROUPS.map((group) => {
+        const categoryRows: GroupCategoryRows[] = group.categories.map(
+          (category) => ({
+            category,
+            rows: rowsByCategory[category],
+            totals: categoryTotalsMap[category],
+          }),
+        );
+        const groupTotals = categoryRows.reduce(
+          (acc, c) => ({
+            today_cases: acc.today_cases + c.totals.today_cases,
+            today_pcs: acc.today_pcs + c.totals.today_pcs,
+          }),
+          { today_cases: 0, today_pcs: 0 },
+        );
+        return { group, categoryRows, groupTotals };
+      }),
+    [rowsByCategory, categoryTotalsMap],
+  );
+
   const totals = useMemo(() => globalTotals(orders), [orders]);
   const intakeTotals = useMemo(() => deriveTotals(intake), [intake]);
 
@@ -116,11 +149,11 @@ export function PrimalCalculationPage() {
     [availabilityRows],
   );
 
-  // Calculated Today's O/S per category (pieces) — the figure shown read-only
-  // in each SKU section and pushed to the cooler.
-  const overstockByCategory = useMemo(() => {
-    const map = {} as Record<PrimalCategory, number>;
-    for (const row of availabilityRows) map[row.category] = row.todaysOverstock;
+  // Calculated Today's O/S per group (pieces) — the figure shown read-only in
+  // each group section and pushed to the cooler.
+  const overstockByGroup = useMemo(() => {
+    const map = {} as Record<PrimalGroupKey, number>;
+    for (const row of availabilityRows) map[row.group] = row.todaysOverstock;
     return map;
   }, [availabilityRows]);
 
@@ -131,15 +164,15 @@ export function PrimalCalculationPage() {
     [availabilityRows],
   );
 
-  const handleToggle = (category: PrimalCategory) =>
-    setExpanded((prev) => ({ ...prev, [category]: !prev[category] }));
+  const handleToggle = (groupKey: PrimalGroupKey) =>
+    setExpanded((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
 
-  const handleTabClick = (category: PrimalCategory) => {
-    setExpanded((prev) => ({ ...prev, [category]: true }));
+  const handleTabClick = (group: PrimalGroup) => {
+    setExpanded((prev) => ({ ...prev, [group.key]: true }));
     // Defer scroll until the section has expanded.
     requestAnimationFrame(() => {
       document
-        .getElementById(`primal-cat-${categorySlug(category)}`)
+        .getElementById(`primal-group-${primalGroupSlug(group.key)}`)
         ?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
@@ -149,13 +182,13 @@ export function PrimalCalculationPage() {
     try {
       const result: OverstockPushResult = await pushOverstockToCooler(
         date,
-        overstockByCategory,
+        overstockByGroup,
       );
       setConfirmPush(false);
       setToast(
         result.lines.length === 0
           ? "No overstock to push."
-          : `Pushed ${result.totalPcs} pcs across ${result.lines.length} categories to Cooler Inventory.`,
+          : `Pushed ${result.totalPcs} pcs across ${result.lines.length} groups to Cooler Inventory.`,
       );
     } finally {
       setPushing(false);
@@ -218,18 +251,26 @@ export function PrimalCalculationPage() {
             minReserve={DEFAULT_MIN_COOLER_RESERVE}
           />
 
-          {/* Category tabs */}
+          <PrimalNextDayProjection
+            nextDay={intake.next_day}
+            onChange={setNextDayField}
+          />
+
+          {/* Group tabs */}
           <div className="flex flex-wrap gap-2">
-            {PRIMAL_CATEGORIES.map((category) => (
+            {PRIMAL_GROUPS.map((group) => (
               <button
-                key={category}
+                key={group.key}
                 type="button"
-                onClick={() => handleTabClick(category)}
+                onClick={() => handleTabClick(group)}
                 className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
               >
-                {category}
+                {group.label}
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
-                  {specsForCategory(category).length}
+                  {group.categories.reduce(
+                    (sum, c) => sum + specsForCategory(c).length,
+                    0,
+                  )}
                 </span>
               </button>
             ))}
@@ -244,27 +285,27 @@ export function PrimalCalculationPage() {
             </button>
           </div>
 
-          {/* Category sections */}
-          {PRIMAL_CATEGORIES.map((category) => (
-            <PrimalCategorySection
-              key={category}
-              category={category}
-              rows={rowsByCategory[category]}
-              totals={categoryTotalsMap[category]}
-              calculatedOverstockPcs={overstockByCategory[category]}
-              expanded={!!expanded[category]}
-              onToggle={() => handleToggle(category)}
+          {/* Group sections */}
+          {groupData.map(({ group, categoryRows, groupTotals }) => (
+            <PrimalGroupSection
+              key={group.key}
+              group={group}
+              categoryRows={categoryRows}
+              groupTotals={groupTotals}
+              calculatedOverstockPcs={overstockByGroup[group.key]}
+              expanded={!!expanded[group.key]}
+              onToggle={() => handleToggle(group.key)}
               activeSku={activeSku}
               onRowFocus={setActiveSku}
               onChangeField={setOrderField}
-              onBumpCases={(delta) => bumpCategoryCases(category, delta)}
-              onClear={() => clearCategory(category)}
-              onSave={() => void saveCategory(category)}
+              onBumpCases={(delta) => bumpGroupCases(group, delta)}
+              onClear={() => clearGroup(group)}
+              onSave={() => void saveGroup(group)}
               saving={
-                saveState.kind === "saving" && saveState.scope === category
+                saveState.kind === "saving" && saveState.scope === group.key
               }
               justSaved={
-                saveState.kind === "saved" && saveState.scope === category
+                saveState.kind === "saved" && saveState.scope === group.key
               }
             />
           ))}

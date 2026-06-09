@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { AUTH_ENABLED } from "@/lib/config";
-import { clampNonNegativeInt } from "../calculations";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getCurrentUserId } from "@/lib/supabase/current-user";
+import {
+  clampNonNegativeInt,
+  derivedCountsFromFarmRecords,
+} from "../calculations";
 import { clearDraft, readDraft, writeDraft } from "../draft-storage";
 import { fetchHogIntakeByDate, upsertHogIntakeRecord } from "../supabase";
 import {
@@ -11,6 +13,7 @@ import {
   emptyHogIntakeRecord,
   isEmptyHogIntakeRecord,
   type FarmRecord,
+  type HogCounts,
   type HogIntakeRecord,
   type HogType,
 } from "../types";
@@ -21,19 +24,6 @@ function todayString(): string {
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-async function getCurrentUserId(): Promise<string | null> {
-  if (!AUTH_ENABLED) return null;
-  try {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user?.id ?? null;
-  } catch {
-    return null;
-  }
 }
 
 export type SaveStatus =
@@ -142,6 +132,18 @@ export function useHogIntakeState() {
     writeDraft(date, record);
     setDirty(true);
   }, [date, record]);
+
+  // Primal hogs (JP / RWA) are derived from Farm Delivery Records — deliveries
+  // are their single entry point — and override the stored values. Every other
+  // type (BK / Sow / Round / Suckling / Customer) stays manual, passing through
+  // from the record's own hog_counts.
+  const hogCounts = useMemo<HogCounts>(
+    () => ({
+      ...record.hog_counts,
+      ...derivedCountsFromFarmRecords(record.farm_records),
+    }),
+    [record.hog_counts, record.farm_records],
+  );
 
   const setDate = useCallback(
     (nextDate: string) => {
@@ -255,7 +257,12 @@ export function useHogIntakeState() {
     setStatus({ kind: "saving" });
     try {
       const userId = await getCurrentUserId();
-      const saved = await upsertHogIntakeRecord(record, userId);
+      // Persist the derived counts so downstream readers (Primal Calc reads
+      // hog_counts from the DB) see the same totals shown on screen.
+      const saved = await upsertHogIntakeRecord(
+        { ...record, hog_counts: hogCounts },
+        userId,
+      );
       clearDraft(saved.date);
       // The post-save setRecord must not re-create a draft for the row
       // we just cleared.
@@ -269,11 +276,12 @@ export function useHogIntakeState() {
         message: err instanceof Error ? err.message : "Failed to save",
       });
     }
-  }, [record]);
+  }, [record, hogCounts]);
 
   return {
     date,
     record,
+    hogCounts,
     status,
     dirty,
     setDate,

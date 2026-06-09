@@ -16,6 +16,7 @@ import type { HogIntakeTotals } from "../calculations";
 type SummaryPanelProps = {
   totals: HogIntakeTotals;
   sideOrders: number;
+  onChangeSideOrders: (value: number) => void;
   sowAvailable: number;
   sowScheduled: number;
   onChangeSowAvailable: (value: number) => void;
@@ -33,6 +34,7 @@ const TONES: Record<Tone, { chipBg: string; chipFg: string }> = {
 export function SummaryPanel({
   totals,
   sideOrders,
+  onChangeSideOrders,
   sowAvailable,
   sowScheduled,
   onChangeSowAvailable,
@@ -41,8 +43,9 @@ export function SummaryPanel({
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <IntakeSummaryCard
-        totalIntake={totals.totalHogs}
+        totalIntake={totals.totalIntake}
         sideOrders={sideOrders}
+        onChangeSideOrders={onChangeSideOrders}
         forCutting={totals.forCutting}
         overSold={totals.overSold}
       />
@@ -95,21 +98,27 @@ function CardShell({
 function IntakeSummaryCard({
   totalIntake,
   sideOrders,
+  onChangeSideOrders,
   forCutting,
   overSold,
 }: {
   totalIntake: number;
   sideOrders: number;
+  onChangeSideOrders: (value: number) => void;
   forCutting: number;
   overSold: boolean;
 }) {
   return (
     <CardShell label="Intake Summary" tone="blue" icon={ClipboardList}>
-      <dl className="mt-2 space-y-1.5">
+      <div className="mt-2 space-y-1.5">
         <FlowRow label="Total Intake" value={totalIntake} />
-        <FlowRow label="Side Orders" value={sideOrders} />
+        <StepperRow
+          label="Side Orders"
+          value={sideOrders}
+          onChange={onChangeSideOrders}
+        />
         <FlowRow label="For Cutting Today" value={forCutting} danger={overSold} />
-      </dl>
+      </div>
     </CardShell>
   );
 }
@@ -130,41 +139,47 @@ function FlowRow({
   prefix?: string;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-2">
-      <dt
+    <div className="flex items-center justify-between gap-2">
+      <span
         className={clsx(
           "text-sm",
           emphasis ? "font-semibold text-slate-700" : "text-slate-500",
         )}
       >
         {label}
-      </dt>
-      <dd
-        className={clsx(
-          "tabular-nums",
-          emphasis ? "text-2xl font-extrabold leading-none" : "text-lg font-bold",
-          danger
-            ? "text-rose-600"
-            : muted
-              ? "text-slate-400"
-              : "text-slate-900",
-        )}
-      >
-        {prefix}
-        {value.toLocaleString()}
-      </dd>
+      </span>
+      {/* Spacers mirror the stepper rows' -/+ buttons so values share the
+          same centered number column. */}
+      <div className="flex items-center gap-1.5">
+        <span className="h-7 w-7" aria-hidden />
+        <span
+          className={clsx(
+            "w-12 text-center tabular-nums",
+            emphasis ? "text-2xl font-extrabold leading-none" : "text-xl font-bold",
+            danger
+              ? "text-rose-600"
+              : muted
+                ? "text-slate-400"
+                : "text-slate-900",
+          )}
+        >
+          {prefix}
+          {value.toLocaleString()}
+        </span>
+        <span className="h-7 w-7" aria-hidden />
+      </div>
     </div>
   );
 }
 
 function PrimalCalcCard({ value }: { value: number }) {
   return (
-    <CardShell label="Primal Calc (JP + RWA + BK)" tone="violet" icon={Award}>
+    <CardShell label="Primal Calc (JP + RWA)" tone="violet" icon={Award}>
       <p className="mt-2 text-3xl font-extrabold tabular-nums leading-none text-slate-900">
         {value.toLocaleString()}
       </p>
       <p className="mt-2 text-[11px] leading-snug text-slate-400">
-        JP + RWA + BK only. Sow, Round, Suckling, and Customer hogs excluded.
+        JP + RWA only. BK, Sow, Round, Suckling, and Customer hogs excluded.
       </p>
     </CardShell>
   );
@@ -185,22 +200,32 @@ function SowProcessingCard({
   return (
     <CardShell label="Sow Availability" tone="rose" icon={PiggyBank}>
       <div className="mt-2 space-y-2">
-        <SowStepperRow
+        <StepperRow
           label="Available This Week"
           value={available}
           onChange={onChangeAvailable}
         />
-        <SowStepperRow
+        <StepperRow
           label="Scheduled For Today"
           value={scheduled}
           onChange={onChangeScheduled}
         />
+        <div className="-mt-1 flex items-center justify-between gap-2 border-t border-slate-100 pt-1">
+          <span className="text-sm text-slate-500">Remaining After Schedule</span>
+          <div className="flex items-center gap-1.5">
+            <span className="h-7 w-7" aria-hidden />
+            <span className="w-12 text-center text-xl font-extrabold tabular-nums text-slate-900">
+              {Math.max(0, available - scheduled).toLocaleString()}
+            </span>
+            <span className="h-7 w-7" aria-hidden />
+          </div>
+        </div>
       </div>
     </CardShell>
   );
 }
 
-function SowStepperRow({
+function StepperRow({
   label,
   value,
   onChange,

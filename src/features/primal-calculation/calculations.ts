@@ -10,15 +10,17 @@ import {
 } from "./product-specs";
 import {
   emptyProductOrder,
-  PRIMAL_CATEGORIES,
+  PRIMAL_GROUPS,
   type AvailabilityStatus,
   type AvailabilityTotals,
-  type CategoryAvailability,
   type CustomerAvailabilityColumn,
   type CustomerOrdersForDate,
+  type GroupAvailability,
   type OrderField,
-  type OverstockByCategory,
+  type OverstockByGroup,
   type PrimalCategory,
+  type PrimalGroup,
+  type PrimalGroupKey,
   type ProductOrder,
   type ProductOrdersForDate,
   type ProductSpec,
@@ -33,13 +35,13 @@ export { clampNonNegativeInt };
 // display-only splits of the same yield hogs that feed Expected
 // Production (yieldTotal); no calculation branches on them.
 //
-//   Regular = JP + RWA + BK · Sow = the Sow count (reference only).
+//   Regular = JP + RWA · Sow = the Sow count (reference only).
 //
-// Sow / Round / Suckling / Customer are excluded from yield entirely,
+// BK / Sow / Round / Suckling / Customer are excluded from yield entirely,
 // matching the YIELD_HOG_TYPES contract in the hog-intake module.
 // -------------------------------------------------------------------
 export function regularHogCount(counts: HogCounts): number {
-  return counts.JP + counts.RWA + counts.BK;
+  return counts.JP + counts.RWA;
 }
 
 export function sowHogCount(counts: HogCounts): number {
@@ -48,7 +50,7 @@ export function sowHogCount(counts: HogCounts): number {
 
 // Shared production primitive: expected pieces = base hog count ×
 // multiplier, floored to whole pieces. The Availability Chart's
-// categoryExpectedProduction is the only caller; it passes the intake's
+// groupExpectedProduction is the only caller; it passes the intake's
 // Yield Total as the base hog count.
 export function calculateExpectedProduction(
   baseHogCount: number,
@@ -118,18 +120,19 @@ export const PRIMAL_PIECES_PER_HOG = PIECES_PER_HOG;
 
 // Expected production for a whole category, derived straight from hog
 // intake. The single source of truth is the intake's yieldTotal
-// (JP + RWA + BK) — the same figure the Hog Intake screen reports — so the
+// (JP + RWA) — the same figure the Hog Intake screen reports — so the
 // chart never recomputes availability separately from the regular counts.
 // Sow is excluded from yield, so it never affects production. Every category
 // therefore starts at yieldTotal × pieces-per-hog (e.g. 136 × 2 = 272).
 //
-// `category` is accepted so a future business rule can exclude a category
-// from a hog pool; with no such rule today, every category shares the base.
-export function categoryExpectedProduction(
-  category: PrimalCategory,
+// `group` is accepted so a future business rule can give a group a different
+// hog pool; with no such rule today, every group shares the same base. Each
+// group counts the pool ONCE — so pooled cuts (Ribs) don't double-count.
+export function groupExpectedProduction(
+  group: PrimalGroup,
   counts: HogCounts,
 ): number {
-  void category;
+  void group;
   return calculateExpectedProduction(yieldTotal(counts), PRIMAL_PIECES_PER_HOG);
 }
 
@@ -163,20 +166,22 @@ export function calculateAvailabilityStatus(
 //   2. Customer Orders — today's pieces from the per-SKU sections below
 //      → leaves Today's Overstock (carries into tomorrow).
 // -------------------------------------------------------------------
-export function buildCategoryAvailability(
-  category: PrimalCategory,
+export function buildGroupAvailability(
+  group: PrimalGroup,
   specialCustomerOrders: number,
   customerOrders: number,
   counts: HogCounts,
   yesterdayOverstock: number,
   minReserve: number,
-): CategoryAvailability {
-  const expectedProduction = categoryExpectedProduction(category, counts);
+): GroupAvailability {
+  const expectedProduction = groupExpectedProduction(group, counts);
   const availableStock =
     expectedProduction + yesterdayOverstock - specialCustomerOrders;
   const todaysOverstock = availableStock - customerOrders;
   return {
-    category,
+    group: group.key as PrimalGroupKey,
+    label: group.label,
+    categories: group.categories,
     expectedProduction,
     yesterdayOverstock,
     specialCustomerOrders,
@@ -192,53 +197,59 @@ export function buildAvailabilityRows(
   orders: ProductOrdersForDate,
   counts: HogCounts,
   customerOrders: CustomerOrdersForDate,
-  // Yesterday's O/S carried in per category — the previous saved date's
+  // Yesterday's O/S carried in per group — the previous saved date's
   // calculated O/S (see readPreviousOverstock). Supplied by the hook so
   // this stays a pure derivation with no storage reads.
-  yesterdayOverstock: OverstockByCategory,
+  yesterdayOverstock: OverstockByGroup,
   minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
-): CategoryAvailability[] {
-  const specialByCategory = sumCustomerOrdersByCategory(customerOrders);
-  return PRIMAL_CATEGORIES.map((category) =>
-    buildCategoryAvailability(
-      category,
-      specialByCategory[category],
-      categoryTotals(category, orders).today_pcs,
+): GroupAvailability[] {
+  const specialByGroup = sumCustomerOrdersByGroup(customerOrders);
+  return PRIMAL_GROUPS.map((group) => {
+    // Today's order pieces are pooled across every category in the group, so
+    // a shared cut (Ribs) subtracts both types' orders from its one pool.
+    const customerOrdersPcs = group.categories.reduce(
+      (sum, category) => sum + categoryTotals(category, orders).today_pcs,
+      0,
+    );
+    return buildGroupAvailability(
+      group,
+      specialByGroup[group.key],
+      customerOrdersPcs,
       counts,
-      yesterdayOverstock[category],
+      yesterdayOverstock[group.key],
       minReserve,
-    ),
-  );
+    );
+  });
 }
 
 // -------------------------------------------------------------------
-// Customer availability — sum each category's customer orders and
-// subtract from that category's Available Stock. Pure derivation from
-// the Availability Chart rows + the raw customer-order matrix.
+// Customer availability — sum each group's customer orders and subtract
+// from that group's Available Stock. Pure derivation from the Availability
+// Chart rows + the raw customer-order matrix.
 // -------------------------------------------------------------------
-export function sumCustomerOrdersByCategory(
+export function sumCustomerOrdersByGroup(
   customerOrders: CustomerOrdersForDate,
-): Record<PrimalCategory, number> {
-  const totals = {} as Record<PrimalCategory, number>;
-  for (const category of PRIMAL_CATEGORIES) totals[category] = 0;
-  for (const perCategory of Object.values(customerOrders)) {
-    for (const category of PRIMAL_CATEGORIES) {
-      totals[category] += clampNonNegativeInt(perCategory?.[category] ?? 0);
+): Record<PrimalGroupKey, number> {
+  const totals = {} as Record<PrimalGroupKey, number>;
+  for (const group of PRIMAL_GROUPS) totals[group.key] = 0;
+  for (const perGroup of Object.values(customerOrders)) {
+    for (const group of PRIMAL_GROUPS) {
+      totals[group.key] += clampNonNegativeInt(perGroup?.[group.key] ?? 0);
     }
   }
   return totals;
 }
 
-// Build one column per category: its Available Stock and the total
-// ordered across all customers (already summed into the availability
-// row's customerOrders), and the remaining stock after subtracting.
-// Remaining may go negative when orders exceed stock — the chart
-// surfaces that as a shortfall.
+// Build one column per group: its Available Stock and the total ordered
+// across all customers (already summed into the availability row's
+// customerOrders), and the remaining stock after subtracting. Remaining may
+// go negative when orders exceed stock — the chart surfaces that as a shortfall.
 export function buildCustomerAvailability(
-  availabilityRows: CategoryAvailability[],
+  availabilityRows: GroupAvailability[],
 ): CustomerAvailabilityColumn[] {
   return availabilityRows.map((row) => ({
-    category: row.category,
+    group: row.group,
+    label: row.label,
     // Totals Available (gross) = expected production + yesterday's overstock.
     availableStock: row.expectedProduction + row.yesterdayOverstock,
     ordered: row.specialCustomerOrders,
@@ -247,7 +258,7 @@ export function buildCustomerAvailability(
 }
 
 export function sumAvailability(
-  rows: CategoryAvailability[],
+  rows: GroupAvailability[],
 ): AvailabilityTotals {
   return rows.reduce<AvailabilityTotals>(
     (acc, row) => ({

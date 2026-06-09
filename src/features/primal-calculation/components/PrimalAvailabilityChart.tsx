@@ -16,7 +16,7 @@ import {
 import type {
   AvailabilityStatus,
   AvailabilityTotals,
-  CategoryAvailability,
+  GroupAvailability,
 } from "../types";
 
 // Top-of-page KPI strip — the four headline figures from the availability
@@ -61,7 +61,7 @@ export function PrimalAvailabilityKpis({
 }
 
 type PrimalAvailabilityChartProps = {
-  rows: CategoryAvailability[];
+  rows: GroupAvailability[];
   totals: AvailabilityTotals;
   minReserve: number;
 };
@@ -126,7 +126,7 @@ export function PrimalAvailabilityChart({
           {shortCount === 0 && lowReserveCount === 0 && (
             <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-600">
               <CheckCircle2 size={12} />
-              All categories OK
+              All groups OK
             </span>
           )}
         </div>
@@ -138,7 +138,7 @@ export function PrimalAvailabilityChart({
         <table className="w-full min-w-225 border-collapse text-sm">
           <thead>
             <tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-2.5">Category</th>
+              <th className="px-4 py-2.5">Group</th>
               <th className="px-2 py-2.5 text-right">Exp. Production</th>
               <th className="px-2 py-2.5 text-right">Yesterday O/S</th>
               <th className="px-2 py-2.5 text-right">Customer Reservations</th>
@@ -151,7 +151,7 @@ export function PrimalAvailabilityChart({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((row) => (
-              <AvailabilityRow key={row.category} row={row} />
+              <AvailabilityRow key={row.group} row={row} />
             ))}
           </tbody>
           <tfoot>
@@ -253,7 +253,7 @@ function KpiCard({
   );
 }
 
-function AvailabilityRow({ row }: { row: CategoryAvailability }) {
+function AvailabilityRow({ row }: { row: GroupAvailability }) {
   const short = row.status === "Short";
   const lowReserve = row.status === "Low Reserve";
   return (
@@ -268,7 +268,7 @@ function AvailabilityRow({ row }: { row: CategoryAvailability }) {
       )}
     >
       <td className="px-4 py-2.5 text-left font-semibold text-slate-800">
-        {row.category}
+        {row.label}
       </td>
       <td className="px-2 py-2.5 text-slate-600">
         {row.expectedProduction.toLocaleString()}
