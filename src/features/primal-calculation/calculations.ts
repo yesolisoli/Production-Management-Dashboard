@@ -10,14 +10,16 @@ import {
 } from "./product-specs";
 import {
   emptyProductOrder,
+  groupForCategory,
   PRIMAL_GROUPS,
   type AvailabilityStatus,
   type AvailabilityTotals,
   type CustomerAvailabilityColumn,
   type CustomerOrdersForDate,
+  type CustomRowsForDate,
+  type EndingStockByGroup,
   type GroupAvailability,
   type OrderField,
-  type OverstockByGroup,
   type PrimalCategory,
   type PrimalGroup,
   type PrimalGroupKey,
@@ -35,17 +37,14 @@ export { clampNonNegativeInt };
 // display-only splits of the same yield hogs that feed Expected
 // Production (yieldTotal); no calculation branches on them.
 //
-//   Regular = JP + RWA · Sow = the Sow count (reference only).
+//   Primal Total = JP + RWA (the Sow figure shown in the banner comes from
+//   the intake's sow_scheduled — today's Sow slated for processing).
 //
 // BK / Sow / Round / Suckling / Customer are excluded from yield entirely,
 // matching the YIELD_HOG_TYPES contract in the hog-intake module.
 // -------------------------------------------------------------------
-export function regularHogCount(counts: HogCounts): number {
+export function primalTotalHogCount(counts: HogCounts): number {
   return counts.JP + counts.RWA;
-}
-
-export function sowHogCount(counts: HogCounts): number {
-  return counts.Sow;
 }
 
 // Shared production primitive: expected pieces = base hog count ×
@@ -136,22 +135,22 @@ export function groupExpectedProduction(
   return calculateExpectedProduction(yieldTotal(counts), PRIMAL_PIECES_PER_HOG);
 }
 
-// Available stock = expected production + existing cooler overstock.
+// Available stock = expected production + opening stock carried in.
 export function calculateAvailableStock(
   expectedProduction: number,
-  coolerOverstock: number,
+  openingStock: number,
 ): number {
-  return expectedProduction + coolerOverstock;
+  return expectedProduction + openingStock;
 }
 
-// Status from today's ending overstock: negative means total demand
-// couldn't be met (Short); positive-but-thin drops below the reserve.
+// Status from today's ending stock: negative means total demand couldn't
+// be met (Short); positive-but-thin drops below the reserve.
 export function calculateAvailabilityStatus(
-  todaysOverstock: number,
+  endingStock: number,
   minReserve: number,
 ): AvailabilityStatus {
-  if (todaysOverstock < 0) return "Short";
-  if (todaysOverstock < minReserve) return "Low Reserve";
+  if (endingStock < 0) return "Short";
+  if (endingStock < minReserve) return "Low Reserve";
   return "OK";
 }
 
@@ -160,63 +159,85 @@ export function calculateAvailabilityStatus(
 // totals the chart renders. All derived; nothing here is stored.
 //
 // Two order streams are subtracted in sequence from the gross supply
-// (expected production + yesterday's overstock):
+// (expected production + opening stock):
 //   1. Special Customer Orders — from the Customer Availability chart
 //      (the per-customer matrix above) → leaves Available Stock.
-//   2. Customer Orders — today's pieces from the per-SKU sections below
-//      → leaves Today's Overstock (carries into tomorrow).
+//   2. Sales Orders — today's pieces from the per-SKU sections below
+//      → leaves Ending Stock (carries into tomorrow).
 // -------------------------------------------------------------------
 export function buildGroupAvailability(
   group: PrimalGroup,
   specialCustomerOrders: number,
-  customerOrders: number,
+  salesOrders: number,
   counts: HogCounts,
-  yesterdayOverstock: number,
+  openingStock: number,
   minReserve: number,
 ): GroupAvailability {
   const expectedProduction = groupExpectedProduction(group, counts);
   const availableStock =
-    expectedProduction + yesterdayOverstock - specialCustomerOrders;
-  const todaysOverstock = availableStock - customerOrders;
+    expectedProduction + openingStock - specialCustomerOrders;
+  const endingStock = availableStock - salesOrders;
   return {
     group: group.key as PrimalGroupKey,
     label: group.label,
     categories: group.categories,
     expectedProduction,
-    yesterdayOverstock,
+    openingStock,
     specialCustomerOrders,
     availableStock,
-    customerOrders,
-    todaysOverstock,
-    shortage: Math.max(-todaysOverstock, 0),
-    status: calculateAvailabilityStatus(todaysOverstock, minReserve),
+    salesOrders,
+    endingStock,
+    shortage: Math.max(-endingStock, 0),
+    status: calculateAvailabilityStatus(endingStock, minReserve),
   };
+}
+
+// Sum manually added (custom) rows' today pieces into their owning group.
+// Each custom row's category resolves to exactly one group, so a Ribs custom
+// row pools into the shared Ribs production just like a catalog row.
+export function sumCustomRowsByGroup(
+  customRows: CustomRowsForDate,
+): Record<PrimalGroupKey, number> {
+  const totals = {} as Record<PrimalGroupKey, number>;
+  for (const group of PRIMAL_GROUPS) totals[group.key] = 0;
+  for (const row of customRows) {
+    const group = groupForCategory(row.spec.category);
+    totals[group.key as PrimalGroupKey] += clampNonNegativeInt(
+      row.order.today_pcs,
+    );
+  }
+  return totals;
 }
 
 export function buildAvailabilityRows(
   orders: ProductOrdersForDate,
   counts: HogCounts,
   customerOrders: CustomerOrdersForDate,
-  // Yesterday's O/S carried in per group — the previous saved date's
-  // calculated O/S (see readPreviousOverstock). Supplied by the hook so
-  // this stays a pure derivation with no storage reads.
-  yesterdayOverstock: OverstockByGroup,
+  // Opening stock carried in per group — the previous saved date's ending
+  // stock (see fetchPreviousEndingStock in ending-stock-source). Supplied
+  // by the hook so this stays a pure derivation with no storage reads.
+  openingStock: EndingStockByGroup,
+  // Manually added rows for the date — their pieces pool into Sales Orders
+  // alongside the catalog rows.
+  customRows: CustomRowsForDate = [],
   minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
 ): GroupAvailability[] {
   const specialByGroup = sumCustomerOrdersByGroup(customerOrders);
+  const customByGroup = sumCustomRowsByGroup(customRows);
   return PRIMAL_GROUPS.map((group) => {
     // Today's order pieces are pooled across every category in the group, so
     // a shared cut (Ribs) subtracts both types' orders from its one pool.
-    const customerOrdersPcs = group.categories.reduce(
-      (sum, category) => sum + categoryTotals(category, orders).today_pcs,
-      0,
-    );
+    const salesOrdersPcs =
+      group.categories.reduce(
+        (sum, category) => sum + categoryTotals(category, orders).today_pcs,
+        0,
+      ) + customByGroup[group.key];
     return buildGroupAvailability(
       group,
       specialByGroup[group.key],
-      customerOrdersPcs,
+      salesOrdersPcs,
       counts,
-      yesterdayOverstock[group.key],
+      openingStock[group.key],
       minReserve,
     );
   });
@@ -250,8 +271,8 @@ export function buildCustomerAvailability(
   return availabilityRows.map((row) => ({
     group: row.group,
     label: row.label,
-    // Totals Available (gross) = expected production + yesterday's overstock.
-    availableStock: row.expectedProduction + row.yesterdayOverstock,
+    // Totals Available (gross) = expected production + opening stock.
+    availableStock: row.expectedProduction + row.openingStock,
     ordered: row.specialCustomerOrders,
     remaining: row.availableStock, // gross − special customer orders
   }));
@@ -263,21 +284,21 @@ export function sumAvailability(
   return rows.reduce<AvailabilityTotals>(
     (acc, row) => ({
       expectedProduction: acc.expectedProduction + row.expectedProduction,
-      yesterdayOverstock: acc.yesterdayOverstock + row.yesterdayOverstock,
+      openingStock: acc.openingStock + row.openingStock,
       specialCustomerOrders:
         acc.specialCustomerOrders + row.specialCustomerOrders,
       availableStock: acc.availableStock + row.availableStock,
-      customerOrders: acc.customerOrders + row.customerOrders,
-      todaysOverstock: acc.todaysOverstock + row.todaysOverstock,
+      salesOrders: acc.salesOrders + row.salesOrders,
+      endingStock: acc.endingStock + row.endingStock,
       shortage: acc.shortage + row.shortage,
     }),
     {
       expectedProduction: 0,
-      yesterdayOverstock: 0,
+      openingStock: 0,
       specialCustomerOrders: 0,
       availableStock: 0,
-      customerOrders: 0,
-      todaysOverstock: 0,
+      salesOrders: 0,
+      endingStock: 0,
       shortage: 0,
     },
   );

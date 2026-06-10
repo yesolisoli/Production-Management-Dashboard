@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import clsx from "clsx";
 import {
+  AlertTriangle,
   Boxes,
   Calendar,
   CheckCircle2,
@@ -16,39 +18,32 @@ import {
   buildCustomerAvailability,
   categoryTotals,
   DEFAULT_MIN_COOLER_RESERVE,
-  globalTotals,
   orderFor,
-  regularHogCount,
-  sowHogCount,
+  primalTotalHogCount,
   sumAvailability,
 } from "../calculations";
 import {
-  pushOverstockToCooler,
-  type OverstockPushResult,
+  pushEndingStockToCooler,
+  type EndingStockPushResult,
 } from "../cooler-inventory";
 import { specsForCategory } from "../product-specs";
 import {
+  groupForCategory,
   PRIMAL_CATEGORIES,
   PRIMAL_GROUPS,
+  type CustomOrderRow,
   type PrimalCategory,
-  type PrimalGroup,
   type PrimalGroupKey,
 } from "../types";
 import { usePrimalCalculationState } from "../hooks/use-primal-calculation-state";
-import {
-  PrimalAvailabilityChart,
-  PrimalAvailabilityKpis,
-} from "./PrimalAvailabilityChart";
+import { PrimalAvailabilityChart } from "./PrimalAvailabilityChart";
 import { PrimalCsvImportModal } from "./PrimalCsvImportModal";
 import { PrimalCustomerChart } from "./PrimalCustomerChart";
-import { PrimalNextDayProjection } from "./PrimalNextDayProjection";
 import {
-  primalGroupSlug,
   PrimalGroupSection,
   type CategorySkuRow,
   type GroupCategoryRows,
 } from "./PrimalGroupSection";
-import { PrimalTotalsBar } from "./PrimalTotalsBar";
 
 export function PrimalCalculationPage() {
   const {
@@ -59,15 +54,18 @@ export function PrimalCalculationPage() {
     saveState,
     setDate,
     setOrderField,
-    setNextDayField,
-    bumpGroupCases,
-    clearGroup,
     saveGroup,
     saveAll,
+    clearGroup,
     applyImportedOrders,
     customerOrders,
-    yesterdayOverstock,
+    customRows,
+    openingStock,
     setCustomerOrder,
+    addCustomRow,
+    updateCustomRowSpec,
+    setCustomRowField,
+    removeCustomRow,
   } = usePrimalCalculationState();
 
   // Butts open by default (matches the reference); others collapsed.
@@ -110,8 +108,20 @@ export function PrimalCalculationPage() {
     return map;
   }, [orders]);
 
+  // Manually added rows, bucketed by the group their category belongs to.
+  const customRowsByGroup = useMemo(() => {
+    const map = {} as Record<PrimalGroupKey, CustomOrderRow[]>;
+    for (const group of PRIMAL_GROUPS) map[group.key] = [];
+    for (const row of customRows) {
+      const group = groupForCategory(row.spec.category);
+      map[group.key as PrimalGroupKey].push(row);
+    }
+    return map;
+  }, [customRows]);
+
   // Per-group view model: each group's per-category subgroups (rows + per-type
-  // totals) plus the combined Today totals shown in the group header.
+  // totals) plus the combined Today totals shown in the group header. Custom
+  // rows pool into the same group totals as the catalog rows.
   const groupData = useMemo(
     () =>
       PRIMAL_GROUPS.map((group) => {
@@ -122,38 +132,50 @@ export function PrimalCalculationPage() {
             totals: categoryTotalsMap[category],
           }),
         );
-        const groupTotals = categoryRows.reduce(
-          (acc, c) => ({
-            today_cases: acc.today_cases + c.totals.today_cases,
-            today_pcs: acc.today_pcs + c.totals.today_pcs,
+        const groupCustomRows = customRowsByGroup[group.key];
+        const groupTotals = groupCustomRows.reduce(
+          (acc, r) => ({
+            today_cases: acc.today_cases + r.order.today_cases,
+            today_pcs: acc.today_pcs + r.order.today_pcs,
           }),
-          { today_cases: 0, today_pcs: 0 },
+          categoryRows.reduce(
+            (acc, c) => ({
+              today_cases: acc.today_cases + c.totals.today_cases,
+              today_pcs: acc.today_pcs + c.totals.today_pcs,
+            }),
+            { today_cases: 0, today_pcs: 0 },
+          ),
         );
-        return { group, categoryRows, groupTotals };
+        return { group, categoryRows, customRows: groupCustomRows, groupTotals };
       }),
-    [rowsByCategory, categoryTotalsMap],
+    [rowsByCategory, categoryTotalsMap, customRowsByGroup],
   );
 
-  const totals = useMemo(() => globalTotals(orders), [orders]);
   const intakeTotals = useMemo(() => deriveTotals(intake), [intake]);
 
   // Availability — derived from intake counts + today's orders + customer
-  // orders + yesterday's carried-in O/S.
+  // orders + the opening-stock carry-in.
   const availabilityRows = useMemo(
     () =>
-      buildAvailabilityRows(orders, counts, customerOrders, yesterdayOverstock),
-    [orders, counts, customerOrders, yesterdayOverstock],
+      buildAvailabilityRows(
+        orders,
+        counts,
+        customerOrders,
+        openingStock,
+        customRows,
+      ),
+    [orders, counts, customerOrders, openingStock, customRows],
   );
   const availabilityTotals = useMemo(
     () => sumAvailability(availabilityRows),
     [availabilityRows],
   );
 
-  // Calculated Today's O/S per group (pieces) — the figure shown read-only in
+  // Calculated Ending Stock per group (pieces) — the figure shown read-only in
   // each group section and pushed to the cooler.
-  const overstockByGroup = useMemo(() => {
+  const endingStockByGroup = useMemo(() => {
     const map = {} as Record<PrimalGroupKey, number>;
-    for (const row of availabilityRows) map[row.group] = row.todaysOverstock;
+    for (const row of availabilityRows) map[row.group] = row.endingStock;
     return map;
   }, [availabilityRows]);
 
@@ -167,27 +189,17 @@ export function PrimalCalculationPage() {
   const handleToggle = (groupKey: PrimalGroupKey) =>
     setExpanded((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
 
-  const handleTabClick = (group: PrimalGroup) => {
-    setExpanded((prev) => ({ ...prev, [group.key]: true }));
-    // Defer scroll until the section has expanded.
-    requestAnimationFrame(() => {
-      document
-        .getElementById(`primal-group-${primalGroupSlug(group.key)}`)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  };
-
   const handlePush = async () => {
     setPushing(true);
     try {
-      const result: OverstockPushResult = await pushOverstockToCooler(
+      const result: EndingStockPushResult = await pushEndingStockToCooler(
         date,
-        overstockByGroup,
+        endingStockByGroup,
       );
       setConfirmPush(false);
       setToast(
         result.lines.length === 0
-          ? "No overstock to push."
+          ? "No ending stock to push."
           : `Pushed ${result.totalPcs} pcs across ${result.lines.length} groups to Cooler Inventory.`,
       );
     } finally {
@@ -204,8 +216,8 @@ export function PrimalCalculationPage() {
           <div className="flex items-center gap-4">
             <IntakeHeaderStats
               status={intakeStatus.kind}
-              regular={regularHogCount(counts)}
-              sow={sowHogCount(counts)}
+              primalTotal={primalTotalHogCount(counts)}
+              sow={intake.sow_scheduled}
               sideOrders={intake.side_orders}
               forCutting={intakeTotals.forCutting}
               nextDayHogs={intake.next_day.hog_count}
@@ -237,7 +249,11 @@ export function PrimalCalculationPage() {
 
       <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
         <div className="flex flex-col gap-4 px-5 py-5 lg:px-6">
-          <PrimalAvailabilityKpis totals={availabilityTotals} />
+          <PrimalAvailabilityChart
+            rows={availabilityRows}
+            totals={availabilityTotals}
+            minReserve={DEFAULT_MIN_COOLER_RESERVE}
+          />
 
           <PrimalCustomerChart
             columns={customerColumns}
@@ -245,40 +261,15 @@ export function PrimalCalculationPage() {
             onChange={setCustomerOrder}
           />
 
-          <PrimalAvailabilityChart
-            rows={availabilityRows}
-            totals={availabilityTotals}
-            minReserve={DEFAULT_MIN_COOLER_RESERVE}
-          />
-
-          <PrimalNextDayProjection
-            nextDay={intake.next_day}
-            onChange={setNextDayField}
-          />
-
-          {/* Group tabs */}
-          <div className="flex flex-wrap gap-2">
-            {PRIMAL_GROUPS.map((group) => (
-              <button
-                key={group.key}
-                type="button"
-                onClick={() => handleTabClick(group)}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-              >
-                {group.label}
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
-                  {group.categories.reduce(
-                    (sum, c) => sum + specsForCategory(c).length,
-                    0,
-                  )}
-                </span>
-              </button>
-            ))}
-
+          {/* Sales Orders section */}
+          <div className="mt-2 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">
+              Sales Orders
+            </h2>
             <button
               type="button"
               onClick={() => setImporting(true)}
-              className="ml-auto flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
             >
               <Upload size={16} />
               Import SAP Orders
@@ -286,21 +277,25 @@ export function PrimalCalculationPage() {
           </div>
 
           {/* Group sections */}
-          {groupData.map(({ group, categoryRows, groupTotals }) => (
+          {groupData.map(({ group, categoryRows, customRows, groupTotals }) => (
             <PrimalGroupSection
               key={group.key}
               group={group}
               categoryRows={categoryRows}
+              customRows={customRows}
               groupTotals={groupTotals}
-              calculatedOverstockPcs={overstockByGroup[group.key]}
+              calculatedEndingStockPcs={endingStockByGroup[group.key]}
               expanded={!!expanded[group.key]}
               onToggle={() => handleToggle(group.key)}
               activeSku={activeSku}
               onRowFocus={setActiveSku}
               onChangeField={setOrderField}
-              onBumpCases={(delta) => bumpGroupCases(group, delta)}
-              onClear={() => clearGroup(group)}
+              onAddRow={() => addCustomRow(group.key)}
+              onUpdateRowSpec={updateCustomRowSpec}
+              onChangeCustomField={setCustomRowField}
+              onRemoveRow={removeCustomRow}
               onSave={() => void saveGroup(group)}
+              onClear={() => clearGroup(group)}
               saving={
                 saveState.kind === "saving" && saveState.scope === group.key
               }
@@ -309,15 +304,6 @@ export function PrimalCalculationPage() {
               }
             />
           ))}
-        </div>
-
-        <div className="mt-auto">
-          <PrimalTotalsBar
-            totals={totals}
-            calculatedOverstockPcs={availabilityTotals.todaysOverstock}
-            onPushOverstock={() => setConfirmPush(true)}
-            pushing={pushing}
-          />
         </div>
       </div>
 
@@ -336,7 +322,7 @@ export function PrimalCalculationPage() {
 
       {confirmPush && (
         <Modal
-          title="Push Overstock to Cooler Inventory"
+          title="Push Ending Stock to Cooler Inventory"
           onClose={() => !pushing && setConfirmPush(false)}
           footer={
             <div className="flex justify-end gap-2">
@@ -363,12 +349,12 @@ export function PrimalCalculationPage() {
           }
         >
           <p className="text-sm text-slate-600">
-            This will move the calculated Today&apos;s O/S for{" "}
+            This will move the calculated Ending Stock for{" "}
             <span className="font-semibold tabular-nums">{date}</span> into
             Cooler Inventory.
           </p>
           <p className="mt-2 text-sm font-semibold text-slate-800 tabular-nums">
-            {availabilityTotals.todaysOverstock.toLocaleString()} pcs
+            {availabilityTotals.endingStock.toLocaleString()} pcs
           </p>
           <p className="mt-2 text-xs text-slate-400">
             Cooler Inventory integration is pending — this is a safe preview
@@ -393,7 +379,7 @@ export function PrimalCalculationPage() {
 // five intake values that drive yield, plus a small load-status indicator.
 function IntakeHeaderStats({
   status,
-  regular,
+  primalTotal,
   sow,
   sideOrders,
   forCutting,
@@ -401,15 +387,19 @@ function IntakeHeaderStats({
   updatedAt,
 }: {
   status: "loading" | "ready" | "missing" | "error";
-  regular: number;
+  primalTotal: number;
   sow: number;
   sideOrders: number;
   forCutting: number;
   nextDayHogs: number;
   updatedAt?: string;
 }) {
+  // Only a saved DB record yields real numbers. For every other state the
+  // values would all read 0 — which looks like genuine "zero hogs" data — so
+  // we render an em dash instead and surface why with a visible badge.
+  const ready = status === "ready";
   const stats = [
-    { label: "Regular", value: regular },
+    { label: "Primal", value: primalTotal },
     { label: "Sow", value: sow },
     { label: "Side", value: sideOrders },
     { label: "Cutting", value: forCutting },
@@ -418,13 +408,20 @@ function IntakeHeaderStats({
 
   return (
     <div className="group relative hidden items-center gap-5 lg:flex">
+      {!ready && <IntakeStatusBadge status={status} />}
+
       {stats.map((s) => (
-        <div key={s.label} className="flex flex-col items-start leading-none">
+        <div key={s.label} className="flex flex-col items-center leading-none">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
             {s.label}
           </span>
-          <span className="mt-1 text-lg font-bold tabular-nums text-white">
-            {s.value.toLocaleString()}
+          <span
+            className={clsx(
+              "mt-1 text-lg font-bold tabular-nums",
+              ready ? "text-white" : "text-white/30",
+            )}
+          >
+            {ready ? s.value.toLocaleString() : "—"}
           </span>
         </div>
       ))}
@@ -439,6 +436,40 @@ function IntakeHeaderStats({
   );
 }
 
+// At-a-glance pill explaining why the intake stats aren't showing numbers.
+// Only rendered for non-ready states (loading / missing / error). "missing"
+// is the common case — the operator entered Hog Intake but hasn't Saved it to
+// the DB yet, and Primal reads DB-only — so the copy points them to the fix.
+function IntakeStatusBadge({
+  status,
+}: {
+  status: "loading" | "missing" | "error";
+}) {
+  if (status === "loading") {
+    return (
+      <span className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-xs font-medium text-white/70">
+        <Loader2 size={13} className="animate-spin" />
+        Loading intake…
+      </span>
+    );
+  }
+
+  const isError = status === "error";
+  return (
+    <span
+      className={clsx(
+        "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ring-1",
+        isError
+          ? "bg-rose-400/15 text-rose-200 ring-rose-300/30"
+          : "bg-amber-400/15 text-amber-100 ring-amber-300/30",
+      )}
+    >
+      <AlertTriangle size={13} className="shrink-0" />
+      {isError ? "Intake load failed" : "Save Hog Intake to sync"}
+    </span>
+  );
+}
+
 // Hover-tooltip text describing where the intake numbers come from / their
 // load state.
 function intakeStatusTooltip(
@@ -449,7 +480,7 @@ function intakeStatusTooltip(
     case "loading":
       return "Loading Hog Intake…";
     case "missing":
-      return "No Hog Intake record for this date — Expected yield is 0";
+      return "No saved Hog Intake for this date — Save it on the Hog Intake screen to sync these figures";
     case "error":
       return "Failed to load Hog Intake";
     default:

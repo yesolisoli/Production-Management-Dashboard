@@ -52,7 +52,8 @@ export type HogIntakeRecord = {
   boars_count: number;
   // Sow Processing — a separate operational track. Total Sow Available lives
   // in hog_counts.Sow; sow_scheduled is how many of those are slated for
-  // processing today. Draft-only for now (no DB column yet).
+  // processing today. Persisted (hog_intake_records.sow_scheduled) and shown
+  // as the Sow figure in the Primal Calculation banner.
   sow_scheduled: number;
   notes: string;
   farm_records: FarmRecord[];

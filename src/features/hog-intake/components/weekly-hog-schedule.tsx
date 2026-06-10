@@ -1,6 +1,11 @@
 "use client";
 
+import { CalendarDays } from "lucide-react";
 import { useEffect, useState } from "react";
+import { NextDayProjection } from "./next-day-projection";
+import type { NextDay } from "../types";
+
+type NextDayField = "hog_count" | "side_orders" | "cooler_overstock";
 
 // Editable reference panel showing the week's planned Cut/Kill market
 // counts. Days run across as columns; the two metrics are rows. Sales uses
@@ -61,7 +66,15 @@ function coerceRows(raw: unknown): ScheduleRow[] {
   return rows;
 }
 
-export function WeeklyHogSchedule() {
+type WeeklyHogScheduleProps = {
+  nextDay: NextDay;
+  onNextDayChange: (field: NextDayField, value: number) => void;
+};
+
+export function WeeklyHogSchedule({
+  nextDay,
+  onNextDayChange,
+}: WeeklyHogScheduleProps) {
   const [rows, setRows] = useState<ScheduleRow[]>(cloneDefaultRows);
   const [collapsed, setCollapsed] = useState(true);
 
@@ -70,7 +83,9 @@ export function WeeklyHogSchedule() {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) setRows(coerceRows(JSON.parse(raw)));
-      setCollapsed(window.localStorage.getItem(COLLAPSED_KEY) === "true");
+      // Default to collapsed; only honor an explicitly stored preference.
+      const storedCollapsed = window.localStorage.getItem(COLLAPSED_KEY);
+      if (storedCollapsed !== null) setCollapsed(storedCollapsed === "true");
     } catch {
       // ignore parse / access errors — fall back to defaults
     }
@@ -115,13 +130,18 @@ export function WeeklyHogSchedule() {
         aria-expanded={!collapsed}
         className={`flex w-full items-start justify-between gap-3 text-left ${collapsed ? "" : "mb-4"}`}
       >
-        <div>
-          <h3 className="text-base font-semibold text-slate-900">
-            Weekly Hog Schedule
-          </h3>
-          <p className="text-xs text-slate-500">
-            Planned market counts by day — for next-day production forecasting
-          </p>
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
+            <CalendarDays size={16} />
+          </span>
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Weekly Hog Plan
+            </h3>
+            <p className="text-xs text-slate-500">
+              Reference counts for weekly planning
+            </p>
+          </div>
         </div>
         <svg
           viewBox="0 0 20 20"
@@ -190,6 +210,10 @@ export function WeeklyHogSchedule() {
           </tbody>
         </table>
       </div>
+      )}
+
+      {!collapsed && (
+        <NextDayProjection nextDay={nextDay} onChange={onNextDayChange} />
       )}
     </section>
   );

@@ -1,11 +1,23 @@
 "use client";
 
 import clsx from "clsx";
-import { Check, ChevronDown, Loader2, Package, Save } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Eraser,
+  Loader2,
+  Minus,
+  Package,
+  Plus,
+  Save,
+  Trash2,
+} from "lucide-react";
+import type { ReactNode } from "react";
 import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
 import type { OrderTotals } from "../calculations";
 import { clampNonNegativeInt } from "../calculations";
 import type {
+  CustomOrderRow,
   OrderField,
   PrimalCategory,
   PrimalGroup,
@@ -21,7 +33,7 @@ export type CategorySkuRow = {
 };
 
 // A group renders one section. Each of its categories is a labeled subgroup so
-// the types stay distinguishable, while the quantity (Calc O/S) is shared.
+// the types stay distinguishable, while the quantity (Ending Stock) is shared.
 export type GroupCategoryRows = {
   category: PrimalCategory;
   rows: CategorySkuRow[];
@@ -31,19 +43,28 @@ export type GroupCategoryRows = {
 type PrimalGroupSectionProps = {
   group: PrimalGroup;
   categoryRows: GroupCategoryRows[];
+  // Manually added (ad-hoc) rows for this group — editable spec + order.
+  customRows: CustomOrderRow[];
   // Combined Today totals across every category in the group.
   groupTotals: OrderTotals;
-  // Calculated Today's O/S for this group, in pieces (Available Stock −
+  // Calculated Ending Stock for this group, in pieces (Available Stock −
   // Customer Orders from the Availability Chart). Read-only / derived.
-  calculatedOverstockPcs: number;
+  calculatedEndingStockPcs: number;
   expanded: boolean;
   onToggle: () => void;
   activeSku: string | null;
   onRowFocus: (sku: string | null) => void;
   onChangeField: (sku: string, field: OrderField, value: number) => void;
-  onBumpCases: (delta: number) => void;
-  onClear: () => void;
+  // Add a blank manual row to this group.
+  onAddRow: () => void;
+  // Edit a manual row's spec fields (SKU / name / case pack / pieces-per-case).
+  onUpdateRowSpec: (id: string, patch: Partial<ProductSpec>) => void;
+  // Edit a manual row's order field (cases / pieces).
+  onChangeCustomField: (id: string, field: OrderField, value: number) => void;
+  // Remove a manual row.
+  onRemoveRow: (id: string) => void;
   onSave: () => void;
+  onClear: () => void;
   saving: boolean;
   justSaved: boolean;
 };
@@ -51,23 +72,28 @@ type PrimalGroupSectionProps = {
 export function PrimalGroupSection({
   group,
   categoryRows,
+  customRows,
   groupTotals,
-  calculatedOverstockPcs,
+  calculatedEndingStockPcs,
   expanded,
   onToggle,
   activeSku,
   onRowFocus,
   onChangeField,
-  onBumpCases,
-  onClear,
+  onAddRow,
+  onUpdateRowSpec,
+  onChangeCustomField,
+  onRemoveRow,
   onSave,
+  onClear,
   saving,
   justSaved,
 }: PrimalGroupSectionProps) {
   // Only label per-type subgroups when the group pools more than one type
   // (e.g. Ribs); single-type groups don't need the redundant header.
   const showTypeHeaders = group.categories.length > 1;
-  const itemCount = categoryRows.reduce((sum, c) => sum + c.rows.length, 0);
+  const itemCount =
+    categoryRows.reduce((sum, c) => sum + c.rows.length, 0) + customRows.length;
 
   return (
     <section
@@ -91,7 +117,7 @@ export function PrimalGroupSection({
           <Package size={16} />
         </span>
         <div className="min-w-0">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">
+          <h3 className="text-sm font-bold tracking-wide text-slate-900">
             {group.label}
           </h3>
           <p className="text-xs text-slate-500">{itemCount} Items</p>
@@ -103,7 +129,7 @@ export function PrimalGroupSection({
             cases={groupTotals.today_cases}
             pcs={groupTotals.today_pcs}
           />
-          <HeaderOverstock pcs={calculatedOverstockPcs} />
+          <HeaderEndingStock pcs={calculatedEndingStockPcs} />
         </div>
       </button>
 
@@ -153,11 +179,38 @@ export function PrimalGroupSection({
                   ))}
                 </tbody>
               ))}
+
+              {/* Manually added rows + the add-row control. These flow inline
+                  with the imported rows (no separate section) so a filled-in
+                  line reads like any other product row. */}
+              <tbody className="divide-y divide-slate-100 border-t border-slate-100">
+                {customRows.map((row) => (
+                  <CustomProductRow
+                    key={row.id}
+                    row={row}
+                    onUpdateSpec={onUpdateRowSpec}
+                    onChangeField={onChangeCustomField}
+                    onRemove={onRemoveRow}
+                  />
+                ))}
+                <tr>
+                  <td colSpan={5} className="px-4 py-2.5">
+                    <button
+                      type="button"
+                      onClick={onAddRow}
+                      className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700"
+                    >
+                      <Plus size={14} />
+                      Add item
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
             </table>
           </div>
 
           {/* Group totals — today's manual inputs, then the derived
-              Calculated O/S (pieces; group-level, read-only). */}
+              Calculated Ending Stock (pieces; group-level, read-only). */}
           <div className="grid grid-cols-2 gap-3 border-t border-slate-100 px-4 py-3 sm:grid-cols-3">
             <TotalStat
               label="Today total cases"
@@ -170,30 +223,23 @@ export function PrimalGroupSection({
               tone="blue"
             />
             <TotalStat
-              label="Calculated O/S pcs"
-              value={calculatedOverstockPcs}
+              label="Ending Stock pcs"
+              value={calculatedEndingStockPcs}
               tone="violet"
             />
           </div>
 
-          {/* Bulk actions + save */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                Bulk Today
-              </span>
-              <BulkButton onClick={() => onBumpCases(10)}>+10 Cases</BulkButton>
-              <BulkButton onClick={() => onBumpCases(50)}>+50 Cases</BulkButton>
-              <BulkButton onClick={() => onBumpCases(100)}>+100 Cases</BulkButton>
-              <button
-                type="button"
-                onClick={onClear}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-200/60"
-              >
-                Clear
-              </button>
-            </div>
-
+          {/* Save / Clear */}
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
+            <button
+              type="button"
+              onClick={onClear}
+              disabled={saving}
+              className="flex h-9 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <Eraser size={14} />
+              Clear
+            </button>
             <button
               type="button"
               onClick={onSave}
@@ -270,7 +316,10 @@ const ACCENTS: Record<string, string> = {
   none: "focus:border-slate-400 focus:ring-slate-100",
 };
 
-function NumberCell({
+// The −/input/+ stepper, without a table cell wrapper, so it can be composed
+// both as a standalone NumberCell and alongside other controls (e.g. the
+// custom row's delete button).
+function StepInput({
   value,
   onChange,
   ariaLabel,
@@ -283,7 +332,14 @@ function NumberCell({
 }) {
   const blank = useBlankZeroInput(value);
   return (
-    <td className="px-1.5 py-2">
+    <div className="flex items-center justify-center gap-1.5">
+      <StepButton
+        ariaLabel={`Decrease ${ariaLabel}`}
+        onClick={() => onChange(clampNonNegativeInt(value - 1))}
+        disabled={value <= 0}
+      >
+        <Minus size={14} />
+      </StepButton>
       <input
         type="number"
         inputMode="numeric"
@@ -293,11 +349,143 @@ function NumberCell({
         aria-label={ariaLabel}
         onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
         className={clsx(
-          "h-10 w-20 rounded-lg border border-slate-200 bg-white text-center text-sm font-semibold tabular-nums text-slate-900 outline-none transition focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+          "h-10 w-20 rounded-lg border border-transparent bg-white text-center text-sm font-semibold tabular-nums text-slate-900 outline-none transition focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
           ACCENTS[accent],
         )}
       />
+      <StepButton
+        ariaLabel={`Increase ${ariaLabel}`}
+        onClick={() => onChange(clampNonNegativeInt(value + 1))}
+      >
+        <Plus size={14} />
+      </StepButton>
+    </div>
+  );
+}
+
+function NumberCell(props: {
+  value: number;
+  onChange: (next: number) => void;
+  ariaLabel: string;
+  accent?: keyof typeof ACCENTS;
+}) {
+  return (
+    <td className="px-1.5 py-2">
+      <StepInput {...props} />
     </td>
+  );
+}
+
+// ---------------------------- Custom row ----------------------------
+// A manually added line: every field is editable (SKU, name, case pack label,
+// pieces-per-case) plus the cases/pieces order, and it can be deleted.
+function CustomProductRow({
+  row,
+  onUpdateSpec,
+  onChangeField,
+  onRemove,
+}: {
+  row: CustomOrderRow;
+  onUpdateSpec: (id: string, patch: Partial<ProductSpec>) => void;
+  onChangeField: (id: string, field: OrderField, value: number) => void;
+  onRemove: (id: string) => void;
+}) {
+  const { id, spec, order } = row;
+  const label = spec.name || spec.sku || "new item";
+  return (
+    <tr className="transition-colors hover:bg-slate-50/60">
+      <td className="px-3 py-2">
+        <input
+          value={spec.sku}
+          onChange={(e) => onUpdateSpec(id, { sku: e.target.value })}
+          placeholder="SKU"
+          aria-label="Custom item SKU"
+          className="h-9 w-24 rounded-lg border border-transparent bg-transparent px-2 font-mono text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
+        />
+      </td>
+      <td className="px-2 py-2">
+        <input
+          value={spec.name}
+          onChange={(e) => onUpdateSpec(id, { name: e.target.value })}
+          placeholder="Item name"
+          aria-label="Custom item name"
+          className="h-9 w-full min-w-40 rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium text-slate-800 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
+        />
+      </td>
+      <td className="px-2 py-2">
+        <div className="flex items-center gap-1.5">
+          <input
+            value={spec.casePack}
+            onChange={(e) => onUpdateSpec(id, { casePack: e.target.value })}
+            placeholder="Case pack"
+            aria-label="Custom item case pack"
+            className="h-9 w-28 rounded-lg border border-transparent bg-transparent px-2 text-xs text-slate-600 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
+          />
+          <span className="text-[10px] text-slate-400">×</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            step={1}
+            value={spec.piecesPerCase}
+            onChange={(e) =>
+              onUpdateSpec(id, {
+                piecesPerCase: clampNonNegativeInt(e.target.value),
+              })
+            }
+            aria-label="Custom item pieces per case"
+            title="Pieces per case"
+            className="h-9 w-14 rounded-lg border border-transparent bg-transparent text-center text-xs font-semibold tabular-nums text-slate-600 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+        </div>
+      </td>
+
+      <NumberCell
+        value={order.today_cases}
+        onChange={(v) => onChangeField(id, "today_cases", v)}
+        ariaLabel={`${label} today cases`}
+        accent="blue"
+      />
+      <td className="px-1.5 py-2">
+        <div className="flex items-center justify-center gap-2">
+          <StepInput
+            value={order.today_pcs}
+            onChange={(v) => onChangeField(id, "today_pcs", v)}
+            ariaLabel={`${label} today pieces`}
+          />
+          <StepButton
+            ariaLabel={`Remove ${label}`}
+            onClick={() => onRemove(id)}
+          >
+            <Trash2 size={14} />
+          </StepButton>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function StepButton({
+  ariaLabel,
+  onClick,
+  disabled,
+  children,
+}: {
+  ariaLabel: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      disabled={disabled}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -367,13 +555,13 @@ function HeaderTotal({
   );
 }
 
-// Calculated Today's O/S summary in the section header — pieces only, since
-// O/S is group-level (mixed case packs make "cases" undefined here).
-function HeaderOverstock({ pcs }: { pcs: number }) {
+// Calculated Ending Stock summary in the section header — pieces only, since
+// it is group-level (mixed case packs make "cases" undefined here).
+function HeaderEndingStock({ pcs }: { pcs: number }) {
   return (
     <div className="hidden text-right sm:block">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-        Calc O/S
+        Ending Stock
       </p>
       <p
         className={clsx(
@@ -384,24 +572,6 @@ function HeaderOverstock({ pcs }: { pcs: number }) {
         {pcs.toLocaleString()} pcs
       </p>
     </div>
-  );
-}
-
-function BulkButton({
-  onClick,
-  children,
-}: {
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-600 transition hover:bg-blue-50"
-    >
-      {children}
-    </button>
   );
 }
 

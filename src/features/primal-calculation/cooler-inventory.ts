@@ -1,49 +1,49 @@
 import {
   PRIMAL_GROUPS,
-  type OverstockByGroup,
+  type EndingStockByGroup,
 } from "./types";
 
 // -------------------------------------------------------------------
-// Overstock → Cooler Inventory hand-off (placeholder).
+// Ending Stock → Cooler Inventory hand-off (placeholder).
 //
-// Isolated on purpose: today this only summarizes the overstock that
+// Isolated on purpose: today this only summarizes the ending stock that
 // WOULD be pushed. When the Cooler Inventory module is ready, replace the
-// body of pushOverstockToCooler() with the real write — nothing else in
+// body of pushEndingStockToCooler() with the real write — nothing else in
 // the feature needs to change.
 //
-// The source is the calculated Today's O/S per group (in pieces) from the
-// Availability Chart — not a manual input. O/S lives at the group level
-// because production comes from whole hogs, not per SKU.
+// The source is the calculated Ending Stock per group (in pieces) from the
+// Availability Chart — not a manual input. Ending Stock lives at the group
+// level because production comes from whole hogs, not per SKU.
 // -------------------------------------------------------------------
 
-export type OverstockLine = {
+export type EndingStockLine = {
   group: string;
   pcs: number;
 };
 
-export type OverstockPushResult = {
+export type EndingStockPushResult = {
   date: string;
-  lines: OverstockLine[];
+  lines: EndingStockLine[];
   totalPcs: number;
 };
 
-// Collect every group that has positive calculated O/S for the date.
-export function collectOverstockLines(
-  overstock: OverstockByGroup,
-): OverstockLine[] {
-  const lines: OverstockLine[] = [];
+// Collect every group that has positive calculated ending stock for the date.
+export function collectEndingStockLines(
+  endingStock: EndingStockByGroup,
+): EndingStockLine[] {
+  const lines: EndingStockLine[] = [];
   for (const group of PRIMAL_GROUPS) {
-    const pcs = overstock[group.key];
+    const pcs = endingStock[group.key];
     if (pcs > 0) lines.push({ group: group.label, pcs });
   }
   return lines;
 }
 
-export async function pushOverstockToCooler(
+export async function pushEndingStockToCooler(
   date: string,
-  overstock: OverstockByGroup,
-): Promise<OverstockPushResult> {
-  const lines = collectOverstockLines(overstock);
+  endingStock: EndingStockByGroup,
+): Promise<EndingStockPushResult> {
+  const lines = collectEndingStockLines(endingStock);
   // TODO: replace with a real write into the Cooler Inventory module.
   return {
     date,

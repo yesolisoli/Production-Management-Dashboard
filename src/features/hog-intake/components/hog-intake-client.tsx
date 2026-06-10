@@ -7,6 +7,7 @@ import { deriveTotals } from "../calculations";
 import { useHogIntakeState } from "../hooks/use-hog-intake-state";
 import { FarmRecords } from "./farm-records";
 import { HogCountGrid } from "./hog-count-grid";
+import { PrimalCalcSummary } from "./primal-calc-summary";
 import { ProcessSheet } from "./process-sheet";
 import { SaveBar } from "./save-bar";
 import { SummaryPanel } from "./summary-panel";
@@ -22,8 +23,8 @@ export function HogIntakeClient() {
     setDate,
     setHogCount,
     setProcessField,
+    setNextDayField,
     setSowScheduled,
-    setNotes,
     addFarmRecord,
     updateFarmRecord,
     removeFarmRecord,
@@ -73,33 +74,40 @@ export function HogIntakeClient() {
 
       <div className="bg-slate-50">
         <div className="flex flex-col gap-4 px-5 py-5 lg:px-6 lg:py-6">
+          <WeeklyHogSchedule
+            nextDay={record.next_day}
+            onNextDayChange={setNextDayField}
+          />
+
           <SummaryPanel
             totals={totals}
             sideOrders={record.side_orders}
             onChangeSideOrders={(v) => setProcessField("side_orders", v)}
+            middle={
+              <HogCountGrid counts={hogCounts} onChangeCount={setHogCount} />
+            }
+            after={
+              <ProcessSheet record={record} onChangeField={setProcessField} />
+            }
             sowAvailable={record.hog_counts.Sow}
             sowScheduled={record.sow_scheduled}
             onChangeSowAvailable={(v) => setHogCount("Sow", v)}
             onChangeSowScheduled={setSowScheduled}
           />
 
-          <HogCountGrid counts={hogCounts} onChangeCount={setHogCount} />
-
-          <WeeklyHogSchedule />
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.5fr_1fr]">
-            <FarmRecords
-              rows={record.farm_records}
-              onAdd={addFarmRecord}
-              onUpdate={updateFarmRecord}
-              onRemove={removeFarmRecord}
-            />
-            <ProcessSheet
-              record={record}
-              onChangeField={setProcessField}
-              onChangeNotes={setNotes}
-            />
-          </div>
+          <FarmRecords
+            rows={record.farm_records}
+            onAdd={addFarmRecord}
+            onUpdate={updateFarmRecord}
+            onRemove={removeFarmRecord}
+            footer={
+              <PrimalCalcSummary
+                jp={hogCounts.JP}
+                rwa={hogCounts.RWA}
+                total={totals.yieldTotal}
+              />
+            }
+          />
 
           <SaveBar status={status} dirty={dirty} onSave={save} onReset={reset} />
         </div>

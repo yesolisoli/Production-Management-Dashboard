@@ -176,7 +176,7 @@ function OrderCell({
         {...blank}
         aria-label={ariaLabel}
         onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
-        className="h-9 w-16 rounded-lg border border-slate-200 bg-white text-center text-sm font-semibold tabular-nums text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="h-9 w-16 rounded-lg border border-transparent bg-transparent text-center text-sm font-semibold tabular-nums text-slate-900 outline-none transition hover:bg-slate-50 focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
     </td>
   );

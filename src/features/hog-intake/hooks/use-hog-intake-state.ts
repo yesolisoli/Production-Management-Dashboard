@@ -7,7 +7,11 @@ import {
   derivedCountsFromFarmRecords,
 } from "../calculations";
 import { clearDraft, readDraft, writeDraft } from "../draft-storage";
-import { fetchHogIntakeByDate, upsertHogIntakeRecord } from "../supabase";
+import {
+  fetchHogIntakeByDate,
+  fetchPreviousSowRemaining,
+  upsertHogIntakeRecord,
+} from "../supabase";
 import {
   emptyHogCounts,
   emptyHogIntakeRecord,
@@ -87,8 +91,24 @@ export function useHogIntakeState() {
     try {
       const remote = await fetchHogIntakeByDate(nextDate);
       if (token !== activeFetchToken.current) return; // stale
+      if (remote) {
+        suppressNextWrite.current = true;
+        setRecord(remote);
+        setDirty(false);
+        setStatus({ kind: "idle" });
+        return;
+      }
+      // No record yet for this date: seed a fresh record whose Sow "Available
+      // This Week" carries over from the most recent prior day's "Remaining
+      // After Schedule". Everything else starts empty. The seed is suppressed
+      // from the draft writer, so merely opening the day doesn't dirty it —
+      // only a real edit persists (and locks in) the carried-over value.
+      const seededSow = await fetchPreviousSowRemaining(nextDate);
+      if (token !== activeFetchToken.current) return; // stale
+      const fresh = emptyHogIntakeRecord(nextDate);
+      fresh.hog_counts.Sow = seededSow;
       suppressNextWrite.current = true;
-      setRecord(remote ?? emptyHogIntakeRecord(nextDate));
+      setRecord(fresh);
       setDirty(false);
       setStatus({ kind: "idle" });
     } catch (err) {

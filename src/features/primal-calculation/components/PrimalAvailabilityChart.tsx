@@ -37,8 +37,8 @@ export function PrimalAvailabilityKpis({
         icon={Boxes}
       />
       <KpiCard
-        label="Orders"
-        value={totals.customerOrders}
+        label="Sales Orders"
+        value={totals.salesOrders}
         tone="blue"
         icon={ClipboardList}
       />
@@ -50,9 +50,9 @@ export function PrimalAvailabilityKpis({
         icon={AlertTriangle}
       />
       <KpiCard
-        label="Today's O/S"
-        value={totals.todaysOverstock}
-        negative={totals.todaysOverstock < 0}
+        label="Ending Stock"
+        value={totals.endingStock}
+        negative={totals.endingStock < 0}
         tone="violet"
         icon={Layers}
       />
@@ -67,17 +67,16 @@ type PrimalAvailabilityChartProps = {
 };
 
 // Read-only summary of what's actually available to ship after subtracting
-// customer orders from today's expected production plus existing cooler
-// overstock. Available Stock here is the NET figure (gross − orders), so it
+// customer orders from today's expected production plus the opening stock
+// carried in. Available Stock here is the NET figure (gross − orders), so it
 // matches the Customer Availability chart's "Remaining" row directly.
 export function PrimalAvailabilityChart({
   rows,
   totals,
   minReserve,
 }: PrimalAvailabilityChartProps) {
-  // Collapsed by default — the headline figures live in the top KPI strip;
-  // this detailed table is opened on demand.
-  const [open, setOpen] = useState(false);
+  // Expanded by default — this is the primary view at the top of the page.
+  const [open, setOpen] = useState(true);
   const shortCount = rows.filter((r) => r.status === "Short").length;
   const lowReserveCount = rows.filter((r) => r.status === "Low Reserve").length;
 
@@ -99,11 +98,10 @@ export function PrimalAvailabilityChart({
           </span>
           <div>
             <h2 className="text-sm font-semibold text-slate-900">
-              Availability Chart for Today
+              Today's Availability
             </h2>
             <p className="text-xs text-slate-500">
-              Exp. production + yesterday O/S − customer reservations = Available
-              Stock; − customer orders = Today&apos;s O/S · minimum reserve{" "}
+              Available inventory after production, reservations, and orders
               <span className="font-semibold tabular-nums">
                 {minReserve} pcs
               </span>
@@ -126,7 +124,7 @@ export function PrimalAvailabilityChart({
           {shortCount === 0 && lowReserveCount === 0 && (
             <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-600">
               <CheckCircle2 size={12} />
-              All groups OK
+              All primals OK
             </span>
           )}
         </div>
@@ -138,15 +136,15 @@ export function PrimalAvailabilityChart({
         <table className="w-full min-w-225 border-collapse text-sm">
           <thead>
             <tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-2.5">Group</th>
-              <th className="px-2 py-2.5 text-right">Exp. Production</th>
-              <th className="px-2 py-2.5 text-right">Yesterday O/S</th>
-              <th className="px-2 py-2.5 text-right">Customer Reservations</th>
-              <th className="px-2 py-2.5 text-right">Available Stock</th>
-              <th className="px-2 py-2.5 text-right">Customer Orders</th>
-              <th className="px-2 py-2.5 text-right">Shortage</th>
-              <th className="px-2 py-2.5 text-right">Today&apos;s O/S</th>
-              <th className="px-4 py-2.5 text-center">Status</th>
+              <th className="w-28 px-4 py-2.5">Primal</th>
+              <th className="w-32 px-2 py-2.5 text-right">Expected Production</th>
+              <th className="w-32 px-2 py-2.5 text-right">Opening Stock</th>
+              <th className="w-32 px-2 py-2.5 text-right">Customer Reservations</th>
+              <th className="w-32 px-2 py-2.5 text-right">Available Stock</th>
+              <th className="w-32 px-2 py-2.5 text-right">Sales Orders</th>
+              <th className="w-32 px-2 py-2.5 text-right">Shortage</th>
+              <th className="w-32 px-2 py-2.5 text-right">Ending Stock</th>
+              <th className="w-32 px-4 py-2.5 text-center">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -163,7 +161,7 @@ export function PrimalAvailabilityChart({
                 {totals.expectedProduction.toLocaleString()}
               </td>
               <td className="px-2 py-2.5">
-                {totals.yesterdayOverstock.toLocaleString()}
+                {totals.openingStock.toLocaleString()}
               </td>
               <td className="px-2 py-2.5">
                 {totals.specialCustomerOrders.toLocaleString()}
@@ -177,7 +175,7 @@ export function PrimalAvailabilityChart({
                 {totals.availableStock.toLocaleString()}
               </td>
               <td className="px-2 py-2.5">
-                {totals.customerOrders.toLocaleString()}
+                {totals.salesOrders.toLocaleString()}
               </td>
               <td
                 className={clsx(
@@ -190,10 +188,10 @@ export function PrimalAvailabilityChart({
               <td
                 className={clsx(
                   "px-2 py-2.5",
-                  totals.todaysOverstock < 0 ? "text-red-600" : "text-slate-800",
+                  totals.endingStock < 0 ? "text-red-600" : "text-slate-800",
                 )}
               >
-                {totals.todaysOverstock.toLocaleString()}
+                {totals.endingStock.toLocaleString()}
               </td>
               <td className="px-4 py-2.5" />
             </tr>
@@ -274,7 +272,7 @@ function AvailabilityRow({ row }: { row: GroupAvailability }) {
         {row.expectedProduction.toLocaleString()}
       </td>
       <td className="px-2 py-2.5 text-violet-600">
-        {row.yesterdayOverstock.toLocaleString()}
+        {row.openingStock.toLocaleString()}
       </td>
       <td className="px-2 py-2.5 text-slate-600">
         {row.specialCustomerOrders.toLocaleString()}
@@ -288,7 +286,7 @@ function AvailabilityRow({ row }: { row: GroupAvailability }) {
         {row.availableStock.toLocaleString()}
       </td>
       <td className="px-2 py-2.5 text-slate-600">
-        {row.customerOrders.toLocaleString()}
+        {row.salesOrders.toLocaleString()}
       </td>
       <td
         className={clsx(
@@ -301,10 +299,10 @@ function AvailabilityRow({ row }: { row: GroupAvailability }) {
       <td
         className={clsx(
           "px-2 py-2.5 font-semibold",
-          row.todaysOverstock < 0 ? "text-red-600" : "text-emerald-600",
+          row.endingStock < 0 ? "text-red-600" : "text-emerald-600",
         )}
       >
-        {row.todaysOverstock.toLocaleString()}
+        {row.endingStock.toLocaleString()}
       </td>
       <td className="px-4 py-2.5 text-center">
         <StatusBadge status={row.status} />

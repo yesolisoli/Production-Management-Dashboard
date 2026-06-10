@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { sowRemaining } from "./calculations";
 import {
   emptyHogCounts,
   HOG_TYPES,
@@ -16,6 +17,7 @@ type HogIntakeRow = {
   held_over: number;
   deaths_on_arrival: number;
   boars_count: number;
+  sow_scheduled: number;
   notes: string | null;
   farm_records: unknown;
   next_day: unknown;
@@ -82,9 +84,7 @@ function rowToRecord(row: HogIntakeRow): HogIntakeRecord {
     held_over: row.held_over,
     deaths_on_arrival: row.deaths_on_arrival,
     boars_count: row.boars_count,
-    // sow_scheduled has no DB column yet (draft-only); always defaults to 0
-    // when loading from the server.
-    sow_scheduled: 0,
+    sow_scheduled: row.sow_scheduled,
     notes: row.notes ?? "",
     farm_records: coerceFarmRecords(row.farm_records),
     next_day: coerceNextDay(row.next_day),
@@ -100,7 +100,7 @@ export async function fetchHogIntakeByDate(
   const { data, error } = await supabase
     .from("hog_intake_records")
     .select(
-      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, notes, farm_records, next_day, updated_at, updated_by",
+      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, sow_scheduled, notes, farm_records, next_day, updated_at, updated_by",
     )
     .eq("intake_date", date)
     .maybeSingle();
@@ -108,6 +108,28 @@ export async function fetchHogIntakeByDate(
   if (error) throw new Error(error.message);
   if (!data) return null;
   return rowToRecord(data as HogIntakeRow);
+}
+
+// The most recent saved record strictly before `date`. Used to roll Sow
+// inventory forward: that day's "Remaining After Schedule" seeds this day's
+// "Available This Week". Skips gaps (weekends / days with no record) by taking
+// the latest earlier row rather than exactly yesterday. Returns 0 when none.
+export async function fetchPreviousSowRemaining(
+  date: string,
+): Promise<number> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("hog_intake_records")
+    .select("hog_counts, sow_scheduled")
+    .lt("intake_date", date)
+    .order("intake_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return 0;
+  const row = data as Pick<HogIntakeRow, "hog_counts" | "sow_scheduled">;
+  return sowRemaining(coerceCounts(row.hog_counts).Sow, row.sow_scheduled);
 }
 
 // Upsert input fields only. Computed totals (total_hogs, for_cutting,
@@ -126,6 +148,7 @@ export async function upsertHogIntakeRecord(
     held_over: record.held_over,
     deaths_on_arrival: record.deaths_on_arrival,
     boars_count: record.boars_count,
+    sow_scheduled: record.sow_scheduled,
     notes: record.notes,
     farm_records: record.farm_records,
     next_day: record.next_day,
@@ -136,7 +159,7 @@ export async function upsertHogIntakeRecord(
     .from("hog_intake_records")
     .upsert(payload, { onConflict: "intake_date", ignoreDuplicates: false })
     .select(
-      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, notes, farm_records, next_day, updated_at, updated_by",
+      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, sow_scheduled, notes, farm_records, next_day, updated_at, updated_by",
     )
     .single();
 

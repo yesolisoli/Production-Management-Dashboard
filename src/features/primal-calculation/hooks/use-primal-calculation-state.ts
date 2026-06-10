@@ -12,6 +12,10 @@ import {
 } from "../calculations";
 import { loadHogIntakeForDate, saveHogIntakeRecord } from "../intake-source";
 import {
+  fetchPreviousEndingStock,
+  saveEndingStockForDate,
+} from "../ending-stock-source";
+import {
   PRODUCT_SPEC_BY_SKU,
   specsForCategory,
 } from "../product-specs";
@@ -19,25 +23,29 @@ import {
   clearDraft,
   readCommittedForDate,
   readCustomerOrdersForDate,
+  readCustomRowsForDate,
   readDraft,
-  readPreviousOverstock,
   saveCustomerOrdersForDate,
+  saveCustomRowsForDate,
   saveOrdersForDate,
-  saveOverstockForDate,
   writeDraft,
 } from "../primal-storage";
 import {
   CASE_TO_PCS,
   emptyCustomerGroupOrders,
-  emptyOverstockByGroup,
+  emptyCustomSpec,
+  emptyEndingStockByGroup,
   emptyProductOrder,
+  PRIMAL_GROUPS,
   type CustomerOrdersForDate,
+  type CustomRowsForDate,
+  type EndingStockByGroup,
   type OrderField,
-  type OverstockByGroup,
   type PrimalGroup,
   type PrimalGroupKey,
   type ProductOrder,
   type ProductOrdersForDate,
+  type ProductSpec,
 } from "../types";
 
 function todayString(): string {
@@ -84,18 +92,32 @@ export function usePrimalCalculationState() {
   const [customerOrders, setCustomerOrders] = useState<CustomerOrdersForDate>(
     {},
   );
-  // Yesterday's O/S carried in per group — the previous saved date's
-  // calculated O/S. Loaded from storage on every date change; feeds the
-  // Availability Chart's "Yesterday O/S" column.
-  const [yesterdayOverstock, setYesterdayOverstock] =
-    useState<OverstockByGroup>(emptyOverstockByGroup);
+  // Manually added (ad-hoc) order rows for the selected date. Self-contained
+  // and auto-persisted per date — see CustomOrderRow.
+  const [customRows, setCustomRows] = useState<CustomRowsForDate>([]);
+  // Opening stock carried in per group — the previous saved date's ending
+  // stock, fetched from Supabase on every date change. Feeds the
+  // Availability Chart's "Opening Stock" column.
+  const [openingStock, setOpeningStock] =
+    useState<EndingStockByGroup>(emptyEndingStockByGroup);
+  // True once the carry-in for the current date has finished loading. The
+  // auto-persist effect waits for this so it never writes today's ending
+  // stock using the previous date's stale opening value during the fetch.
+  const [openingStockLoaded, setOpeningStockLoaded] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   const hasHydrated = useRef(false);
   const activeIntakeToken = useRef(0);
+  const activeOpeningStockToken = useRef(0);
+  // Debounce timer for auto-persisting the recalculated Ending Stock.
+  const endingStockSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   // Set before any non-user-driven setOrders so the draft-write effect
   // doesn't persist a freshly loaded value back as a new draft.
   const suppressNextWrite = useRef(false);
+  // Monotonic suffix so two rows added in the same millisecond get distinct ids.
+  const customRowSeq = useRef(0);
 
   // Live mirror of `intake` plus a debounce timer, used to persist Next Day
   // Projection edits back to the hog_intake row without re-saving on load.
@@ -134,8 +156,25 @@ export function usePrimalCalculationState() {
     suppressNextWrite.current = true;
     setOrders(resolved);
     setCustomerOrders(readCustomerOrdersForDate(nextDate));
-    // Carry the previous saved date's calculated O/S in as Yesterday O/S.
-    setYesterdayOverstock(readPreviousOverstock(nextDate));
+    setCustomRows(readCustomRowsForDate(nextDate));
+  }, []);
+
+  // Carry the previous work date's saved Ending Stock in as this date's
+  // Opening Stock. Async (Supabase) and token-guarded so a rapid date change
+  // can't let a slow earlier fetch overwrite a newer one.
+  const loadOpeningStock = useCallback(async (nextDate: string) => {
+    const token = ++activeOpeningStockToken.current;
+    setOpeningStockLoaded(false);
+    try {
+      const previous = await fetchPreviousEndingStock(nextDate);
+      if (token !== activeOpeningStockToken.current) return; // stale
+      setOpeningStock(previous);
+    } catch {
+      if (token !== activeOpeningStockToken.current) return;
+      setOpeningStock(emptyEndingStockByGroup());
+    } finally {
+      if (token === activeOpeningStockToken.current) setOpeningStockLoaded(true);
+    }
   }, []);
 
   // Mount — load today's intake + orders.
@@ -144,6 +183,7 @@ export function usePrimalCalculationState() {
     void (async () => {
       const initial = todayString();
       loadOrdersForDate(initial);
+      void loadOpeningStock(initial);
       await loadIntakeForDate(initial);
       if (!cancelled) hasHydrated.current = true;
     })();
@@ -167,14 +207,17 @@ export function usePrimalCalculationState() {
   const setDate = useCallback(
     (nextDate: string) => {
       if (!nextDate) return;
-      // Drop any pending Next Day save so it can't land on the new date.
+      // Drop any pending Next Day / ending stock save so neither lands on
+      // the new date.
       if (nextDaySaveTimer.current) clearTimeout(nextDaySaveTimer.current);
+      if (endingStockSaveTimer.current) clearTimeout(endingStockSaveTimer.current);
       setSaveState({ kind: "idle" });
       setDateState(nextDate);
       loadOrdersForDate(nextDate);
+      void loadOpeningStock(nextDate);
       void loadIntakeForDate(nextDate);
     },
-    [loadIntakeForDate, loadOrdersForDate],
+    [loadIntakeForDate, loadOrdersForDate, loadOpeningStock],
   );
 
   // Edit the Next Day Projection (owned by Hog Intake, but entered here).
@@ -222,20 +265,15 @@ export function usePrimalCalculationState() {
     [],
   );
 
-  // Bulk: add `delta` cases to every product's Today column across all of a
-  // group's categories and re-derive Today pieces.
-  const bumpGroupCases = useCallback((group: PrimalGroup, delta: number) => {
+  // Clear every order for a group — zero out all SKUs across its categories.
+  // Treated as a normal edit so the draft auto-persists (surviving refresh);
+  // the operator can still Save to commit the cleared state.
+  const clearGroup = useCallback((group: PrimalGroup) => {
     setOrders((prev) => {
       const next = { ...prev };
       for (const category of group.categories) {
         for (const spec of specsForCategory(category)) {
-          const current = next[spec.sku] ?? emptyProductOrder();
-          const today_cases = clampNonNegativeInt(current.today_cases + delta);
-          next[spec.sku] = {
-            ...current,
-            today_cases,
-            today_pcs: casesToPieces(spec, today_cases),
-          };
+          next[spec.sku] = emptyProductOrder();
         }
       }
       return next;
@@ -271,37 +309,135 @@ export function usePrimalCalculationState() {
     [date],
   );
 
-  // Bulk: clear every order field for all products across a group's categories.
-  const clearGroup = useCallback((group: PrimalGroup) => {
-    setOrders((prev) => {
-      const next = { ...prev };
-      for (const category of group.categories) {
-        for (const spec of specsForCategory(category)) {
-          next[spec.sku] = emptyProductOrder();
-        }
-      }
-      return next;
-    });
-  }, []);
+  // -------------------------- Custom rows ---------------------------
+  // Ad-hoc rows an operator adds by hand for the selected date. Each is
+  // self-contained (its own spec + order) and auto-persisted on every edit —
+  // no draft/commit split, mirroring the customer matrix above. A new row is
+  // filed under the group's first category so it pools into that group.
+  const addCustomRow = useCallback(
+    (groupKey: PrimalGroupKey) => {
+      const group = PRIMAL_GROUPS.find((g) => g.key === groupKey);
+      if (!group) return;
+      setCustomRows((prev) => {
+        const id = `custom-${Date.now()}-${customRowSeq.current++}`;
+        const next: CustomRowsForDate = [
+          ...prev,
+          {
+            id,
+            spec: emptyCustomSpec(group.categories[0]),
+            order: emptyProductOrder(),
+          },
+        ];
+        saveCustomRowsForDate(date, next);
+        return next;
+      });
+    },
+    [date],
+  );
 
-  // Per-group calculated Today's O/S (pieces) — the Availability Chart's
-  // todaysOverstock, derived from today's orders + intake + customer orders
-  // + yesterday's carry-in. Persisted on Save so it becomes the next
-  // production date's Yesterday O/S.
-  const computeOverstockByGroup = useCallback((): OverstockByGroup => {
+  // Edit a custom row's spec fields (SKU / name / case pack / pieces-per-case).
+  // Changing pieces-per-case re-derives the row's pieces from its case count so
+  // the two stay consistent, exactly like editing a *_cases order field.
+  const updateCustomRowSpec = useCallback(
+    (id: string, patch: Partial<ProductSpec>) => {
+      setCustomRows((prev) => {
+        const next = prev.map((row) => {
+          if (row.id !== id) return row;
+          const spec: ProductSpec = { ...row.spec, ...patch };
+          if (patch.piecesPerCase !== undefined) {
+            spec.piecesPerCase = Math.max(
+              1,
+              Math.floor(clampNonNegativeInt(patch.piecesPerCase)),
+            );
+          }
+          const order =
+            patch.piecesPerCase !== undefined
+              ? { ...row.order, today_pcs: casesToPieces(spec, row.order.today_cases) }
+              : row.order;
+          return { ...row, spec, order };
+        });
+        saveCustomRowsForDate(date, next);
+        return next;
+      });
+    },
+    [date],
+  );
+
+  // Edit a custom row's order field. Editing today_cases auto-derives today_pcs
+  // from the row's own case pack, matching the catalog rows' behavior.
+  const setCustomRowField = useCallback(
+    (id: string, field: OrderField, value: number) => {
+      const clamped = clampNonNegativeInt(value);
+      setCustomRows((prev) => {
+        const next = prev.map((row) => {
+          if (row.id !== id) return row;
+          const order: ProductOrder = { ...row.order, [field]: clamped };
+          const pcsField = CASE_TO_PCS[field];
+          if (pcsField) order[pcsField] = casesToPieces(row.spec, clamped);
+          return { ...row, order };
+        });
+        saveCustomRowsForDate(date, next);
+        return next;
+      });
+    },
+    [date],
+  );
+
+  const removeCustomRow = useCallback(
+    (id: string) => {
+      setCustomRows((prev) => {
+        const next = prev.filter((row) => row.id !== id);
+        saveCustomRowsForDate(date, next);
+        return next;
+      });
+    },
+    [date],
+  );
+
+  // Per-group calculated Ending Stock (pieces) — the Availability Chart's
+  // endingStock, derived from today's orders + intake + customer orders
+  // + the opening-stock carry-in. Persisted on Save so it becomes the next
+  // production date's Opening Stock.
+  const computeEndingStockByGroup = useCallback((): EndingStockByGroup => {
     const rows = buildAvailabilityRows(
       orders,
       intake.hog_counts,
       customerOrders,
-      yesterdayOverstock,
+      openingStock,
+      customRows,
     );
-    const out = emptyOverstockByGroup();
-    for (const row of rows) out[row.group] = row.todaysOverstock;
+    const out = emptyEndingStockByGroup();
+    for (const row of rows) out[row.group] = row.endingStock;
     return out;
-  }, [orders, intake, customerOrders, yesterdayOverstock]);
+  }, [orders, intake, customerOrders, openingStock, customRows]);
+
+  // Auto-persist the recalculated Ending Stock (debounced) so the carry-over
+  // chain is always current: opening the next work date reads back exactly
+  // the value shown here, with no explicit Save required. This is the fix for
+  // the stale-snapshot bug — previously it only persisted on Save, so an
+  // edited-but-unsaved day carried its old value forward.
+  //
+  // Gated on hydration + the carry-in having loaded + intake settled so it
+  // never writes a value derived from a stale Opening Stock or not-yet-loaded
+  // hog counts during a date change's async fetch window.
+  useEffect(() => {
+    if (!hasHydrated.current || !openingStockLoaded) return;
+    if (intakeStatus.kind === "loading") return;
+    const byGroup = computeEndingStockByGroup();
+    if (endingStockSaveTimer.current) clearTimeout(endingStockSaveTimer.current);
+    endingStockSaveTimer.current = setTimeout(() => {
+      void saveEndingStockForDate(date, byGroup).catch(() => {
+        // Best-effort: a transient persist failure shouldn't block editing;
+        // the next recalculation retries.
+      });
+    }, 600);
+    return () => {
+      if (endingStockSaveTimer.current) clearTimeout(endingStockSaveTimer.current);
+    };
+  }, [date, computeEndingStockByGroup, openingStockLoaded, intakeStatus.kind]);
 
   // Commit a group's orders (every SKU across its categories) to the
-  // persistent store, plus its calculated O/S.
+  // persistent store, plus its calculated Ending Stock.
   const saveGroup = useCallback(
     async (group: PrimalGroup) => {
       const groupKey = group.key as PrimalGroupKey;
@@ -314,8 +450,9 @@ export function usePrimalCalculationState() {
           }
         }
         saveOrdersForDate(date, subset);
-        saveOverstockForDate(date, {
-          [groupKey]: computeOverstockByGroup()[groupKey],
+        if (endingStockSaveTimer.current) clearTimeout(endingStockSaveTimer.current);
+        await saveEndingStockForDate(date, {
+          [groupKey]: computeEndingStockByGroup()[groupKey],
         });
         setSaveState({ kind: "saved", scope: group.key, at: Date.now() });
       } catch (err) {
@@ -326,16 +463,17 @@ export function usePrimalCalculationState() {
         });
       }
     },
-    [date, orders, computeOverstockByGroup],
+    [date, orders, computeEndingStockByGroup],
   );
 
-  // Commit every group at once, plus all calculated O/S. Clears the draft
+  // Commit every group at once, plus all calculated Ending Stock. Clears the draft
   // since committed and working copy now match.
   const saveAll = useCallback(async () => {
     setSaveState({ kind: "saving", scope: "all" });
     try {
       saveOrdersForDate(date, orders);
-      saveOverstockForDate(date, computeOverstockByGroup());
+      if (endingStockSaveTimer.current) clearTimeout(endingStockSaveTimer.current);
+      await saveEndingStockForDate(date, computeEndingStockByGroup());
       clearDraft(date);
       setSaveState({ kind: "saved", scope: "all", at: Date.now() });
     } catch (err) {
@@ -345,7 +483,7 @@ export function usePrimalCalculationState() {
         message: err instanceof Error ? err.message : "Failed to save",
       });
     }
-  }, [date, orders, computeOverstockByGroup]);
+  }, [date, orders, computeEndingStockByGroup]);
 
   return {
     date,
@@ -353,17 +491,21 @@ export function usePrimalCalculationState() {
     intakeStatus,
     orders,
     customerOrders,
-    yesterdayOverstock,
+    customRows,
+    openingStock,
     saveState,
     setDate,
     setOrderField,
     setNextDayField,
     setCustomerOrder,
-    bumpGroupCases,
-    clearGroup,
     saveGroup,
     saveAll,
+    clearGroup,
     applyImportedOrders,
+    addCustomRow,
+    updateCustomRowSpec,
+    setCustomRowField,
+    removeCustomRow,
   };
 }
 

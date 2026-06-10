@@ -12,7 +12,7 @@
 //
 // Only today's RAW case input is read from the file; the paired today_pcs
 // is derived from each product's case pack, exactly like manual entry.
-// Tomorrow / overstock are no longer entered per SKU — O/S is calculated.
+// Tomorrow / ending stock are no longer entered per SKU — it is calculated.
 // Older templates with extra columns still import (extras are ignored).
 // -------------------------------------------------------------------
 

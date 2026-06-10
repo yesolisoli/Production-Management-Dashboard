@@ -1,16 +1,19 @@
 import {
   emptyCustomerGroupOrders,
-  emptyOverstockByGroup,
   emptyProductOrder,
+  PRIMAL_CATEGORIES,
   PRIMAL_GROUPS,
   type CustomerGroupOrders,
   type CustomerOrdersByDate,
   type CustomerOrdersForDate,
-  type OverstockByDate,
-  type OverstockByGroup,
+  type CustomOrderRow,
+  type CustomRowsByDate,
+  type CustomRowsForDate,
+  type PrimalCategory,
   type PrimalOrdersByDate,
   type ProductOrder,
   type ProductOrdersForDate,
+  type ProductSpec,
 } from "./types";
 
 // -------------------------------------------------------------------
@@ -29,7 +32,7 @@ import {
 const COMMITTED_KEY = "primal-calc.orders";
 const DRAFT_KEY_PREFIX = "primal-calc.draft.";
 const CUSTOMER_KEY = "primal-calc.customer-orders";
-const OVERSTOCK_KEY = "primal-calc.overstock";
+const CUSTOM_ROWS_KEY = "primal-calc.custom-rows";
 
 function draftKey(date: string): string {
   return `${DRAFT_KEY_PREFIX}${date}`;
@@ -200,37 +203,61 @@ export function saveCustomerOrdersForDate(
   }
 }
 
-// ---------------------- Calculated Today's O/S ----------------------
-// Per-date, per-group calculated overstock (in pieces). Written on Save
-// from the Availability Chart's Today's O/S; read back as the next
-// production date's Yesterday O/S (the carry-over). Keyed:
-//   { "YYYY-MM-DD": { "<group>": pcs } }
+// --------------------------- Custom rows ----------------------------
+// Per-date list of manually added order rows. Auto-persisted on every edit
+// (no draft/commit split — like the customer matrix), keyed by date:
+//   { "YYYY-MM-DD": [ { id, spec, order } ] }
 
-function coerceOverstockByGroup(raw: unknown): OverstockByGroup {
-  const out = emptyOverstockByGroup();
-  if (!raw || typeof raw !== "object") return out;
+function coerceCustomSpec(raw: unknown): ProductSpec | null {
+  if (!raw || typeof raw !== "object") return null;
   const obj = raw as Record<string, unknown>;
-  for (const group of PRIMAL_GROUPS) {
-    const v = obj[group.key];
-    if (typeof v === "number" && Number.isFinite(v)) {
-      out[group.key] = Math.floor(v);
-    }
+  const category = obj.category;
+  if (
+    typeof category !== "string" ||
+    !(PRIMAL_CATEGORIES as readonly string[]).includes(category)
+  ) {
+    return null;
   }
-  return out;
+  const pieces = obj.piecesPerCase;
+  return {
+    sku: typeof obj.sku === "string" ? obj.sku : "",
+    name: typeof obj.name === "string" ? obj.name : "",
+    category: category as PrimalCategory,
+    casePack: typeof obj.casePack === "string" ? obj.casePack : "",
+    piecesPerCase:
+      typeof pieces === "number" && Number.isFinite(pieces) && pieces >= 1
+        ? Math.floor(pieces)
+        : 1,
+  };
 }
 
-function readOverstock(): OverstockByDate {
+function coerceCustomRow(raw: unknown): CustomOrderRow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  const spec = coerceCustomSpec(obj.spec);
+  if (typeof obj.id !== "string" || !obj.id || !spec) return null;
+  return { id: obj.id, spec, order: coerceOrder(obj.order) };
+}
+
+function coerceCustomRowsForDate(raw: unknown): CustomRowsForDate {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(coerceCustomRow)
+    .filter((row): row is CustomOrderRow => row !== null);
+}
+
+function readCustomRows(): CustomRowsByDate {
   if (typeof window === "undefined") return {};
   try {
-    const raw = window.localStorage.getItem(OVERSTOCK_KEY);
+    const raw = window.localStorage.getItem(CUSTOM_ROWS_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return {};
-    const out: OverstockByDate = {};
-    for (const [date, byGroup] of Object.entries(
+    const out: CustomRowsByDate = {};
+    for (const [date, rows] of Object.entries(
       parsed as Record<string, unknown>,
     )) {
-      out[date] = coerceOverstockByGroup(byGroup);
+      out[date] = coerceCustomRowsForDate(rows);
     }
     return out;
   } catch {
@@ -238,39 +265,28 @@ function readOverstock(): OverstockByDate {
   }
 }
 
-export function readOverstockForDate(date: string): OverstockByGroup {
-  return readOverstock()[date] ?? emptyOverstockByGroup();
+export function readCustomRowsForDate(date: string): CustomRowsForDate {
+  return readCustomRows()[date] ?? [];
 }
 
-// Merge the given per-group O/S into the store for a date and persist.
-// Merging (rather than replacing) lets a per-group Save write just its own
-// group without clobbering the others.
-export function saveOverstockForDate(
+export function saveCustomRowsForDate(
   date: string,
-  byGroup: Partial<OverstockByGroup>,
+  rows: CustomRowsForDate,
 ): void {
   if (typeof window === "undefined") return;
-  const all = readOverstock();
-  all[date] = { ...(all[date] ?? emptyOverstockByGroup()), ...byGroup };
+  const all = readCustomRows();
+  if (rows.length === 0) {
+    delete all[date];
+  } else {
+    all[date] = rows;
+  }
   try {
-    window.localStorage.setItem(OVERSTOCK_KEY, JSON.stringify(all));
+    window.localStorage.setItem(CUSTOM_ROWS_KEY, JSON.stringify(all));
   } catch {
     // ignore quota / access errors
   }
 }
 
-// The carry-over source: the most recent saved date strictly before
-// `beforeDate`. Dates are "YYYY-MM-DD" so a lexicographic compare is a
-// correct chronological compare. Returns zeros when nothing precedes it
-// (e.g. the very first production date), and skips gaps (weekends) by
-// taking the latest prior date rather than calendar −1.
-export function readPreviousOverstock(beforeDate: string): OverstockByGroup {
-  const all = readOverstock();
-  let latest: string | null = null;
-  for (const date of Object.keys(all)) {
-    if (date < beforeDate && (latest === null || date > latest)) {
-      latest = date;
-    }
-  }
-  return latest === null ? emptyOverstockByGroup() : all[latest];
-}
+// NOTE: Calculated Ending Stock is no longer persisted here. It moved to
+// Supabase (primal_ending_stock) so the day-to-day carry-over survives refresh
+// and is shared across devices/users. See ending-stock-source.ts.

@@ -20,7 +20,7 @@ export type PrimalCategory = (typeof PRIMAL_CATEGORIES)[number];
 // -------------------------------------------------------------------
 // Production groups — categories that come off the same primal cut share
 // ONE production pool, so quantity (expected production, availability,
-// Calculated O/S, carry-over, customer reservations) is computed per group,
+// Ending Stock, carry-over, customer reservations) is computed per group,
 // never per category. Order entry and per-type display stay at the category
 // level. Most groups are a single category; Spareribs + Ribbons/Ribs come
 // off the same rib cut, so they form one "Ribs" group.
@@ -61,8 +61,8 @@ export type ProductSpec = {
 };
 
 // The editable values a supervisor enters per product. Today's
-// production/orders only — everything else (overstock, availability) is
-// derived, never typed in. See the Calculated O/S note below.
+// production/orders only — everything else (ending stock, availability) is
+// derived, never typed in. See the Calculated Ending Stock note below.
 export type ProductOrder = {
   today_cases: number;
   today_pcs: number;
@@ -91,31 +91,55 @@ export type ProductOrdersForDate = Record<string, ProductOrder>;
 export type PrimalOrdersByDate = Record<string, ProductOrdersForDate>;
 
 // -------------------------------------------------------------------
-// Calculated Today's O/S — saved per date, per production group (pieces).
+// Manually added (ad-hoc) order rows — products that aren't in the static
+// catalog but an operator adds by hand for a single date. Each row is
+// self-contained: it carries its own editable spec plus its order, and is
+// persisted per date in its own store (mirrors the customer-orders pattern,
+// not the catalog). Its pieces pool into the owning group's Sales Orders
+// exactly like a catalog row, so Availability / Ending Stock pick it up
+// automatically. `id` is an immutable key, independent of the editable SKU.
+//   { "YYYY-MM-DD": [ { id, spec, order } ] }
+// -------------------------------------------------------------------
+export type CustomOrderRow = {
+  id: string;
+  spec: ProductSpec;
+  order: ProductOrder;
+};
+export type CustomRowsForDate = CustomOrderRow[];
+export type CustomRowsByDate = Record<string, CustomRowsForDate>;
+
+// A blank custom spec for a freshly added row. piecesPerCase defaults to 1
+// (not 0) so cases↔pieces conversion is a no-op until the operator sets it.
+export function emptyCustomSpec(category: PrimalCategory): ProductSpec {
+  return { sku: "", name: "", category, casePack: "", piecesPerCase: 1 };
+}
+
+// -------------------------------------------------------------------
+// Calculated Ending Stock — saved per date, per production group (pieces).
 //
-// O/S is DERIVED from the Availability Chart (Available Stock − Customer
-// Orders) at the group level — production comes from whole hogs, not per
-// SKU, so there is no per-SKU O/S, and pooled cuts (Ribs) share one figure.
-// On Save the computed figure is persisted here; opening the next
+// Ending Stock is DERIVED from the Availability Chart (Available Stock −
+// Customer Orders) at the group level — production comes from whole hogs,
+// not per SKU, so there is no per-SKU figure, and pooled cuts (Ribs) share
+// one value. On Save the computed figure is persisted here; opening the next
 // production date loads the previous saved date's values as that day's
-// Yesterday O/S (the carry-over).
+// Opening Stock (the carry-over).
 //   { "YYYY-MM-DD": { "<group>": pcs } }
 // -------------------------------------------------------------------
-export type OverstockByGroup = Record<PrimalGroupKey, number>;
-export type OverstockByDate = Record<string, OverstockByGroup>;
+export type EndingStockByGroup = Record<PrimalGroupKey, number>;
+export type EndingStockByDate = Record<string, EndingStockByGroup>;
 
-export function emptyOverstockByGroup(): OverstockByGroup {
-  const out = {} as OverstockByGroup;
+export function emptyEndingStockByGroup(): EndingStockByGroup {
+  const out = {} as EndingStockByGroup;
   for (const group of PRIMAL_GROUPS) out[group.key] = 0;
   return out;
 }
 
 // -------------------------------------------------------------------
-// Availability — combines expected production with cooler overstock and
+// Availability — combines expected production with opening stock and
 // compares against customer orders. Like everything else here this is a
 // DERIVED view: never persisted, always recomputed from intake counts +
-// orders + cooler O/S. Ending O/S and Shortage are computed, never typed
-// in by an operator.
+// orders + opening stock. Ending Stock and Shortage are computed, never
+// typed in by an operator.
 // -------------------------------------------------------------------
 export type AvailabilityStatus = "OK" | "Short" | "Low Reserve";
 
@@ -124,22 +148,22 @@ export type GroupAvailability = {
   label: string;
   categories: readonly PrimalCategory[];
   expectedProduction: number; // expected pieces from today's hog intake (per group, once)
-  yesterdayOverstock: number; // cooler O/S carried in from yesterday
+  openingStock: number; // stock carried in from the previous day (yesterday's ending stock)
   specialCustomerOrders: number; // orders from the Customer Availability chart (above)
-  availableStock: number; // expProd + yesterdayOverstock − specialCustomerOrders
-  customerOrders: number; // today's order pieces from the per-SKU sections (below)
-  todaysOverstock: number; // availableStock − customerOrders (may be negative)
+  availableStock: number; // expProd + openingStock − specialCustomerOrders
+  salesOrders: number; // today's order pieces from the per-SKU sections (below)
+  endingStock: number; // availableStock − salesOrders (may be negative)
   shortage: number; // demand that exceeds availability
   status: AvailabilityStatus;
 };
 
 export type AvailabilityTotals = {
   expectedProduction: number;
-  yesterdayOverstock: number;
+  openingStock: number;
   specialCustomerOrders: number;
   availableStock: number;
-  customerOrders: number;
-  todaysOverstock: number;
+  salesOrders: number;
+  endingStock: number;
   shortage: number;
 };
 

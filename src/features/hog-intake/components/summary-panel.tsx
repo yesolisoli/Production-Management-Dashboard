@@ -1,47 +1,38 @@
 "use client";
 
 import clsx from "clsx";
-import {
-  Award,
-  ClipboardList,
-  Minus,
-  PiggyBank,
-  Plus,
-  type LucideIcon,
-} from "lucide-react";
+import { Boxes, ClipboardList, type LucideIcon, Minus, Plus } from "lucide-react";
 import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
-import { clampNonNegativeInt } from "../calculations";
+import { clampNonNegativeInt, sowRemaining } from "../calculations";
 import type { HogIntakeTotals } from "../calculations";
 
 type SummaryPanelProps = {
   totals: HogIntakeTotals;
   sideOrders: number;
   onChangeSideOrders: (value: number) => void;
+  // Rendered as the middle column, between Intake Summary and Sow Availability.
+  middle?: React.ReactNode;
+  // Rendered as the last column, to the right of Sow Availability.
+  after?: React.ReactNode;
   sowAvailable: number;
   sowScheduled: number;
   onChangeSowAvailable: (value: number) => void;
   onChangeSowScheduled: (value: number) => void;
 };
 
-type Tone = "blue" | "violet" | "rose";
-
-const TONES: Record<Tone, { chipBg: string; chipFg: string }> = {
-  blue: { chipBg: "bg-blue-50", chipFg: "text-blue-500" },
-  violet: { chipBg: "bg-violet-50", chipFg: "text-violet-500" },
-  rose: { chipBg: "bg-rose-50", chipFg: "text-rose-500" },
-};
-
 export function SummaryPanel({
   totals,
   sideOrders,
   onChangeSideOrders,
+  middle,
+  after,
   sowAvailable,
   sowScheduled,
   onChangeSowAvailable,
   onChangeSowScheduled,
 }: SummaryPanelProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
       <IntakeSummaryCard
         totalIntake={totals.totalIntake}
         sideOrders={sideOrders}
@@ -49,46 +40,78 @@ export function SummaryPanel({
         forCutting={totals.forCutting}
         overSold={totals.overSold}
       />
-      <PrimalCalcCard value={totals.yieldTotal} />
+      {middle}
       <SowProcessingCard
         available={sowAvailable}
         scheduled={sowScheduled}
         onChangeAvailable={onChangeSowAvailable}
         onChangeScheduled={onChangeSowScheduled}
       />
+      {after}
     </div>
   );
 }
 
-function CardShell({
+export function CardShell({
   label,
-  tone,
-  icon: Icon,
+  subtitle,
+  icon,
+  className,
   children,
 }: {
   label: string;
-  tone: Tone;
-  icon: LucideIcon;
+  subtitle?: string;
+  // Small colored badge shown in the top-right corner of the card.
+  icon?: React.ReactNode;
+  className?: string;
   children: React.ReactNode;
 }) {
-  const t = TONES[tone];
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          {label}
-        </p>
-        <span
-          className={clsx(
-            "flex h-6 w-6 items-center justify-center rounded-md",
-            t.chipBg,
-          )}
-        >
-          <Icon size={13} className={t.chipFg} strokeWidth={2} />
-        </span>
+    <div
+      className={clsx(
+        "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm",
+        className,
+      )}
+    >
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">{label}</h3>
+          {subtitle ? (
+            <p className="text-xs text-slate-500">{subtitle}</p>
+          ) : null}
+        </div>
+        {icon}
       </div>
       {children}
     </div>
+  );
+}
+
+// Small colored icon badge for the top-right corner of a CardShell. Tones
+// mirror the soft pill styling used across the Primal Calc cards.
+const CARD_ICON_TONES = {
+  blue: "bg-blue-50 text-blue-600",
+  amber: "bg-amber-50 text-amber-600",
+  emerald: "bg-emerald-50 text-emerald-600",
+  violet: "bg-violet-50 text-violet-600",
+} as const;
+
+export function CardIcon({
+  icon: Icon,
+  tone,
+}: {
+  icon: LucideIcon;
+  tone: keyof typeof CARD_ICON_TONES;
+}) {
+  return (
+    <span
+      className={clsx(
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+        CARD_ICON_TONES[tone],
+      )}
+    >
+      <Icon size={16} />
+    </span>
   );
 }
 
@@ -109,8 +132,12 @@ function IntakeSummaryCard({
   overSold: boolean;
 }) {
   return (
-    <CardShell label="Intake Summary" tone="blue" icon={ClipboardList}>
-      <div className="mt-2 space-y-1.5">
+    <CardShell
+      label="Intake Summary"
+      subtitle="Daily intake overview"
+      icon={<CardIcon icon={ClipboardList} tone="blue" />}
+    >
+      <div className="space-y-2">
         <FlowRow label="Total Intake" value={totalIntake} />
         <StepperRow
           label="Side Orders"
@@ -172,19 +199,6 @@ function FlowRow({
   );
 }
 
-function PrimalCalcCard({ value }: { value: number }) {
-  return (
-    <CardShell label="Primal Calc (JP + RWA)" tone="violet" icon={Award}>
-      <p className="mt-2 text-3xl font-extrabold tabular-nums leading-none text-slate-900">
-        {value.toLocaleString()}
-      </p>
-      <p className="mt-2 text-[11px] leading-snug text-slate-400">
-        JP + RWA only. BK, Sow, Round, Suckling, and Customer hogs excluded.
-      </p>
-    </CardShell>
-  );
-}
-
 // Sow is its own operational track — editable here rather than in Hog Counts.
 function SowProcessingCard({
   available,
@@ -198,8 +212,12 @@ function SowProcessingCard({
   onChangeScheduled: (value: number) => void;
 }) {
   return (
-    <CardShell label="Sow Availability" tone="rose" icon={PiggyBank}>
-      <div className="mt-2 space-y-2">
+    <CardShell
+      label="Sow Inventory"
+      subtitle="Sow inventory tracking"
+      icon={<CardIcon icon={Boxes} tone="emerald" />}
+    >
+      <div className="space-y-2">
         <StepperRow
           label="Available This Week"
           value={available}
@@ -215,7 +233,7 @@ function SowProcessingCard({
           <div className="flex items-center gap-1.5">
             <span className="h-7 w-7" aria-hidden />
             <span className="w-12 text-center text-xl font-extrabold tabular-nums text-slate-900">
-              {Math.max(0, available - scheduled).toLocaleString()}
+              {sowRemaining(available, scheduled).toLocaleString()}
             </span>
             <span className="h-7 w-7" aria-hidden />
           </div>
@@ -225,7 +243,7 @@ function SowProcessingCard({
   );
 }
 
-function StepperRow({
+export function StepperRow({
   label,
   value,
   onChange,
