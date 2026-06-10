@@ -195,14 +195,16 @@ export function PrimalGroupSection({
                 ))}
                 <tr>
                   <td colSpan={5} className="px-4 py-2.5">
+                    <div className="flex justify-center">
                     <button
                       type="button"
                       onClick={onAddRow}
-                      className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700"
+                      aria-label="Add item"
+                      className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-1.5 text-slate-500 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700"
                     >
                       <Plus size={14} />
-                      Add item
                     </button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -292,7 +294,9 @@ function ProductRow({
       <td className="px-2 py-2">
         <span className="font-medium text-slate-800">{spec.name}</span>
       </td>
-      <td className="px-2 py-2 text-xs text-slate-500">{spec.casePack}</td>
+      <td className="px-2 py-2 text-xs text-slate-500">
+        {casePackLabel(spec.casePack)}
+      </td>
 
       <NumberCell
         value={order.today_cases}
@@ -377,8 +381,9 @@ function NumberCell(props: {
 }
 
 // ---------------------------- Custom row ----------------------------
-// A manually added line: every field is editable (SKU, name, case pack label,
-// pieces-per-case) plus the cases/pieces order, and it can be deleted.
+// A manually added line: SKU, name and case pack are free-text, plus the
+// cases/pieces order, and it can be deleted. Case pack is a plain label here
+// (no pieces-per-case divisor); pieces are entered directly.
 function CustomProductRow({
   row,
   onUpdateSpec,
@@ -394,13 +399,13 @@ function CustomProductRow({
   const label = spec.name || spec.sku || "new item";
   return (
     <tr className="transition-colors hover:bg-slate-50/60">
-      <td className="px-3 py-2">
+      <td className="px-4 py-2">
         <input
           value={spec.sku}
           onChange={(e) => onUpdateSpec(id, { sku: e.target.value })}
           placeholder="SKU"
           aria-label="Custom item SKU"
-          className="h-9 w-24 rounded-lg border border-transparent bg-transparent px-2 font-mono text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
+          className="-ml-2 h-9 w-24 rounded-lg border border-transparent bg-transparent px-2 font-mono text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
         />
       </td>
       <td className="px-2 py-2">
@@ -409,35 +414,17 @@ function CustomProductRow({
           onChange={(e) => onUpdateSpec(id, { name: e.target.value })}
           placeholder="Item name"
           aria-label="Custom item name"
-          className="h-9 w-full min-w-40 rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium text-slate-800 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
+          className="-ml-2 h-9 w-full min-w-40 rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium text-slate-800 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
         />
       </td>
       <td className="px-2 py-2">
-        <div className="flex items-center gap-1.5">
-          <input
-            value={spec.casePack}
-            onChange={(e) => onUpdateSpec(id, { casePack: e.target.value })}
-            placeholder="Case pack"
-            aria-label="Custom item case pack"
-            className="h-9 w-28 rounded-lg border border-transparent bg-transparent px-2 text-xs text-slate-600 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
-          />
-          <span className="text-[10px] text-slate-400">×</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
-            value={spec.piecesPerCase}
-            onChange={(e) =>
-              onUpdateSpec(id, {
-                piecesPerCase: clampNonNegativeInt(e.target.value),
-              })
-            }
-            aria-label="Custom item pieces per case"
-            title="Pieces per case"
-            className="h-9 w-14 rounded-lg border border-transparent bg-transparent text-center text-xs font-semibold tabular-nums text-slate-600 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          />
-        </div>
+        <input
+          value={spec.casePack}
+          onChange={(e) => onUpdateSpec(id, { casePack: e.target.value })}
+          placeholder="Case pack"
+          aria-label="Custom item case pack"
+          className="-ml-2 h-9 w-full min-w-28 rounded-lg border border-transparent bg-transparent px-2 text-xs text-slate-600 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
+        />
       </td>
 
       <NumberCell
@@ -446,20 +433,17 @@ function CustomProductRow({
         ariaLabel={`${label} today cases`}
         accent="blue"
       />
-      <td className="px-1.5 py-2">
-        <div className="flex items-center justify-center gap-2">
-          <StepInput
-            value={order.today_pcs}
-            onChange={(v) => onChangeField(id, "today_pcs", v)}
-            ariaLabel={`${label} today pieces`}
-          />
-          <StepButton
-            ariaLabel={`Remove ${label}`}
-            onClick={() => onRemove(id)}
-          >
+      <td className="relative px-1.5 py-2">
+        <StepInput
+          value={order.today_pcs}
+          onChange={(v) => onChangeField(id, "today_pcs", v)}
+          ariaLabel={`${label} today pieces`}
+        />
+        <span className="absolute right-2 top-1/2 -translate-y-1/2">
+          <StepButton ariaLabel={`Remove ${label}`} onClick={() => onRemove(id)}>
             <Trash2 size={14} />
           </StepButton>
-        </div>
+        </span>
       </td>
     </tr>
   );
@@ -573,6 +557,12 @@ function HeaderEndingStock({ pcs }: { pcs: number }) {
       </p>
     </div>
   );
+}
+
+// Case Pack specs read like "6 (20-22 KG)" / "240 (TOTE)". Show just the pack
+// count, dropping the parenthetical weight/unit annotation.
+function casePackLabel(casePack: string): string {
+  return casePack.replace(/\s*\([^)]*\)\s*$/, "").trim();
 }
 
 function groupSlug(key: string): string {

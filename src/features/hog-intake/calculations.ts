@@ -6,15 +6,16 @@ import {
   type FarmRecord,
   type HogCounts,
   type HogIntakeRecord,
+  type HogType,
   type NextDay,
 } from "./types";
 
 const FARM_DERIVED_SET = new Set<string>(FARM_DERIVED_HOG_TYPES);
 
-// Farm Delivery Records are the single entry point for delivered primal hogs —
-// JP / RWA roll up from the rows and are read-only in the grid. Every other
-// type (BK / Sow / Round / Suckling / Customer) is entered manually on its own
-// card. JP / RWA are also the only types that feed Primal Calc (see yieldTotal).
+// Farm Delivery Records are the single entry point for delivered hogs that roll
+// up — JP / RWA / BK sum from the rows and are read-only in the grid. Sow, Round,
+// Suckling and Customer stay manual on their own cards. Only JP / RWA feed Primal
+// Calc (see yieldTotal); BK is summed here but shown separately.
 export function derivedCountsFromFarmRecords(
   records: FarmRecord[],
 ): Record<FarmDerivedHogType, number> {
@@ -27,6 +28,19 @@ export function derivedCountsFromFarmRecords(
     }
   }
   return counts;
+}
+
+// Sum of farm-delivery counts for a single hog type — works for any type, even
+// ones that don't roll up into hogCounts (e.g. Sow, whose stored count is the
+// weekly Available tracked separately). Display-only roll-up for the footer.
+export function farmRecordCountForType(
+  records: FarmRecord[],
+  type: HogType,
+): number {
+  return records.reduce(
+    (sum, row) => sum + (row.type === type ? row.count : 0),
+    0,
+  );
 }
 
 // Total Hog — the sum of every hog type, including Sow. Side orders are NOT

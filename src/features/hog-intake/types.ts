@@ -18,11 +18,17 @@ export const YIELD_HOG_TYPES = ["JP", "RWA"] as const;
 export type YieldHogType = (typeof YIELD_HOG_TYPES)[number];
 
 // Hog types whose grid counts roll up from Farm Delivery Records (read-only).
-// Only the Primal Calc hogs (JP / RWA) are tracked per-farm with tattoos, so
-// deliveries are their single entry point. Every other type (BK / Sow / Round /
-// Suckling / Customer) is entered manually on its own card.
-export const FARM_DERIVED_HOG_TYPES = ["JP", "RWA"] as const;
+// JP / RWA / BK are tracked per-farm, so deliveries are their single entry
+// point — their counts are summed from the rows, not typed in by hand. BK does
+// NOT feed Primal Calc (see YIELD_HOG_TYPES); it is shown separately. Sow, Round,
+// Suckling and Customer stay manual (their own cards).
+export const FARM_DERIVED_HOG_TYPES = ["JP", "RWA", "BK"] as const;
 export type FarmDerivedHogType = (typeof FARM_DERIVED_HOG_TYPES)[number];
+
+// Types offered in the Farm Delivery Records dropdown. JP / RWA / BK roll up
+// from the rows (FARM_DERIVED_HOG_TYPES); Sow is selectable for labeling a
+// delivery, but its count stays manual (the Sow card), so it is not summed here.
+export const FARM_RECORD_TYPES = ["JP", "RWA", "BK", "Sow"] as const;
 
 export type HogCounts = Record<HogType, number>;
 

@@ -2,18 +2,18 @@
 
 import { Layers } from "lucide-react";
 import { type HogCounts, type HogType } from "../types";
-import { CardIcon, CardShell, StepperRow } from "./summary-panel";
+import { CardIcon, CardShell, ReadOnlyRow, StepperRow } from "./summary-panel";
 
 type HogCountGridProps = {
   counts: HogCounts;
   onChangeCount: (type: HogType, value: number) => void;
 };
 
-const EXCLUDE_TYPES: HogType[] = ["BK", "Round", "Suckling", "Customer"];
+const EXCLUDE_TYPES: HogType[] = ["Round", "Suckling", "Customer"];
 
-// JP / RWA live in the Primal Calc summary card. This card is only the excluded
-// hogs (BK / Round / Suckling / Customer), entered manually — they count toward
-// Total Hog but not yield.
+// JP / RWA / BK roll up from Farm Delivery Records. This card is only the
+// manually-entered excluded hogs (Round / Suckling / Customer) — they count
+// toward Total Hog but not yield.
 export function HogCountGrid({ counts, onChangeCount }: HogCountGridProps) {
   return (
     <CardShell
@@ -22,6 +22,8 @@ export function HogCountGrid({ counts, onChangeCount }: HogCountGridProps) {
       icon={<CardIcon icon={Layers} tone="amber" />}
     >
       <div className="space-y-2">
+        {/* BK rolls up from Farm Delivery Records — read-only here. */}
+        <ReadOnlyRow label="BK" value={counts.BK} />
         {EXCLUDE_TYPES.map((type) => (
           <StepperRow
             key={type}

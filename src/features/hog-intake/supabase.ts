@@ -113,23 +113,30 @@ export async function fetchHogIntakeByDate(
 // The most recent saved record strictly before `date`. Used to roll Sow
 // inventory forward: that day's "Remaining After Schedule" seeds this day's
 // "Available This Week". Skips gaps (weekends / days with no record) by taking
-// the latest earlier row rather than exactly yesterday. Returns 0 when none.
-export async function fetchPreviousSowRemaining(
+// the latest earlier row rather than exactly yesterday. The date is returned
+// alongside so the caller can pick the newer of this and any local draft.
+export async function fetchPreviousSowState(
   date: string,
-): Promise<number> {
+): Promise<{ date: string; remaining: number } | null> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("hog_intake_records")
-    .select("hog_counts, sow_scheduled")
+    .select("intake_date, hog_counts, sow_scheduled")
     .lt("intake_date", date)
     .order("intake_date", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) return 0;
-  const row = data as Pick<HogIntakeRow, "hog_counts" | "sow_scheduled">;
-  return sowRemaining(coerceCounts(row.hog_counts).Sow, row.sow_scheduled);
+  if (!data) return null;
+  const row = data as Pick<
+    HogIntakeRow,
+    "intake_date" | "hog_counts" | "sow_scheduled"
+  >;
+  return {
+    date: row.intake_date,
+    remaining: sowRemaining(coerceCounts(row.hog_counts).Sow, row.sow_scheduled),
+  };
 }
 
 // Upsert input fields only. Computed totals (total_hogs, for_cutting,

@@ -3,6 +3,9 @@ import {
   emptyProductOrder,
   PRIMAL_CATEGORIES,
   PRIMAL_GROUPS,
+  type CustomCustomer,
+  type CustomCustomersByDate,
+  type CustomCustomersForDate,
   type CustomerGroupOrders,
   type CustomerOrdersByDate,
   type CustomerOrdersForDate,
@@ -32,6 +35,7 @@ import {
 const COMMITTED_KEY = "primal-calc.orders";
 const DRAFT_KEY_PREFIX = "primal-calc.draft.";
 const CUSTOMER_KEY = "primal-calc.customer-orders";
+const CUSTOM_CUSTOMERS_KEY = "primal-calc.custom-customers";
 const CUSTOM_ROWS_KEY = "primal-calc.custom-rows";
 
 function draftKey(date: string): string {
@@ -198,6 +202,69 @@ export function saveCustomerOrdersForDate(
   all[date] = orders;
   try {
     window.localStorage.setItem(CUSTOMER_KEY, JSON.stringify(all));
+  } catch {
+    // ignore quota / access errors
+  }
+}
+
+// ------------------------ Custom customers --------------------------
+// Per-date list of manually added customer rows for the reservation matrix.
+// Only the row's identity + display name live here; its per-group order
+// pieces are stored in the customer-orders store above, keyed by `id`.
+// Auto-persisted on every edit, keyed by date.
+
+function coerceCustomCustomer(raw: unknown): CustomCustomer | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.id !== "string" || !obj.id) return null;
+  return { id: obj.id, name: typeof obj.name === "string" ? obj.name : "" };
+}
+
+function coerceCustomCustomersForDate(raw: unknown): CustomCustomersForDate {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(coerceCustomCustomer)
+    .filter((row): row is CustomCustomer => row !== null);
+}
+
+function readCustomCustomers(): CustomCustomersByDate {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_CUSTOMERS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: CustomCustomersByDate = {};
+    for (const [date, rows] of Object.entries(
+      parsed as Record<string, unknown>,
+    )) {
+      out[date] = coerceCustomCustomersForDate(rows);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function readCustomCustomersForDate(
+  date: string,
+): CustomCustomersForDate {
+  return readCustomCustomers()[date] ?? [];
+}
+
+export function saveCustomCustomersForDate(
+  date: string,
+  rows: CustomCustomersForDate,
+): void {
+  if (typeof window === "undefined") return;
+  const all = readCustomCustomers();
+  if (rows.length === 0) {
+    delete all[date];
+  } else {
+    all[date] = rows;
+  }
+  try {
+    window.localStorage.setItem(CUSTOM_CUSTOMERS_KEY, JSON.stringify(all));
   } catch {
     // ignore quota / access errors
   }

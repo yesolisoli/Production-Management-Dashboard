@@ -1,4 +1,9 @@
-import { emptyHogCounts, HOG_TYPES, type HogIntakeRecord } from "./types";
+import {
+  emptyHogCounts,
+  HOG_TYPES,
+  isEmptyHogIntakeRecord,
+  type HogIntakeRecord,
+} from "./types";
 
 const DRAFT_KEY_PREFIX = "hog-intake.draft.";
 
@@ -86,6 +91,30 @@ export function readDraft(date: string): HogIntakeRecord | null {
     const raw = window.localStorage.getItem(draftKey(date));
     if (!raw) return null;
     return coerceDraft(JSON.parse(raw), date);
+  } catch {
+    return null;
+  }
+}
+
+// The most recent non-empty draft strictly before `date` (YYYY-MM-DD sorts
+// lexicographically, so string compare is correct). Lets Sow inventory roll
+// forward from unsaved input — the previous day need not be saved yet.
+export function readMostRecentPriorDraft(
+  date: string,
+): { date: string; record: HogIntakeRecord } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    let bestDate: string | null = null;
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(DRAFT_KEY_PREFIX)) continue;
+      const d = key.slice(DRAFT_KEY_PREFIX.length);
+      if (d < date && (bestDate === null || d > bestDate)) bestDate = d;
+    }
+    if (bestDate === null) return null;
+    const record = readDraft(bestDate);
+    if (!record || isEmptyHogIntakeRecord(record)) return null;
+    return { date: bestDate, record };
   } catch {
     return null;
   }

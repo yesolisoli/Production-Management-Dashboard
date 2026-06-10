@@ -59,9 +59,13 @@ export function PrimalCalculationPage() {
     clearGroup,
     applyImportedOrders,
     customerOrders,
+    customCustomers,
     customRows,
     openingStock,
     setCustomerOrder,
+    addCustomCustomer,
+    renameCustomCustomer,
+    removeCustomCustomer,
     addCustomRow,
     updateCustomRowSpec,
     setCustomRowField,
@@ -258,7 +262,11 @@ export function PrimalCalculationPage() {
           <PrimalCustomerChart
             columns={customerColumns}
             customerOrders={customerOrders}
+            customCustomers={customCustomers}
             onChange={setCustomerOrder}
+            onAddCustomer={addCustomCustomer}
+            onRenameCustomer={renameCustomCustomer}
+            onRemoveCustomer={removeCustomCustomer}
           />
 
           {/* Sales Orders section */}

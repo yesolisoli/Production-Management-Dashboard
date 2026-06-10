@@ -32,7 +32,7 @@ export function SummaryPanel({
   onChangeSowScheduled,
 }: SummaryPanelProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
       <IntakeSummaryCard
         totalIntake={totals.totalIntake}
         sideOrders={sideOrders}
@@ -240,6 +240,48 @@ function SowProcessingCard({
         </div>
       </div>
     </CardShell>
+  );
+}
+
+// Read-only counterpart to StepperRow for derived counts (e.g. JP / RWA / BK
+// that roll up from Farm Delivery Records). Spacers reserve the width of the
+// +/- buttons so the value lines up with the editable rows.
+export function ReadOnlyRow({
+  label,
+  value,
+  emphasis = false,
+  // When true, spacers reserve the +/- button widths so the value lines up with
+  // StepperRows. Set false to right-align the value flush to the edge.
+  alignWithSteppers = true,
+}: {
+  label: string;
+  value: number;
+  emphasis?: boolean;
+  alignWithSteppers?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span
+        className={clsx(
+          "text-sm",
+          emphasis ? "font-semibold text-slate-700" : "text-slate-500",
+        )}
+      >
+        {label}
+      </span>
+      <div className="flex items-center gap-1.5">
+        {alignWithSteppers ? <span className="h-7 w-7" aria-hidden /> : null}
+        <span
+          className={clsx(
+            "flex h-8 items-center justify-center text-xl font-extrabold tabular-nums text-slate-900",
+            alignWithSteppers && "w-12",
+          )}
+        >
+          {value}
+        </span>
+        {alignWithSteppers ? <span className="h-7 w-7" aria-hidden /> : null}
+      </div>
+    </div>
   );
 }
 

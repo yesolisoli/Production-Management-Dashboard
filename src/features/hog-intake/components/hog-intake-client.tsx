@@ -7,7 +7,7 @@ import { deriveTotals } from "../calculations";
 import { useHogIntakeState } from "../hooks/use-hog-intake-state";
 import { FarmRecords } from "./farm-records";
 import { HogCountGrid } from "./hog-count-grid";
-import { PrimalCalcSummary } from "./primal-calc-summary";
+import { PrimalHogsGrid } from "./primal-hogs-grid";
 import { ProcessSheet } from "./process-sheet";
 import { SaveBar } from "./save-bar";
 import { SummaryPanel } from "./summary-panel";
@@ -75,6 +75,7 @@ export function HogIntakeClient() {
       <div className="bg-slate-50">
         <div className="flex flex-col gap-4 px-5 py-5 lg:px-6 lg:py-6">
           <WeeklyHogSchedule
+            date={date}
             nextDay={record.next_day}
             onNextDayChange={setNextDayField}
           />
@@ -84,7 +85,14 @@ export function HogIntakeClient() {
             sideOrders={record.side_orders}
             onChangeSideOrders={(v) => setProcessField("side_orders", v)}
             middle={
-              <HogCountGrid counts={hogCounts} onChangeCount={setHogCount} />
+              <>
+                <PrimalHogsGrid
+                  jp={hogCounts.JP}
+                  rwa={hogCounts.RWA}
+                  total={totals.yieldTotal}
+                />
+                <HogCountGrid counts={hogCounts} onChangeCount={setHogCount} />
+              </>
             }
             after={
               <ProcessSheet record={record} onChangeField={setProcessField} />
@@ -100,13 +108,6 @@ export function HogIntakeClient() {
             onAdd={addFarmRecord}
             onUpdate={updateFarmRecord}
             onRemove={removeFarmRecord}
-            footer={
-              <PrimalCalcSummary
-                jp={hogCounts.JP}
-                rwa={hogCounts.RWA}
-                total={totals.yieldTotal}
-              />
-            }
           />
 
           <SaveBar status={status} dirty={dirty} onSave={save} onReset={reset} />

@@ -5,11 +5,17 @@ import { getCurrentUserId } from "@/lib/supabase/current-user";
 import {
   clampNonNegativeInt,
   derivedCountsFromFarmRecords,
+  sowRemaining,
 } from "../calculations";
-import { clearDraft, readDraft, writeDraft } from "../draft-storage";
+import {
+  clearDraft,
+  readDraft,
+  readMostRecentPriorDraft,
+  writeDraft,
+} from "../draft-storage";
 import {
   fetchHogIntakeByDate,
-  fetchPreviousSowRemaining,
+  fetchPreviousSowState,
   upsertHogIntakeRecord,
 } from "../supabase";
 import {
@@ -103,8 +109,23 @@ export function useHogIntakeState() {
       // After Schedule". Everything else starts empty. The seed is suppressed
       // from the draft writer, so merely opening the day doesn't dirty it —
       // only a real edit persists (and locks in) the carried-over value.
-      const seededSow = await fetchPreviousSowRemaining(nextDate);
+      //
+      // The prior day's value can live in the DB (saved) or in a local draft
+      // (entered but not yet saved). Take whichever is newer; on a date tie the
+      // draft wins, since it's the unsaved edit on top of the saved row.
+      const dbPrev = await fetchPreviousSowState(nextDate);
       if (token !== activeFetchToken.current) return; // stale
+      const draftPrev = readMostRecentPriorDraft(nextDate);
+      let seededSow = dbPrev?.remaining ?? 0;
+      if (
+        draftPrev &&
+        (!dbPrev || draftPrev.date >= dbPrev.date)
+      ) {
+        seededSow = sowRemaining(
+          draftPrev.record.hog_counts.Sow,
+          draftPrev.record.sow_scheduled,
+        );
+      }
       const fresh = emptyHogIntakeRecord(nextDate);
       fresh.hog_counts.Sow = seededSow;
       suppressNextWrite.current = true;
@@ -136,6 +157,13 @@ export function useHogIntakeState() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Persist drafts keyed by the RECORD's own date, never the `date` state,
+  // and depend only on `record`. During a date switch the `date` state
+  // updates immediately but `record` still holds the previous day's data
+  // until the async load replaces it. Keying off `date` here would copy that
+  // stale record into the NEW date's draft — duplicating whole records across
+  // days and shadowing the DB. `record.date` always matches the data, so the
+  // transient window writes nothing it shouldn't.
   useEffect(() => {
     if (!hasHydrated.current) return;
     if (suppressNextWrite.current) {
@@ -145,13 +173,13 @@ export function useHogIntakeState() {
     // Never persist an empty draft — it would shadow the DB record on the
     // next load. Clear any leftover instead.
     if (isEmptyHogIntakeRecord(record)) {
-      clearDraft(date);
+      clearDraft(record.date);
       setDirty(false);
       return;
     }
-    writeDraft(date, record);
+    writeDraft(record.date, record);
     setDirty(true);
-  }, [date, record]);
+  }, [record]);
 
   // Primal hogs (JP / RWA) are derived from Farm Delivery Records — deliveries
   // are their single entry point — and override the stored values. Every other

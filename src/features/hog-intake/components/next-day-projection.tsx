@@ -6,25 +6,32 @@ import { projectedForCutting } from "../calculations";
 import { NumberStepper } from "./number-stepper";
 import type { NextDay } from "../types";
 
-type NextDayField = "hog_count" | "side_orders" | "cooler_overstock";
+type EditableField = "side_orders" | "cooler_overstock";
 
 type NextDayProjectionProps = {
   nextDay: NextDay;
-  onChange: (field: NextDayField, value: number) => void;
+  // Next Day Hog Count is read-only — derived from the Weekly Hog Plan's
+  // Cut - Markets count for the day after the selected intake date.
+  hogCount: number;
+  onChange: (field: EditableField, value: number) => void;
 };
 
-const FIELDS: { key: NextDayField; label: string }[] = [
-  { key: "hog_count", label: "Next Day Hog Count" },
+const EDITABLE_FIELDS: { key: EditableField; label: string }[] = [
   { key: "side_orders", label: "Next Day Side Orders" },
   { key: "cooler_overstock", label: "Cooler Overstock" },
 ];
 
 // Next Day Projection embedded at the bottom of the Weekly Hog Plan box on the
-// Hog Intake page (no own card wrapper). Values are stored on the hog_intake
-// row. Styled like the Farm Delivery Records footer summary — flat
-// label-over-value stats laid out as a right-aligned equation.
-export function NextDayProjection({ nextDay, onChange }: NextDayProjectionProps) {
-  const projected = projectedForCutting(nextDay);
+// Hog Intake page (no own card wrapper). Side Orders / Cooler Overstock are
+// stored on the hog_intake row; Hog Count is derived from the Weekly Hog Plan.
+// Styled like the Farm Delivery Records footer summary — flat label-over-value
+// stats laid out as a right-aligned equation.
+export function NextDayProjection({
+  nextDay,
+  hogCount,
+  onChange,
+}: NextDayProjectionProps) {
+  const projected = projectedForCutting({ ...nextDay, hog_count: hogCount });
   const negative = projected < 0;
 
   return (
@@ -44,7 +51,18 @@ export function NextDayProjection({ nextDay, onChange }: NextDayProjectionProps)
       </div>
 
       <div className="flex flex-wrap items-end justify-start gap-x-6 gap-y-4">
-        {FIELDS.map((field) => (
+        <div className="flex flex-col">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            Next Day Hog Count
+          </span>
+          <div className="mt-1 flex h-8 w-36 items-center justify-center">
+            <span className="text-lg font-bold tabular-nums text-slate-900">
+              {hogCount.toLocaleString()}
+            </span>
+          </div>
+        </div>
+
+        {EDITABLE_FIELDS.map((field) => (
           <div key={field.key} className="flex flex-col">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
               {field.label}

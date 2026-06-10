@@ -201,8 +201,18 @@ export type PrimalCustomer = (typeof PRIMAL_CUSTOMERS)[number];
 export type CustomerGroupOrders = Record<PrimalGroupKey, number>;
 
 // Persisted save shape: { "YYYY-MM-DD": { "<customer>": { Butts: n, ... } } }
+// The key is the customer's display name for the fixed PRIMAL_CUSTOMERS, or
+// the stable id of a manually added customer (see CustomCustomer).
 export type CustomerOrdersForDate = Record<string, CustomerGroupOrders>;
 export type CustomerOrdersByDate = Record<string, CustomerOrdersForDate>;
+
+// A manually added customer row appended to the reservation matrix. Its orders
+// live in CustomerOrdersForDate keyed by `id` — calculations sum over the map's
+// values, so a free-form id key is safe and keeps the editable name decoupled
+// from the orders. Persisted per date, like CustomRowsForDate.
+export type CustomCustomer = { id: string; name: string };
+export type CustomCustomersForDate = CustomCustomer[];
+export type CustomCustomersByDate = Record<string, CustomCustomersForDate>;
 
 export function emptyCustomerGroupOrders(): CustomerGroupOrders {
   const out = {} as CustomerGroupOrders;

@@ -22,9 +22,11 @@ import {
 import {
   clearDraft,
   readCommittedForDate,
+  readCustomCustomersForDate,
   readCustomerOrdersForDate,
   readCustomRowsForDate,
   readDraft,
+  saveCustomCustomersForDate,
   saveCustomerOrdersForDate,
   saveCustomRowsForDate,
   saveOrdersForDate,
@@ -37,6 +39,7 @@ import {
   emptyEndingStockByGroup,
   emptyProductOrder,
   PRIMAL_GROUPS,
+  type CustomCustomersForDate,
   type CustomerOrdersForDate,
   type CustomRowsForDate,
   type EndingStockByGroup,
@@ -92,6 +95,11 @@ export function usePrimalCalculationState() {
   const [customerOrders, setCustomerOrders] = useState<CustomerOrdersForDate>(
     {},
   );
+  // Manually added customer rows for the reservation matrix (selected date).
+  // Identity + display name only; their order pieces live in customerOrders
+  // keyed by id. Auto-persisted per date — see addCustomCustomer.
+  const [customCustomers, setCustomCustomers] =
+    useState<CustomCustomersForDate>([]);
   // Manually added (ad-hoc) order rows for the selected date. Self-contained
   // and auto-persisted per date — see CustomOrderRow.
   const [customRows, setCustomRows] = useState<CustomRowsForDate>([]);
@@ -118,6 +126,7 @@ export function usePrimalCalculationState() {
   const suppressNextWrite = useRef(false);
   // Monotonic suffix so two rows added in the same millisecond get distinct ids.
   const customRowSeq = useRef(0);
+  const customCustomerSeq = useRef(0);
 
   // Live mirror of `intake` plus a debounce timer, used to persist Next Day
   // Projection edits back to the hog_intake row without re-saving on load.
@@ -156,6 +165,7 @@ export function usePrimalCalculationState() {
     suppressNextWrite.current = true;
     setOrders(resolved);
     setCustomerOrders(readCustomerOrdersForDate(nextDate));
+    setCustomCustomers(readCustomCustomersForDate(nextDate));
     setCustomRows(readCustomRowsForDate(nextDate));
   }, []);
 
@@ -309,6 +319,52 @@ export function usePrimalCalculationState() {
     [date],
   );
 
+  // ------------------------ Custom customers ------------------------
+  // Ad-hoc customer rows appended to the reservation matrix for the selected
+  // date. Identity + display name are tracked here; their per-group order
+  // pieces flow through setCustomerOrder keyed by the row's id. Auto-persisted
+  // on every edit, mirroring the customer matrix.
+  const addCustomCustomer = useCallback(() => {
+    setCustomCustomers((prev) => {
+      const id = `cust-${Date.now()}-${customCustomerSeq.current++}`;
+      const next: CustomCustomersForDate = [...prev, { id, name: "" }];
+      saveCustomCustomersForDate(date, next);
+      return next;
+    });
+  }, [date]);
+
+  const renameCustomCustomer = useCallback(
+    (id: string, name: string) => {
+      setCustomCustomers((prev) => {
+        const next = prev.map((row) =>
+          row.id === id ? { ...row, name } : row,
+        );
+        saveCustomCustomersForDate(date, next);
+        return next;
+      });
+    },
+    [date],
+  );
+
+  const removeCustomCustomer = useCallback(
+    (id: string) => {
+      setCustomCustomers((prev) => {
+        const next = prev.filter((row) => row.id !== id);
+        saveCustomCustomersForDate(date, next);
+        return next;
+      });
+      // Drop the row's orders too so a removed customer stops counting.
+      setCustomerOrders((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        saveCustomerOrdersForDate(date, next);
+        return next;
+      });
+    },
+    [date],
+  );
+
   // -------------------------- Custom rows ---------------------------
   // Ad-hoc rows an operator adds by hand for the selected date. Each is
   // self-contained (its own spec + order) and auto-persisted on every edit —
@@ -335,23 +391,23 @@ export function usePrimalCalculationState() {
     [date],
   );
 
-  // Edit a custom row's spec fields (SKU / name / case pack / pieces-per-case).
-  // Changing pieces-per-case re-derives the row's pieces from its case count so
-  // the two stay consistent, exactly like editing a *_cases order field.
+  // Edit a custom row's spec fields (SKU / name / case pack). The single Case
+  // Pack input doubles as the pieces-per-case divisor: its leading number
+  // multiplies Today Cases into pieces (matching the catalog specs, where
+  // "6 (20-22 KG)" carries a piecesPerCase of 6). Changing it re-derives the
+  // row's pieces from its case count so the two stay consistent.
   const updateCustomRowSpec = useCallback(
     (id: string, patch: Partial<ProductSpec>) => {
       setCustomRows((prev) => {
         const next = prev.map((row) => {
           if (row.id !== id) return row;
           const spec: ProductSpec = { ...row.spec, ...patch };
-          if (patch.piecesPerCase !== undefined) {
-            spec.piecesPerCase = Math.max(
-              1,
-              Math.floor(clampNonNegativeInt(patch.piecesPerCase)),
-            );
+          if (patch.casePack !== undefined) {
+            const parsed = parseInt(patch.casePack, 10);
+            spec.piecesPerCase = parsed > 0 ? parsed : 1;
           }
           const order =
-            patch.piecesPerCase !== undefined
+            patch.casePack !== undefined
               ? { ...row.order, today_pcs: casesToPieces(spec, row.order.today_cases) }
               : row.order;
           return { ...row, spec, order };
@@ -491,6 +547,7 @@ export function usePrimalCalculationState() {
     intakeStatus,
     orders,
     customerOrders,
+    customCustomers,
     customRows,
     openingStock,
     saveState,
@@ -498,6 +555,9 @@ export function usePrimalCalculationState() {
     setOrderField,
     setNextDayField,
     setCustomerOrder,
+    addCustomCustomer,
+    renameCustomCustomer,
+    removeCustomCustomer,
     saveGroup,
     saveAll,
     clearGroup,
