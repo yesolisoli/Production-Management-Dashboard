@@ -1,11 +1,10 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronDown, Minus, Plus, Truck, X } from "lucide-react";
+import { ChevronDown, Plus, Truck, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { BaseDropdown, DROPDOWN_WIDTH } from "@/features/assignment-board/components/base-dropdown";
-import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
-import { clampNonNegativeInt } from "../calculations";
+import { NumberStepper } from "@/components/shared/number-stepper";
 import {
   FARM_RECORD_TYPES,
   type FarmRecord,
@@ -108,7 +107,10 @@ export function FarmRecords({
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <CountInput
+                    <NumberStepper
+                      variant="card"
+                      className="inline-flex items-center gap-1.5"
+                      ariaLabel="Count"
                       value={row.count}
                       onChange={(count) => onUpdate(row.id, { count })}
                     />
@@ -247,48 +249,6 @@ function TypeSelect({
           })}
         </div>
       </BaseDropdown>
-    </div>
-  );
-}
-
-function CountInput({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (count: number) => void;
-}) {
-  const set = (next: number) => onChange(clampNonNegativeInt(next));
-  const blank = useBlankZeroInput(value);
-  return (
-    <div className="inline-flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={() => set(value - 1)}
-        disabled={value <= 0}
-        aria-label="Count decrement"
-        className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        <Minus size={13} />
-      </button>
-      <input
-        type="number"
-        inputMode="numeric"
-        min={0}
-        step={1}
-        {...blank}
-        onChange={(e) => set(Number(e.target.value))}
-        aria-label="Count"
-        className="h-8 w-12 border-0 bg-transparent text-center text-xl font-extrabold tabular-nums text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-      />
-      <button
-        type="button"
-        onClick={() => set(value + 1)}
-        aria-label="Count increment"
-        className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
-      >
-        <Plus size={13} />
-      </button>
     </div>
   );
 }

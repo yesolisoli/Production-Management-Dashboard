@@ -2,7 +2,12 @@
 
 import { Layers } from "lucide-react";
 import { type HogCounts, type HogType } from "../types";
-import { CardIcon, CardShell, ReadOnlyRow, StepperRow } from "./summary-panel";
+import {
+  CardIcon,
+  CardShell,
+  ReadOnlyRow,
+  StepperRow,
+} from "@/components/shared/card";
 
 type HogCountGridProps = {
   counts: HogCounts;

@@ -12,41 +12,20 @@ import {
 } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { Modal } from "@/components/shared/modal";
-import { deriveTotals } from "@/features/hog-intake/calculations";
 import {
-  buildAvailabilityRows,
-  buildCustomerAvailability,
-  buildCustomGroupAvailability,
-  categoryTotals,
   DEFAULT_MIN_COOLER_RESERVE,
-  orderFor,
   primalTotalHogCount,
-  sumAvailability,
 } from "../calculations";
 import {
   pushEndingStockToCooler,
   type EndingStockPushResult,
 } from "../cooler-inventory";
-import { specsForCategory } from "../product-specs";
-import {
-  groupForCategory,
-  PRIMAL_CATEGORIES,
-  PRIMAL_GROUPS,
-  type AvailabilityStatus,
-  type CustomOrderRow,
-  type PrimalCategory,
-  type PrimalGroup,
-  type PrimalGroupKey,
-} from "../types";
 import { usePrimalCalculationState } from "../hooks/use-primal-calculation-state";
+import { derivePrimalViewModel } from "../view-model";
 import { PrimalAvailabilityChart } from "./PrimalAvailabilityChart";
 import { PrimalCsvImportModal } from "./PrimalCsvImportModal";
 import { PrimalCustomerChart } from "./PrimalCustomerChart";
-import {
-  PrimalGroupSection,
-  type CategorySkuRow,
-  type GroupCategoryRows,
-} from "./PrimalGroupSection";
+import { PrimalGroupSection } from "./PrimalGroupSection";
 
 export function PrimalCalculationPage() {
   const {
@@ -96,163 +75,29 @@ export function PrimalCalculationPage() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  const counts = intake.hog_counts;
-
-  // Per-category order-entry rows (spec + its editable order). Recomputed
-  // only when orders change.
-  const rowsByCategory = useMemo(() => {
-    const map = {} as Record<PrimalCategory, CategorySkuRow[]>;
-    for (const category of PRIMAL_CATEGORIES) {
-      map[category] = specsForCategory(category).map((spec) => ({
-        spec,
-        order: orderFor(orders, spec.sku),
-      }));
-    }
-    return map;
-  }, [orders]);
-
-  const categoryTotalsMap = useMemo(() => {
-    const map = {} as Record<PrimalCategory, ReturnType<typeof categoryTotals>>;
-    for (const category of PRIMAL_CATEGORIES) {
-      map[category] = categoryTotals(category, orders);
-    }
-    return map;
-  }, [orders]);
-
-  // Manually added rows, bucketed by their owning group. Catalog rows resolve
-  // their group from the category; custom-group rows carry an explicit groupKey
-  // (the custom group's id), so both catalog keys and custom ids appear here.
-  const customRowsByGroup = useMemo(() => {
-    const map: Record<string, CustomOrderRow[]> = {};
-    for (const group of PRIMAL_GROUPS) map[group.key] = [];
-    for (const row of customRows) {
-      const key = row.groupKey ?? groupForCategory(row.spec.category).key;
-      (map[key] ??= []).push(row);
-    }
-    return map;
-  }, [customRows]);
-
-  // Per-group view model: each group's per-category subgroups (rows + per-type
-  // totals) plus the combined Today totals shown in the group header. Custom
-  // rows pool into the same group totals as the catalog rows.
-  const groupData = useMemo(
+  // All derived data is assembled by the pure view model; this component only
+  // memoizes the single call and renders the result. See ../view-model.ts.
+  const {
+    counts,
+    intakeTotals,
+    groupData,
+    availabilityRows,
+    availabilityTotals,
+    customGroupRows,
+    endingStockByGroup,
+    customGroupData,
+    customerColumns,
+  } = useMemo(
     () =>
-      PRIMAL_GROUPS.map((group) => {
-        const categoryRows: GroupCategoryRows[] = group.categories.map(
-          (category) => ({
-            category,
-            rows: rowsByCategory[category],
-            totals: categoryTotalsMap[category],
-          }),
-        );
-        const groupCustomRows = customRowsByGroup[group.key];
-        const groupTotals = groupCustomRows.reduce(
-          (acc, r) => ({
-            today_cases: acc.today_cases + r.order.today_cases,
-            today_pcs: acc.today_pcs + r.order.today_pcs,
-          }),
-          categoryRows.reduce(
-            (acc, c) => ({
-              today_cases: acc.today_cases + c.totals.today_cases,
-              today_pcs: acc.today_pcs + c.totals.today_pcs,
-            }),
-            { today_cases: 0, today_pcs: 0 },
-          ),
-        );
-        return { group, categoryRows, customRows: groupCustomRows, groupTotals };
-      }),
-    [rowsByCategory, categoryTotalsMap, customRowsByGroup],
-  );
-
-  const intakeTotals = useMemo(() => deriveTotals(intake), [intake]);
-
-  // Availability — derived from intake counts + today's orders + customer
-  // orders + the opening-stock carry-in.
-  const availabilityRows = useMemo(
-    () =>
-      buildAvailabilityRows(
+      derivePrimalViewModel({
+        intake,
         orders,
-        counts,
         customerOrders,
-        openingStock,
-        customRows,
-      ),
-    [orders, counts, customerOrders, openingStock, customRows],
-  );
-  const availabilityTotals = useMemo(
-    () => sumAvailability(availabilityRows),
-    [availabilityRows],
-  );
-
-  // Operator-added availability groups — derived the same way as catalog rows
-  // (Expected Production from the whole-hog pool), but now keyed by their id
-  // they also subtract their own Custom Orders + Sales Orders. Kept
-  // separate from `availabilityRows` so the catalog-only paths (ending-stock
-  // carry-over, cooler push) stay on the fixed primal set.
-  const customGroupRows = useMemo(
-    () =>
-      buildCustomGroupAvailability(
         customGroups,
-        counts,
-        customerOrders,
         customRows,
-        DEFAULT_MIN_COOLER_RESERVE,
-      ),
-    [customGroups, counts, customerOrders, customRows],
-  );
-  // Calculated Ending Stock per catalog group (pieces) — shown read-only in
-  // each section and pushed to the cooler. Catalog-only: custom groups are
-  // ephemeral per-date rows and never carry over.
-  const endingStockByGroup = useMemo(() => {
-    const map = {} as Record<PrimalGroupKey, number>;
-    for (const row of availabilityRows) map[row.group] = row.endingStock;
-    return map;
-  }, [availabilityRows]);
-
-  // Availability status per catalog group — drives each section header's
-  // Ending Stock color. Derived from the same availability rows.
-  const statusByGroup = useMemo(() => {
-    const map = {} as Record<PrimalGroupKey, AvailabilityStatus>;
-    for (const row of availabilityRows) map[row.group] = row.status;
-    return map;
-  }, [availabilityRows]);
-
-  // Custom-group Sales Orders sections — one per operator-added group, holding
-  // only its ad-hoc rows (a custom group has no catalog SKUs). Mirrors the
-  // catalog groupData shape so it renders through the same PrimalGroupSection,
-  // carrying each group's own derived Ending Stock from its availability row.
-  const customGroupData = useMemo(() => {
-    const endingByKey = new Map<string, number>(
-      customGroupRows.map((row) => [row.group, row.endingStock]),
-    );
-    const statusByKey = new Map<string, AvailabilityStatus>(
-      customGroupRows.map((row) => [row.group, row.status]),
-    );
-    return customGroups.map((g) => {
-      const group: PrimalGroup = { key: g.id, label: g.label, categories: [] };
-      const rows = customRowsByGroup[g.id] ?? [];
-      const groupTotals = rows.reduce(
-        (acc, r) => ({
-          today_cases: acc.today_cases + r.order.today_cases,
-          today_pcs: acc.today_pcs + r.order.today_pcs,
-        }),
-        { today_cases: 0, today_pcs: 0 },
-      );
-      return {
-        group,
-        rows,
-        groupTotals,
-        endingStock: endingByKey.get(g.id) ?? 0,
-        status: statusByKey.get(g.id) ?? "OK",
-      };
-    });
-  }, [customGroups, customGroupRows, customRowsByGroup]);
-
-  // Customer chart columns — one per group (catalog + custom), each group's
-  // Available Stock minus the summed customer orders against it.
-  const customerColumns = useMemo(
-    () => buildCustomerAvailability([...availabilityRows, ...customGroupRows]),
-    [availabilityRows, customGroupRows],
+        openingStock,
+      }),
+    [intake, orders, customerOrders, customGroups, customRows, openingStock],
   );
 
   const handleToggle = (groupKey: string) =>
@@ -353,15 +198,15 @@ export function PrimalCalculationPage() {
           </div>
 
           {/* Group sections */}
-          {groupData.map(({ group, categoryRows, customRows, groupTotals }) => (
+          {groupData.map(({ group, categoryRows, customRows, groupTotals, endingStock, status }) => (
             <PrimalGroupSection
               key={group.key}
               group={group}
               categoryRows={categoryRows}
               customRows={customRows}
               groupTotals={groupTotals}
-              calculatedEndingStockPcs={endingStockByGroup[group.key]}
-              endingStockStatus={statusByGroup[group.key]}
+              calculatedEndingStockPcs={endingStock}
+              endingStockStatus={status}
               expanded={!!expanded[group.key]}
               onToggle={() => handleToggle(group.key)}
               activeSku={activeSku}

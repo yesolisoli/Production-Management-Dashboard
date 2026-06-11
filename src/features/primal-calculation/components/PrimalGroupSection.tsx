@@ -6,16 +6,17 @@ import {
   ChevronDown,
   Eraser,
   Loader2,
-  Minus,
   Package,
   Plus,
   Save,
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
+import {
+  NumberStepper,
+  type NumberStepperAccent,
+} from "@/components/shared/number-stepper";
 import type { OrderTotals } from "../calculations";
-import { clampNonNegativeInt } from "../calculations";
 import type {
   AvailabilityStatus,
   CustomOrderRow,
@@ -324,17 +325,10 @@ function ProductRow({
   );
 }
 
-const ACCENTS: Record<string, string> = {
-  blue: "focus:border-blue-400 focus:ring-blue-100",
-  emerald: "focus:border-emerald-400 focus:ring-emerald-100",
-  violet: "focus:border-violet-400 focus:ring-violet-100",
-  none: "focus:border-slate-400 focus:ring-slate-100",
-};
-
-// The −/input/+ stepper, without a table cell wrapper, so it can be composed
-// both as a standalone NumberCell and alongside other controls (e.g. the
-// custom row's delete button).
-function StepInput({
+// Primal order-table number cell — the shared NumberStepper (cell variant)
+// wrapped in a <td>. The bordered input + accent focus ring match the rest of
+// the order table.
+function NumberCell({
   value,
   onChange,
   ariaLabel,
@@ -343,50 +337,17 @@ function StepInput({
   value: number;
   onChange: (next: number) => void;
   ariaLabel: string;
-  accent?: keyof typeof ACCENTS;
-}) {
-  const blank = useBlankZeroInput(value);
-  return (
-    <div className="flex items-center justify-center gap-1.5">
-      <StepButton
-        ariaLabel={`Decrease ${ariaLabel}`}
-        onClick={() => onChange(clampNonNegativeInt(value - 1))}
-        disabled={value <= 0}
-      >
-        <Minus size={14} />
-      </StepButton>
-      <input
-        type="number"
-        inputMode="numeric"
-        min={0}
-        step={1}
-        {...blank}
-        aria-label={ariaLabel}
-        onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
-        className={clsx(
-          "h-10 w-20 rounded-lg border border-transparent bg-white text-center text-sm font-semibold tabular-nums text-slate-900 outline-none transition focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
-          ACCENTS[accent],
-        )}
-      />
-      <StepButton
-        ariaLabel={`Increase ${ariaLabel}`}
-        onClick={() => onChange(clampNonNegativeInt(value + 1))}
-      >
-        <Plus size={14} />
-      </StepButton>
-    </div>
-  );
-}
-
-function NumberCell(props: {
-  value: number;
-  onChange: (next: number) => void;
-  ariaLabel: string;
-  accent?: keyof typeof ACCENTS;
+  accent?: NumberStepperAccent;
 }) {
   return (
     <td className="px-1.5 py-2">
-      <StepInput {...props} />
+      <NumberStepper
+        variant="cell"
+        accent={accent}
+        value={value}
+        onChange={onChange}
+        ariaLabel={ariaLabel}
+      />
     </td>
   );
 }

@@ -2,8 +2,8 @@
 
 import clsx from "clsx";
 import { CalendarPlus } from "lucide-react";
+import { NumberStepper } from "@/components/shared/number-stepper";
 import { projectedForCutting } from "../calculations";
-import { NumberStepper } from "./number-stepper";
 import type { NextDay } from "../types";
 
 type EditableField = "side_orders" | "cooler_overstock";

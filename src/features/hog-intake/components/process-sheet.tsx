@@ -2,7 +2,7 @@
 
 import { SlidersHorizontal } from "lucide-react";
 import type { HogIntakeRecord } from "../types";
-import { CardIcon, CardShell, StepperRow } from "./summary-panel";
+import { CardIcon, CardShell, StepperRow } from "@/components/shared/card";
 
 type ProcessField = "side_orders" | "held_over" | "deaths_on_arrival" | "boars_count";
 

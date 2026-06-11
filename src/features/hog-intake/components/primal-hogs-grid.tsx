@@ -1,7 +1,7 @@
 "use client";
 
 import { Boxes } from "lucide-react";
-import { CardIcon, CardShell, ReadOnlyRow } from "./summary-panel";
+import { CardIcon, CardShell, ReadOnlyRow } from "@/components/shared/card";
 
 type PrimalHogsGridProps = {
   jp: number;
