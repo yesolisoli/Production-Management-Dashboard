@@ -15,7 +15,6 @@ export type HogType = (typeof HOG_TYPES)[number];
 // BK / Sow / Round / Suckling / Customer are intentionally excluded — they are
 // tracked but never count toward the yield total.
 export const YIELD_HOG_TYPES = ["JP", "RWA"] as const;
-export type YieldHogType = (typeof YIELD_HOG_TYPES)[number];
 
 // Hog types whose grid counts roll up from Farm Delivery Records (read-only).
 // JP / RWA / BK are tracked per-farm, so deliveries are their single entry

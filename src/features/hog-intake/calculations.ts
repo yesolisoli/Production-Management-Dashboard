@@ -85,21 +85,6 @@ export function projectedForCutting(nextDay: NextDay): number {
 // "× 2" rule lives in exactly one place.
 export const PIECES_PER_HOG = 2;
 
-// Loins produced from a yield-hog count.
-export function expectedLoins(yieldCount: number): number {
-  return yieldCount * PIECES_PER_HOG;
-}
-
-// Loins available tomorrow = today's expected loin production plus loins
-// already held in the cooler. Sales uses this to decide how many orders
-// tomorrow can absorb.
-export function loinsAvailableTomorrow(
-  yieldCount: number,
-  coolerOverstock: number,
-): number {
-  return expectedLoins(yieldCount) + coolerOverstock;
-}
-
 export type HogIntakeTotals = {
   totalIntake: number; // Total Hog: all hog types incl. Sow (no side orders)
   totalHogs: number;

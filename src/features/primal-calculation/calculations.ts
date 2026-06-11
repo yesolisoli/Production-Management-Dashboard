@@ -4,10 +4,7 @@ import {
   yieldTotal,
 } from "@/features/hog-intake/calculations";
 import type { HogCounts } from "@/features/hog-intake/types";
-import {
-  PRODUCT_SPECS,
-  specsForCategory,
-} from "./product-specs";
+import { specsForCategory } from "./product-specs";
 import {
   emptyProductOrder,
   groupForCategory,
@@ -99,12 +96,6 @@ export function categoryTotals(
   );
 }
 
-export function globalTotals(orders: ProductOrdersForDate): OrderTotals {
-  return sumOrders(
-    PRODUCT_SPECS.map((spec) => orderFor(orders, spec.sku)),
-  );
-}
-
 // -------------------------------------------------------------------
 // Availability — pure formula primitives.
 //
@@ -134,14 +125,6 @@ export function groupExpectedProduction(
 ): number {
   void group;
   return calculateExpectedProduction(yieldTotal(counts), PRIMAL_PIECES_PER_HOG);
-}
-
-// Available stock = expected production + opening stock carried in.
-export function calculateAvailableStock(
-  expectedProduction: number,
-  openingStock: number,
-): number {
-  return expectedProduction + openingStock;
 }
 
 // Status from today's ending stock: negative means total demand couldn't

@@ -70,9 +70,6 @@ export type ProductOrder = {
 
 export type OrderField = keyof ProductOrder;
 
-// Which fields are case inputs (editing one auto-derives its *_pcs twin).
-export const CASE_FIELDS: ReadonlyArray<OrderField> = ["today_cases"];
-
 // Map each *_cases field to the *_pcs field it drives.
 export const CASE_TO_PCS: Record<string, OrderField> = {
   today_cases: "today_pcs",
@@ -131,7 +128,6 @@ export function emptyCustomSpec(category: PrimalCategory): ProductSpec {
 //   { "YYYY-MM-DD": { "<group>": pcs } }
 // -------------------------------------------------------------------
 export type EndingStockByGroup = Record<PrimalGroupKey, number>;
-export type EndingStockByDate = Record<string, EndingStockByGroup>;
 
 export function emptyEndingStockByGroup(): EndingStockByGroup {
   const out = {} as EndingStockByGroup;
@@ -197,8 +193,6 @@ export const PRIMAL_CUSTOMERS = [
   "Bradner Freezer/Freezer",
   "Stapleton",
 ] as const;
-
-export type PrimalCustomer = (typeof PRIMAL_CUSTOMERS)[number];
 
 // One customer's order pieces per production group. Pooled cuts (Ribs) take a
 // single custom order rather than one per type, matching how production is

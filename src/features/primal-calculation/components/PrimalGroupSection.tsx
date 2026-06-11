@@ -575,7 +575,3 @@ function casePackLabel(casePack: string): string {
 function groupSlug(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
-
-export function primalGroupSlug(key: string): string {
-  return groupSlug(key);
-}

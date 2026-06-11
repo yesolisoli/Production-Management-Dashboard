@@ -5,62 +5,16 @@ import clsx from "clsx";
 import {
   AlertTriangle,
   BarChart3,
-  Boxes,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  ClipboardList,
-  Layers,
-  type LucideIcon,
   Plus,
   X,
 } from "lucide-react";
 import type {
   AvailabilityStatus,
-  AvailabilityTotals,
   GroupAvailability,
 } from "../types";
-
-// Top-of-page KPI strip — the four headline figures from the availability
-// footer totals. Standalone so the page can show them above everything while
-// the detailed chart stays collapsed.
-export function PrimalAvailabilityKpis({
-  totals,
-}: {
-  totals: AvailabilityTotals;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <KpiCard
-        label="Available"
-        value={totals.availableStock}
-        negative={totals.availableStock < 0}
-        tone="emerald"
-        icon={Boxes}
-      />
-      <KpiCard
-        label="Sales Orders"
-        value={totals.salesOrders}
-        tone="blue"
-        icon={ClipboardList}
-      />
-      <KpiCard
-        label="Shortage"
-        value={totals.shortage}
-        negative={totals.shortage > 0}
-        tone="rose"
-        icon={AlertTriangle}
-      />
-      <KpiCard
-        label="Ending Stock"
-        value={totals.endingStock}
-        negative={totals.endingStock < 0}
-        tone="violet"
-        icon={Layers}
-      />
-    </div>
-  );
-}
 
 type PrimalAvailabilityChartProps = {
   rows: GroupAvailability[];
@@ -191,54 +145,6 @@ export function PrimalAvailabilityChart({
       </div>
       )}
     </section>
-  );
-}
-
-const KPI_TONES = {
-  emerald: { chipBg: "bg-emerald-50", chipFg: "text-emerald-500" },
-  blue: { chipBg: "bg-blue-50", chipFg: "text-blue-500" },
-  rose: { chipBg: "bg-rose-50", chipFg: "text-rose-500" },
-  violet: { chipBg: "bg-violet-50", chipFg: "text-violet-500" },
-} as const;
-
-function KpiCard({
-  label,
-  value,
-  negative = false,
-  tone = "blue",
-  icon: Icon,
-}: {
-  label: string;
-  value: number;
-  negative?: boolean;
-  tone?: keyof typeof KPI_TONES;
-  icon: LucideIcon;
-}) {
-  const chip = KPI_TONES[tone];
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          {label}
-        </p>
-        <span
-          className={clsx(
-            "flex h-6 w-6 items-center justify-center rounded-md",
-            chip.chipBg,
-          )}
-        >
-          <Icon size={13} className={chip.chipFg} strokeWidth={2} />
-        </span>
-      </div>
-      <p
-        className={clsx(
-          "mt-1 text-xl font-bold tabular-nums",
-          negative ? "text-red-600" : "text-slate-900",
-        )}
-      >
-        {value.toLocaleString()}
-      </p>
-    </div>
   );
 }
 
