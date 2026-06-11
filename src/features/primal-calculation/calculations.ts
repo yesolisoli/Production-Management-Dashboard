@@ -16,6 +16,7 @@ import {
   type AvailabilityTotals,
   type CustomerAvailabilityColumn,
   type CustomerOrdersForDate,
+  type CustomGroupsForDate,
   type CustomRowsForDate,
   type EndingStockByGroup,
   type GroupAvailability,
@@ -38,7 +39,7 @@ export { clampNonNegativeInt };
 // Production (yieldTotal); no calculation branches on them.
 //
 //   Primal Total = JP + RWA (the Sow figure shown in the banner comes from
-//   the intake's sow_scheduled — today's Sow slated for processing).
+//   the intake's todays_cutting — today's Sow slated for processing).
 //
 // BK / Sow / Round / Suckling / Customer are excluded from yield entirely,
 // matching the YIELD_HOG_TYPES contract in the hog-intake module.
@@ -192,19 +193,25 @@ export function buildGroupAvailability(
   };
 }
 
-// Sum manually added (custom) rows' today pieces into their owning group.
-// Each custom row's category resolves to exactly one group, so a Ribs custom
-// row pools into the shared Ribs production just like a catalog row.
+// The production group a custom row belongs to: its explicit groupKey (set for
+// rows filed under a custom availability group) or, for catalog rows, the group
+// its category resolves to.
+function customRowGroupKey(row: CustomRowsForDate[number]): string {
+  return row.groupKey ?? groupForCategory(row.spec.category).key;
+}
+
+// Sum manually added (custom) rows' today pieces into their owning group. Each
+// row pools into exactly one group — a Ribs custom row into the shared Ribs
+// production, a custom-group row into that group's id. Keyed by group key so
+// both catalog keys and custom group ids are represented.
 export function sumCustomRowsByGroup(
   customRows: CustomRowsForDate,
-): Record<PrimalGroupKey, number> {
-  const totals = {} as Record<PrimalGroupKey, number>;
+): Record<string, number> {
+  const totals: Record<string, number> = {};
   for (const group of PRIMAL_GROUPS) totals[group.key] = 0;
   for (const row of customRows) {
-    const group = groupForCategory(row.spec.category);
-    totals[group.key as PrimalGroupKey] += clampNonNegativeInt(
-      row.order.today_pcs,
-    );
+    const key = customRowGroupKey(row);
+    totals[key] = (totals[key] ?? 0) + clampNonNegativeInt(row.order.today_pcs);
   }
   return totals;
 }
@@ -243,6 +250,33 @@ export function buildAvailabilityRows(
   });
 }
 
+// Operator-added availability groups. Each reuses the same production
+// primitive as the catalog groups — Expected Production is the whole-hog pool
+// (yieldTotal × 2), since production isn't split per group. A custom group
+// carries no categories, but keyed by its id it gets its own Custom
+// Orders (from the matrix) and Sales Orders (from custom rows tagged with
+// its id), subtracted just like a catalog group. No opening stock is carried
+// over for it. The synthetic PrimalGroup keys off the row's stable id.
+export function buildCustomGroupAvailability(
+  customGroups: CustomGroupsForDate,
+  counts: HogCounts,
+  customerOrders: CustomerOrdersForDate,
+  customRows: CustomRowsForDate,
+  minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
+): GroupAvailability[] {
+  const customByGroup = sumCustomRowsByGroup(customRows);
+  return customGroups.map((g) =>
+    buildGroupAvailability(
+      { key: g.id, label: g.label, categories: [] },
+      sumCustomerOrdersForKey(customerOrders, g.id),
+      customByGroup[g.id] ?? 0,
+      counts,
+      0,
+      minReserve,
+    ),
+  );
+}
+
 // -------------------------------------------------------------------
 // Customer availability — sum each group's customer orders and subtract
 // from that group's Available Stock. Pure derivation from the Availability
@@ -259,6 +293,20 @@ export function sumCustomerOrdersByGroup(
     }
   }
   return totals;
+}
+
+// Sum every customer's order for one group key (pieces). Works for any key,
+// including a custom availability group's id — its custom orders column lives in
+// the same matrix, keyed by that id.
+export function sumCustomerOrdersForKey(
+  customerOrders: CustomerOrdersForDate,
+  key: string,
+): number {
+  let total = 0;
+  for (const perGroup of Object.values(customerOrders)) {
+    total += clampNonNegativeInt(perGroup?.[key] ?? 0);
+  }
+  return total;
 }
 
 // Build one column per group: its Available Stock and the total ordered

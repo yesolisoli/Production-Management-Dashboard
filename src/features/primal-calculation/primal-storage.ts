@@ -2,10 +2,12 @@ import {
   emptyCustomerGroupOrders,
   emptyProductOrder,
   PRIMAL_CATEGORIES,
-  PRIMAL_GROUPS,
   type CustomCustomer,
   type CustomCustomersByDate,
   type CustomCustomersForDate,
+  type CustomGroup,
+  type CustomGroupsByDate,
+  type CustomGroupsForDate,
   type CustomerGroupOrders,
   type CustomerOrdersByDate,
   type CustomerOrdersForDate,
@@ -36,6 +38,7 @@ const COMMITTED_KEY = "primal-calc.orders";
 const DRAFT_KEY_PREFIX = "primal-calc.draft.";
 const CUSTOMER_KEY = "primal-calc.customer-orders";
 const CUSTOM_CUSTOMERS_KEY = "primal-calc.custom-customers";
+const CUSTOM_GROUPS_KEY = "primal-calc.custom-groups";
 const CUSTOM_ROWS_KEY = "primal-calc.custom-rows";
 
 function draftKey(date: string): string {
@@ -150,10 +153,11 @@ function coerceCustomerGroupOrders(raw: unknown): CustomerGroupOrders {
   const orders = emptyCustomerGroupOrders();
   if (!raw || typeof raw !== "object") return orders;
   const obj = raw as Record<string, unknown>;
-  for (const group of PRIMAL_GROUPS) {
-    const v = obj[group.key];
+  // Keep every valid numeric entry, not just the catalog groups — custom
+  // availability groups store their custom orders column keyed by the group's id.
+  for (const [key, v] of Object.entries(obj)) {
     if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
-      orders[group.key] = Math.floor(v);
+      orders[key] = Math.floor(v);
     }
   }
   return orders;
@@ -208,7 +212,7 @@ export function saveCustomerOrdersForDate(
 }
 
 // ------------------------ Custom customers --------------------------
-// Per-date list of manually added customer rows for the reservation matrix.
+// Per-date list of manually added customer rows for the custom orders matrix.
 // Only the row's identity + display name live here; its per-group order
 // pieces are stored in the customer-orders store above, keyed by `id`.
 // Auto-persisted on every edit, keyed by date.
@@ -270,6 +274,67 @@ export function saveCustomCustomersForDate(
   }
 }
 
+// ------------------------- Custom groups ----------------------------
+// Per-date list of operator-added availability groups for the Availability
+// Chart. Only identity + display label live here; every other figure is
+// derived (see buildCustomGroupAvailability). Auto-persisted on every edit,
+// keyed by date — mirrors the custom-customers store above.
+
+function coerceCustomGroup(raw: unknown): CustomGroup | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.id !== "string" || !obj.id) return null;
+  return { id: obj.id, label: typeof obj.label === "string" ? obj.label : "" };
+}
+
+function coerceCustomGroupsForDate(raw: unknown): CustomGroupsForDate {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(coerceCustomGroup)
+    .filter((row): row is CustomGroup => row !== null);
+}
+
+function readCustomGroups(): CustomGroupsByDate {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_GROUPS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: CustomGroupsByDate = {};
+    for (const [date, rows] of Object.entries(
+      parsed as Record<string, unknown>,
+    )) {
+      out[date] = coerceCustomGroupsForDate(rows);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function readCustomGroupsForDate(date: string): CustomGroupsForDate {
+  return readCustomGroups()[date] ?? [];
+}
+
+export function saveCustomGroupsForDate(
+  date: string,
+  rows: CustomGroupsForDate,
+): void {
+  if (typeof window === "undefined") return;
+  const all = readCustomGroups();
+  if (rows.length === 0) {
+    delete all[date];
+  } else {
+    all[date] = rows;
+  }
+  try {
+    window.localStorage.setItem(CUSTOM_GROUPS_KEY, JSON.stringify(all));
+  } catch {
+    // ignore quota / access errors
+  }
+}
+
 // --------------------------- Custom rows ----------------------------
 // Per-date list of manually added order rows. Auto-persisted on every edit
 // (no draft/commit split — like the customer matrix), keyed by date:
@@ -303,7 +368,12 @@ function coerceCustomRow(raw: unknown): CustomOrderRow | null {
   const obj = raw as Record<string, unknown>;
   const spec = coerceCustomSpec(obj.spec);
   if (typeof obj.id !== "string" || !obj.id || !spec) return null;
-  return { id: obj.id, spec, order: coerceOrder(obj.order) };
+  const row: CustomOrderRow = { id: obj.id, spec, order: coerceOrder(obj.order) };
+  // Preserve the explicit owning group (custom-group rows) when present.
+  if (typeof obj.groupKey === "string" && obj.groupKey) {
+    row.groupKey = obj.groupKey;
+  }
+  return row;
 }
 
 function coerceCustomRowsForDate(raw: unknown): CustomRowsForDate {

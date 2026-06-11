@@ -10,13 +10,14 @@ import {
   Package,
   Plus,
   Save,
-  Trash2,
+  X,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
 import type { OrderTotals } from "../calculations";
 import { clampNonNegativeInt } from "../calculations";
 import type {
+  AvailabilityStatus,
   CustomOrderRow,
   OrderField,
   PrimalCategory,
@@ -50,6 +51,9 @@ type PrimalGroupSectionProps = {
   // Calculated Ending Stock for this group, in pieces (Available Stock −
   // Customer Orders from the Availability Chart). Read-only / derived.
   calculatedEndingStockPcs: number;
+  // Availability status for this group, derived from the same Ending Stock.
+  // Drives the header figure's color (OK / Low Reserve / Short).
+  endingStockStatus: AvailabilityStatus;
   expanded: boolean;
   onToggle: () => void;
   activeSku: string | null;
@@ -67,6 +71,9 @@ type PrimalGroupSectionProps = {
   onClear: () => void;
   saving: boolean;
   justSaved: boolean;
+  // Custom availability groups auto-persist their rows, so they hide the
+  // Save/Clear footer (catalog sections show it). Defaults to shown.
+  showSaveClear?: boolean;
 };
 
 export function PrimalGroupSection({
@@ -75,6 +82,7 @@ export function PrimalGroupSection({
   customRows,
   groupTotals,
   calculatedEndingStockPcs,
+  endingStockStatus,
   expanded,
   onToggle,
   activeSku,
@@ -88,6 +96,7 @@ export function PrimalGroupSection({
   onClear,
   saving,
   justSaved,
+  showSaveClear = true,
 }: PrimalGroupSectionProps) {
   // Only label per-type subgroups when the group pools more than one type
   // (e.g. Ribs); single-type groups don't need the redundant header.
@@ -129,7 +138,10 @@ export function PrimalGroupSection({
             cases={groupTotals.today_cases}
             pcs={groupTotals.today_pcs}
           />
-          <HeaderEndingStock pcs={calculatedEndingStockPcs} />
+          <HeaderEndingStock
+            pcs={calculatedEndingStockPcs}
+            status={endingStockStatus}
+          />
         </div>
       </button>
 
@@ -137,13 +149,27 @@ export function PrimalGroupSection({
         <div className="border-t border-slate-100">
           {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-150 border-collapse text-sm">
+            <table className="w-full min-w-150 table-fixed border-collapse text-sm">
+              {/* Fixed column widths so the layout never shifts when a custom
+                  row (whose cells hold wider <input> fields) is added. Item is
+                  left flexible to absorb the remaining width; Case Pack / Cases
+                  / Pieces share one width, and the remove button gets its own
+                  trailing column (empty on non-custom rows). */}
+              <colgroup>
+                <col className="w-28" />
+                <col />
+                <col className="w-44" />
+                <col className="w-44" />
+                <col className="w-44" />
+                <col className="w-16" />
+              </colgroup>
               <thead>
                 <tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-4 py-2.5">SKU</th>
                   <th className="px-2 py-2.5">Item</th>
-                  <th className="px-2 py-2.5">Case Pack</th>
+                  <th className="px-2 py-2.5 text-center">Case Pack</th>
                   <ColGroupHead label="Today" tone="text-blue-600" />
+                  <th className="px-1.5 py-2.5" aria-hidden />
                 </tr>
               </thead>
               {categoryRows.map(({ category, rows, totals }) => (
@@ -165,6 +191,7 @@ export function PrimalGroupSection({
                       <td className="px-1.5 py-1.5 text-center tabular-nums text-slate-400">
                         {totals.today_pcs}
                       </td>
+                      <td aria-hidden />
                     </tr>
                   )}
                   {rows.map((row) => (
@@ -194,7 +221,7 @@ export function PrimalGroupSection({
                   />
                 ))}
                 <tr>
-                  <td colSpan={5} className="px-4 py-2.5">
+                  <td colSpan={6} className="px-4 py-2.5">
                     <div className="flex justify-center">
                     <button
                       type="button"
@@ -211,53 +238,35 @@ export function PrimalGroupSection({
             </table>
           </div>
 
-          {/* Group totals — today's manual inputs, then the derived
-              Calculated Ending Stock (pieces; group-level, read-only). */}
-          <div className="grid grid-cols-2 gap-3 border-t border-slate-100 px-4 py-3 sm:grid-cols-3">
-            <TotalStat
-              label="Today total cases"
-              value={groupTotals.today_cases}
-              tone="blue"
-            />
-            <TotalStat
-              label="Today total pcs"
-              value={groupTotals.today_pcs}
-              tone="blue"
-            />
-            <TotalStat
-              label="Ending Stock pcs"
-              value={calculatedEndingStockPcs}
-              tone="violet"
-            />
-          </div>
-
-          {/* Save / Clear */}
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
-            <button
-              type="button"
-              onClick={onClear}
-              disabled={saving}
-              className="flex h-9 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 disabled:opacity-60"
-            >
-              <Eraser size={14} />
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={onSave}
-              disabled={saving}
-              className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60"
-            >
-              {saving ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : justSaved ? (
-                <Check size={14} />
-              ) : (
-                <Save size={14} />
-              )}
-              {saving ? "Saving…" : justSaved ? "Saved" : `Save ${group.label}`}
-            </button>
-          </div>
+          {/* Save / Clear — hidden for auto-persisting custom sections. */}
+          {showSaveClear && (
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
+              <button
+                type="button"
+                onClick={onClear}
+                disabled={saving}
+                className="flex h-9 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 disabled:opacity-60"
+              >
+                <Eraser size={14} />
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={saving}
+                className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60"
+              >
+                {saving ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : justSaved ? (
+                  <Check size={14} />
+                ) : (
+                  <Save size={14} />
+                )}
+                {saving ? "Saving…" : justSaved ? "Saved" : `Save ${group.label}`}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </section>
@@ -294,7 +303,7 @@ function ProductRow({
       <td className="px-2 py-2">
         <span className="font-medium text-slate-800">{spec.name}</span>
       </td>
-      <td className="px-2 py-2 text-xs text-slate-500">
+      <td className="px-2 py-2 text-center text-xs text-slate-500">
         {casePackLabel(spec.casePack)}
       </td>
 
@@ -309,6 +318,8 @@ function ProductRow({
         onChange={(v) => onChangeField(spec.sku, "today_pcs", v)}
         ariaLabel={`${spec.name} today pieces`}
       />
+      {/* Trailing column reserved for the custom rows' remove button. */}
+      <td aria-hidden />
     </tr>
   );
 }
@@ -405,7 +416,7 @@ function CustomProductRow({
           onChange={(e) => onUpdateSpec(id, { sku: e.target.value })}
           placeholder="SKU"
           aria-label="Custom item SKU"
-          className="-ml-2 h-9 w-24 rounded-lg border border-transparent bg-transparent px-2 font-mono text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
+          className="-ml-2 h-9 w-full rounded-lg border border-transparent bg-transparent px-2 font-mono text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
         />
       </td>
       <td className="px-2 py-2">
@@ -414,7 +425,7 @@ function CustomProductRow({
           onChange={(e) => onUpdateSpec(id, { name: e.target.value })}
           placeholder="Item name"
           aria-label="Custom item name"
-          className="-ml-2 h-9 w-full min-w-40 rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium text-slate-800 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
+          className="-ml-2 h-9 w-full rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium text-slate-800 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
         />
       </td>
       <td className="px-2 py-2">
@@ -423,7 +434,7 @@ function CustomProductRow({
           onChange={(e) => onUpdateSpec(id, { casePack: e.target.value })}
           placeholder="Case pack"
           aria-label="Custom item case pack"
-          className="-ml-2 h-9 w-full min-w-28 rounded-lg border border-transparent bg-transparent px-2 text-xs text-slate-600 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
+          className="h-9 w-full rounded-lg border border-transparent bg-transparent px-2 text-center text-xs text-slate-600 outline-none transition hover:bg-slate-50 focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
         />
       </td>
 
@@ -433,17 +444,23 @@ function CustomProductRow({
         ariaLabel={`${label} today cases`}
         accent="blue"
       />
-      <td className="relative px-1.5 py-2">
-        <StepInput
-          value={order.today_pcs}
-          onChange={(v) => onChangeField(id, "today_pcs", v)}
-          ariaLabel={`${label} today pieces`}
-        />
-        <span className="absolute right-2 top-1/2 -translate-y-1/2">
-          <StepButton ariaLabel={`Remove ${label}`} onClick={() => onRemove(id)}>
-            <Trash2 size={14} />
+      <NumberCell
+        value={order.today_pcs}
+        onChange={(v) => onChangeField(id, "today_pcs", v)}
+        ariaLabel={`${label} today pieces`}
+      />
+      {/* Remove button in its own trailing column so the Pieces stepper stays
+          identical to the catalog rows. */}
+      <td className="px-1.5 py-2">
+        <div className="flex justify-center">
+          <StepButton
+            ariaLabel={`Remove ${label}`}
+            onClick={() => onRemove(id)}
+            className="hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+          >
+            <X size={14} />
           </StepButton>
-        </span>
+        </div>
       </td>
     </tr>
   );
@@ -453,11 +470,13 @@ function StepButton({
   ariaLabel,
   onClick,
   disabled,
+  className,
   children,
 }: {
   ariaLabel: string;
   onClick: () => void;
   disabled?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
   return (
@@ -466,7 +485,10 @@ function StepButton({
       aria-label={ariaLabel}
       onClick={onClick}
       disabled={disabled}
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+      className={clsx(
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40",
+        className,
+      )}
     >
       {children}
     </button>
@@ -486,35 +508,6 @@ function ColGroupHead({ label, tone }: { label: string; tone: string }) {
         <span className="block text-[9px] font-normal text-slate-400">Pieces</span>
       </th>
     </>
-  );
-}
-
-const TOTAL_TONES: Record<string, string> = {
-  blue: "text-blue-600",
-  violet: "text-violet-600",
-};
-
-function TotalStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: keyof typeof TOTAL_TONES;
-}) {
-  return (
-    <div>
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p
-        className={clsx(
-          "text-2xl font-extrabold tabular-nums",
-          TOTAL_TONES[tone],
-        )}
-      >
-        {value}
-      </p>
-    </div>
   );
 }
 
@@ -541,7 +534,21 @@ function HeaderTotal({
 
 // Calculated Ending Stock summary in the section header — pieces only, since
 // it is group-level (mixed case packs make "cases" undefined here).
-function HeaderEndingStock({ pcs }: { pcs: number }) {
+// Header figure colored by availability status, matching the Availability
+// Chart's status palette: OK → emerald, Low Reserve → amber, Short → red.
+const ENDING_STOCK_STATUS_COLORS: Record<AvailabilityStatus, string> = {
+  OK: "text-emerald-600",
+  "Low Reserve": "text-amber-600",
+  Short: "text-red-600",
+};
+
+function HeaderEndingStock({
+  pcs,
+  status,
+}: {
+  pcs: number;
+  status: AvailabilityStatus;
+}) {
   return (
     <div className="hidden text-right sm:block">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -550,7 +557,7 @@ function HeaderEndingStock({ pcs }: { pcs: number }) {
       <p
         className={clsx(
           "text-xs font-bold tabular-nums",
-          pcs < 0 ? "text-red-600" : "text-violet-600",
+          ENDING_STOCK_STATUS_COLORS[status],
         )}
       >
         {pcs.toLocaleString()} pcs

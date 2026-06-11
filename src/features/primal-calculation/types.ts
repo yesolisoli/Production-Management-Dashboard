@@ -20,7 +20,7 @@ export type PrimalCategory = (typeof PRIMAL_CATEGORIES)[number];
 // -------------------------------------------------------------------
 // Production groups — categories that come off the same primal cut share
 // ONE production pool, so quantity (expected production, availability,
-// Ending Stock, carry-over, customer reservations) is computed per group,
+// Ending Stock, carry-over, custom orders) is computed per group,
 // never per category. Order entry and per-type display stay at the category
 // level. Most groups are a single category; Spareribs + Ribbons/Ribs come
 // off the same rib cut, so they form one "Ribs" group.
@@ -104,6 +104,11 @@ export type CustomOrderRow = {
   id: string;
   spec: ProductSpec;
   order: ProductOrder;
+  // Owning production group's key. When set it overrides the category-based
+  // bucketing — needed for rows filed under a custom availability group, which
+  // has no category. Absent on catalog rows (their group is resolved from
+  // spec.category), so stored rows stay backward-compatible.
+  groupKey?: string;
 };
 export type CustomRowsForDate = CustomOrderRow[];
 export type CustomRowsByDate = Record<string, CustomRowsForDate>;
@@ -196,9 +201,10 @@ export const PRIMAL_CUSTOMERS = [
 export type PrimalCustomer = (typeof PRIMAL_CUSTOMERS)[number];
 
 // One customer's order pieces per production group. Pooled cuts (Ribs) take a
-// single reservation rather than one per type, matching how production is
-// shared.
-export type CustomerGroupOrders = Record<PrimalGroupKey, number>;
+// single custom order rather than one per type, matching how production is
+// shared. Keyed by group key — the catalog PrimalGroupKeys plus any custom
+// availability group's id (custom groups get their own custom orders column).
+export type CustomerGroupOrders = Record<string, number>;
 
 // Persisted save shape: { "YYYY-MM-DD": { "<customer>": { Butts: n, ... } } }
 // The key is the customer's display name for the fixed PRIMAL_CUSTOMERS, or
@@ -206,13 +212,24 @@ export type CustomerGroupOrders = Record<PrimalGroupKey, number>;
 export type CustomerOrdersForDate = Record<string, CustomerGroupOrders>;
 export type CustomerOrdersByDate = Record<string, CustomerOrdersForDate>;
 
-// A manually added customer row appended to the reservation matrix. Its orders
+// A manually added customer row appended to the custom orders matrix. Its orders
 // live in CustomerOrdersForDate keyed by `id` — calculations sum over the map's
 // values, so a free-form id key is safe and keeps the editable name decoupled
 // from the orders. Persisted per date, like CustomRowsForDate.
 export type CustomCustomer = { id: string; name: string };
 export type CustomCustomersForDate = CustomCustomer[];
 export type CustomCustomersByDate = Record<string, CustomCustomersForDate>;
+
+// A manually added (ad-hoc) availability group appended to the Availability
+// Chart for a single date. Only identity + display label are stored; its
+// Expected Production is derived from the same whole-hog pool as every catalog
+// group (yieldTotal × 2). It carries no categories, but — keyed by its id — it
+// gets its own Custom Orders column and a Sales Orders section whose
+// rows are ad-hoc CustomOrderRows tagged with its id. Persisted per date, like
+// CustomCustomer. The id is the stable key, independent of the editable label.
+export type CustomGroup = { id: string; label: string };
+export type CustomGroupsForDate = CustomGroup[];
+export type CustomGroupsByDate = Record<string, CustomGroupsForDate>;
 
 export function emptyCustomerGroupOrders(): CustomerGroupOrders {
   const out = {} as CustomerGroupOrders;

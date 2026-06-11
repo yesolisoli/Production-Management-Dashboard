@@ -62,7 +62,7 @@ export function PrimalCustomerChart({
         </span>
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-slate-900">
-            Customer Reservations
+            Custom Orders
           </h2>
           <p className="text-xs text-slate-500">
             Per-customer orders subtracted from each category&apos;s Available
@@ -93,24 +93,14 @@ export function PrimalCustomerChart({
             </colgroup>
             <thead>
               <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                <th className="sticky left-0 z-10 bg-slate-50 px-4 py-2.5 text-left">
-                  Customer
-                </th>
+                <th
+                  className="sticky left-0 z-10 bg-slate-50 px-4 py-2.5 text-left"
+                  aria-label="Customer"
+                />
                 {columns.map((col) => (
                   <th key={col.group} className="px-2 py-2.5 text-center">
                     {col.label}
                   </th>
-                ))}
-              </tr>
-              {/* Totals Available — read-only, per group */}
-              <tr className="border-y border-slate-200 bg-slate-100/70 text-center text-xs font-bold tabular-nums text-slate-700">
-                <th className="sticky left-0 z-10 bg-slate-100/70 px-4 py-2 text-left text-[11px] uppercase tracking-wide text-slate-500">
-                  Totals Available
-                </th>
-                {columns.map((col) => (
-                  <td key={col.group} className="px-2 py-2">
-                    {col.availableStock.toLocaleString()}
-                  </td>
                 ))}
               </tr>
             </thead>
@@ -130,7 +120,7 @@ export function PrimalCustomerChart({
                     {columns.map((col) => (
                       <OrderCell
                         key={col.group}
-                        value={orders[col.group]}
+                        value={orders[col.group] ?? 0}
                         ariaLabel={`${customer} ${col.label} order`}
                         onChange={(v) => onChange(customer, col.group, v)}
                       />
@@ -163,7 +153,7 @@ export function PrimalCustomerChart({
                     {columns.map((col, i) => (
                       <OrderCell
                         key={col.group}
-                        value={orders[col.group]}
+                        value={orders[col.group] ?? 0}
                         ariaLabel={`${customer.name || "New customer"} ${col.label} order`}
                         onChange={(v) => onChange(customer.id, col.group, v)}
                         trailing={
@@ -191,32 +181,13 @@ export function PrimalCustomerChart({
                     type="button"
                     onClick={onAddCustomer}
                     aria-label="Add customer"
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-900 bg-white text-slate-900 transition hover:bg-slate-50"
+                    className="mx-auto flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-900 transition hover:bg-slate-50"
                   >
-                    <Plus size={16} />
+                    <Plus size={14} />
                   </button>
                 </td>
               </tr>
             </tbody>
-
-            <tfoot>
-              <tr className="border-t-2 border-slate-200 bg-slate-50 text-center text-sm font-bold tabular-nums text-slate-800">
-                <td className="sticky left-0 z-10 bg-slate-50 px-4 py-2.5 text-left text-[11px] uppercase tracking-wide text-slate-500">
-                  Remaining
-                </td>
-                {columns.map((col) => (
-                  <td
-                    key={col.group}
-                    className={clsx(
-                      "px-2 py-2.5",
-                      col.remaining < 0 ? "text-red-600" : "text-emerald-600",
-                    )}
-                  >
-                    {col.remaining.toLocaleString()}
-                  </td>
-                ))}
-              </tr>
-            </tfoot>
           </table>
         </div>
       )}

@@ -123,12 +123,12 @@ export function deriveTotals(record: HogIntakeRecord): HogIntakeTotals {
   };
 }
 
-// Sow inventory rolls forward day to day: today's "Remaining After Schedule"
-// (what's left once the day's scheduled sows are taken) seeds the next day's
+// Sow inventory rolls forward day to day: today's "Remaining After Cutting"
+// (what's left once the day's cutting is taken) seeds the next day's
 // "Available This Week". Centralized so the card display and the carry-over
 // computation can never diverge.
-export function sowRemaining(available: number, scheduled: number): number {
-  return Math.max(0, available - scheduled);
+export function sowRemaining(available: number, cutting: number): number {
+  return Math.max(0, available - cutting);
 }
 
 // Clamp a free-form numeric input to a non-negative integer. Used at

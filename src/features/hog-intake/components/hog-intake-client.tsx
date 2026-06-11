@@ -5,6 +5,7 @@ import { Calendar, Loader2, Save } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { deriveTotals } from "../calculations";
 import { useHogIntakeState } from "../hooks/use-hog-intake-state";
+import { useWeeklyHogSchedule } from "../hooks/use-weekly-hog-schedule";
 import { FarmRecords } from "./farm-records";
 import { HogCountGrid } from "./hog-count-grid";
 import { PrimalHogsGrid } from "./primal-hogs-grid";
@@ -14,6 +15,14 @@ import { SummaryPanel } from "./summary-panel";
 import { WeeklyHogSchedule } from "./weekly-hog-schedule";
 
 export function HogIntakeClient() {
+  // Weekly Hog Plan owns its rows here (single instance) so both the plan grid
+  // and the Sow card's derived "Available This Week" read the same data.
+  const {
+    rows: weeklyRows,
+    updateValue: updateWeeklyValue,
+    sowPlanTotal,
+  } = useWeeklyHogSchedule();
+
   const {
     date,
     record,
@@ -24,13 +33,13 @@ export function HogIntakeClient() {
     setHogCount,
     setProcessField,
     setNextDayField,
-    setSowScheduled,
+    setTodaysCutting,
     addFarmRecord,
     updateFarmRecord,
     removeFarmRecord,
     reset,
     save,
-  } = useHogIntakeState();
+  } = useHogIntakeState({ sowPlanTotal });
 
   // hog_counts are derived from Farm Delivery Records, so totals flow from the
   // derived counts rather than the record's stored (input-only) field.
@@ -76,6 +85,8 @@ export function HogIntakeClient() {
         <div className="flex flex-col gap-4 px-5 py-5 lg:px-6 lg:py-6">
           <WeeklyHogSchedule
             date={date}
+            rows={weeklyRows}
+            onUpdateValue={updateWeeklyValue}
             nextDay={record.next_day}
             onNextDayChange={setNextDayField}
           />
@@ -97,10 +108,9 @@ export function HogIntakeClient() {
             after={
               <ProcessSheet record={record} onChangeField={setProcessField} />
             }
-            sowAvailable={record.hog_counts.Sow}
-            sowScheduled={record.sow_scheduled}
-            onChangeSowAvailable={(v) => setHogCount("Sow", v)}
-            onChangeSowScheduled={setSowScheduled}
+            sowAvailable={hogCounts.Sow}
+            todaysCutting={record.todays_cutting}
+            onChangeTodaysCutting={setTodaysCutting}
           />
 
           <FarmRecords

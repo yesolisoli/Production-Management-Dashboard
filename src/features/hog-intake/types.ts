@@ -57,10 +57,11 @@ export type HogIntakeRecord = {
   deaths_on_arrival: number;
   boars_count: number;
   // Sow Processing — a separate operational track. Total Sow Available lives
-  // in hog_counts.Sow; sow_scheduled is how many of those are slated for
-  // processing today. Persisted (hog_intake_records.sow_scheduled) and shown
-  // as the Sow figure in the Primal Calculation banner.
-  sow_scheduled: number;
+  // in hog_counts.Sow; todays_cutting is how many of those are slated for
+  // processing today ("Today's Cutting"). Persisted
+  // (hog_intake_records.todays_cutting) and shown as the Sow figure in the
+  // Primal Calculation banner.
+  todays_cutting: number;
   notes: string;
   farm_records: FarmRecord[];
   next_day: NextDay;
@@ -88,7 +89,7 @@ export function emptyHogIntakeRecord(date: string): HogIntakeRecord {
     held_over: 0,
     deaths_on_arrival: 0,
     boars_count: 0,
-    sow_scheduled: 0,
+    todays_cutting: 0,
     notes: "",
     farm_records: [],
     next_day: { hog_count: 0, side_orders: 0, cooler_overstock: 0 },
@@ -105,7 +106,7 @@ export function isEmptyHogIntakeRecord(record: HogIntakeRecord): boolean {
     record.held_over === 0 &&
     record.deaths_on_arrival === 0 &&
     record.boars_count === 0 &&
-    record.sow_scheduled === 0 &&
+    record.todays_cutting === 0 &&
     record.notes.trim() === "" &&
     record.farm_records.length === 0 &&
     record.next_day.hog_count === 0 &&

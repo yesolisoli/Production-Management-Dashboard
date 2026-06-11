@@ -15,9 +15,8 @@ type SummaryPanelProps = {
   // Rendered as the last column, to the right of Sow Availability.
   after?: React.ReactNode;
   sowAvailable: number;
-  sowScheduled: number;
-  onChangeSowAvailable: (value: number) => void;
-  onChangeSowScheduled: (value: number) => void;
+  todaysCutting: number;
+  onChangeTodaysCutting: (value: number) => void;
 };
 
 export function SummaryPanel({
@@ -27,9 +26,8 @@ export function SummaryPanel({
   middle,
   after,
   sowAvailable,
-  sowScheduled,
-  onChangeSowAvailable,
-  onChangeSowScheduled,
+  todaysCutting,
+  onChangeTodaysCutting,
 }: SummaryPanelProps) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -43,9 +41,8 @@ export function SummaryPanel({
       {middle}
       <SowProcessingCard
         available={sowAvailable}
-        scheduled={sowScheduled}
-        onChangeAvailable={onChangeSowAvailable}
-        onChangeScheduled={onChangeSowScheduled}
+        todaysCutting={todaysCutting}
+        onChangeTodaysCutting={onChangeTodaysCutting}
       />
       {after}
     </div>
@@ -199,17 +196,17 @@ function FlowRow({
   );
 }
 
-// Sow is its own operational track — editable here rather than in Hog Counts.
+// Sow is its own operational track. "Available This Week" is derived (Weekly
+// Hog Plan sow rows + farm-delivered sows) and therefore read-only; only the
+// daily schedule is editable here.
 function SowProcessingCard({
   available,
-  scheduled,
-  onChangeAvailable,
-  onChangeScheduled,
+  todaysCutting,
+  onChangeTodaysCutting,
 }: {
   available: number;
-  scheduled: number;
-  onChangeAvailable: (value: number) => void;
-  onChangeScheduled: (value: number) => void;
+  todaysCutting: number;
+  onChangeTodaysCutting: (value: number) => void;
 }) {
   return (
     <CardShell
@@ -218,22 +215,18 @@ function SowProcessingCard({
       icon={<CardIcon icon={Boxes} tone="emerald" />}
     >
       <div className="space-y-2">
+        <ReadOnlyRow label="Available This Week" value={available} />
         <StepperRow
-          label="Available This Week"
-          value={available}
-          onChange={onChangeAvailable}
-        />
-        <StepperRow
-          label="Scheduled For Today"
-          value={scheduled}
-          onChange={onChangeScheduled}
+          label="Today's Cutting"
+          value={todaysCutting}
+          onChange={onChangeTodaysCutting}
         />
         <div className="-mt-1 flex items-center justify-between gap-2 border-t border-slate-100 pt-1">
-          <span className="text-sm text-slate-500">Remaining After Schedule</span>
+          <span className="text-sm text-slate-500">Remaining After Cutting</span>
           <div className="flex items-center gap-1.5">
             <span className="h-7 w-7" aria-hidden />
             <span className="w-12 text-center text-xl font-extrabold tabular-nums text-slate-900">
-              {sowRemaining(available, scheduled).toLocaleString()}
+              {sowRemaining(available, todaysCutting).toLocaleString()}
             </span>
             <span className="h-7 w-7" aria-hidden />
           </div>

@@ -2,27 +2,21 @@
 
 import { CalendarDays } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  WEEKLY_PLAN_DAYS,
+  type ScheduleRow,
+  type WeeklyPlanDay,
+} from "../hooks/use-weekly-hog-schedule";
 import { NextDayProjection } from "./next-day-projection";
 import type { NextDay } from "../types";
 
 type EditableNextDayField = "side_orders" | "cooler_overstock";
 
 // Editable reference panel showing the week's planned Cut/Kill market
-// counts. Days run across as columns; the two metrics are rows. Sales uses
-// this to forecast next-day production volume. These values are a standalone
-// note — they are NOT linked to intake/production figures. Edits persist to
-// localStorage so they survive a refresh.
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"] as const;
-
-type Day = (typeof DAYS)[number];
-
-type ScheduleRow = {
-  label: string;
-  description: string;
-  values: Record<Day, number>;
-};
-
-const STORAGE_KEY = "hog-intake.weekly-schedule";
+// counts. Days run across as columns; the metrics are rows. Sales uses this
+// to forecast next-day production volume, and the Sow plan rows roll up into
+// the Sow card's "Available This Week". The persisted rows live in
+// use-weekly-hog-schedule (single source of truth) and arrive via props.
 const COLLAPSED_KEY = "hog-intake.weekly-schedule.collapsed";
 
 // Row the Next Day Hog Count is sourced from.
@@ -30,7 +24,7 @@ const CUT_ROW_LABEL = "Cut - Markets";
 
 // The Weekly Hog Plan only carries Mon–Fri. Given the selected intake date,
 // return the plan day for the following business day (Fri/Sat/Sun → Mon).
-const NEXT_PLAN_DAY: Record<number, Day> = {
+const NEXT_PLAN_DAY: Record<number, WeeklyPlanDay> = {
   0: "Mon", // Sun → Mon
   1: "Tue", // Mon → Tue
   2: "Wed", // Tue → Wed
@@ -53,7 +47,7 @@ const LOCKED_BEFORE_BY_DOW: Record<number, number> = {
   6: 5, // Sat → all locked
 };
 
-function nextPlanDay(dateStr: string): Day | null {
+function nextPlanDay(dateStr: string): WeeklyPlanDay | null {
   const [y, m, d] = dateStr.split("-").map(Number);
   if (!y || !m || !d) return null;
   // Construct in local time so the weekday isn't shifted by the UTC offset.
@@ -62,85 +56,26 @@ function nextPlanDay(dateStr: string): Day | null {
   return NEXT_PLAN_DAY[date.getDay()] ?? null;
 }
 
-const DEFAULT_ROWS: ScheduleRow[] = [
-  {
-    label: "Cut - Markets",
-    description: "Hogs planned for cutting",
-    values: { Mon: 300, Tue: 365, Wed: 340, Thu: 365, Fri: 365 },
-  },
-  {
-    label: "Kill - Markets",
-    description: "Hogs planned for slaughter",
-    values: { Mon: 392, Tue: 360, Wed: 392, Thu: 392, Fri: 332 },
-  },
-  {
-    label: "JP Sows",
-    description: "Hogs planned",
-    values: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 },
-  },
-  {
-    label: "ADACA Sows",
-    description: "Hogs planned",
-    values: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 },
-  },
-  {
-    label: "Custom RH",
-    description: "Hogs planned",
-    values: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 },
-  },
-  {
-    label: "Custom Market",
-    description: "Hogs planned",
-    values: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 },
-  },
-  {
-    label: "Custom Sow",
-    description: "Hogs planned",
-    values: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 },
-  },
-];
-
-function cloneDefaultRows(): ScheduleRow[] {
-  return DEFAULT_ROWS.map((row) => ({
-    label: row.label,
-    description: row.description,
-    values: { ...row.values },
-  }));
-}
-
-// Merge a stored payload onto the default shape so a partial/corrupt value
-// still loads with sane fallbacks, keyed by the fixed row labels.
-function coerceRows(raw: unknown): ScheduleRow[] {
-  const rows = cloneDefaultRows();
-  if (!raw || typeof raw !== "object") return rows;
-  const stored = raw as Record<string, unknown>;
-  for (const row of rows) {
-    const savedValues = stored[row.label];
-    if (!savedValues || typeof savedValues !== "object") continue;
-    const values = savedValues as Record<string, unknown>;
-    for (const day of DAYS) {
-      const v = values[day];
-      if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
-        row.values[day] = v;
-      }
-    }
-  }
-  return rows;
-}
-
 type WeeklyHogScheduleProps = {
   date: string; // selected intake date, YYYY-MM-DD
+  // Persisted plan rows owned by use-weekly-hog-schedule (single source).
+  rows: ScheduleRow[];
+  onUpdateValue: (rowIndex: number, day: WeeklyPlanDay, value: number) => void;
   nextDay: NextDay;
   onNextDayChange: (field: EditableNextDayField, value: number) => void;
 };
 
 export function WeeklyHogSchedule({
   date,
+  rows,
+  onUpdateValue,
   nextDay,
   onNextDayChange,
 }: WeeklyHogScheduleProps) {
-  const [rows, setRows] = useState<ScheduleRow[]>(cloneDefaultRows);
   const [collapsed, setCollapsed] = useState(true);
+  // Which cell is currently focused, keyed as `${rowIndex}-${day}`. A focused
+  // cell whose value is 0 renders blank so users can type without clearing it.
+  const [focusedCell, setFocusedCell] = useState<string | null>(null);
   // Number of leading weekday columns to lock (days before today). Computed
   // after mount from the real clock so it never causes an SSR hydration
   // mismatch — every column is editable on the server's first render.
@@ -155,11 +90,9 @@ export function WeeklyHogSchedule({
     return cutRow?.values[day] ?? 0;
   }, [rows, date]);
 
-  // Hydrate from localStorage after mount (avoids SSR mismatch).
+  // Restore the collapsed preference after mount (avoids SSR mismatch).
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) setRows(coerceRows(JSON.parse(raw)));
       // Default to collapsed; only honor an explicitly stored preference.
       const storedCollapsed = window.localStorage.getItem(COLLAPSED_KEY);
       if (storedCollapsed !== null) setCollapsed(storedCollapsed === "true");
@@ -174,25 +107,6 @@ export function WeeklyHogSchedule({
       const next = !prev;
       try {
         window.localStorage.setItem(COLLAPSED_KEY, String(next));
-      } catch {
-        // ignore quota / access errors
-      }
-      return next;
-    });
-  }
-
-  function updateValue(rowIndex: number, day: Day, value: number) {
-    setRows((prev) => {
-      const next = prev.map((row, i) =>
-        i === rowIndex
-          ? { ...row, values: { ...row.values, [day]: value } }
-          : row,
-      );
-      try {
-        const payload = Object.fromEntries(
-          next.map((row) => [row.label, row.values]),
-        );
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
       } catch {
         // ignore quota / access errors
       }
@@ -241,7 +155,7 @@ export function WeeklyHogSchedule({
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/80">
               <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" />
-              {DAYS.map((day) => (
+              {WEEKLY_PLAN_DAYS.map((day) => (
                 <th
                   key={day}
                   className="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500"
@@ -265,7 +179,7 @@ export function WeeklyHogSchedule({
                     {row.description}
                   </span>
                 </th>
-                {DAYS.map((day, dayIndex) => {
+                {WEEKLY_PLAN_DAYS.map((day, dayIndex) => {
                   // Days before today are read-only — past plan figures are locked.
                   const locked = dayIndex < lockedBefore;
                   return (
@@ -274,11 +188,17 @@ export function WeeklyHogSchedule({
                         type="number"
                         min={0}
                         inputMode="numeric"
-                        value={row.values[day]}
+                        value={
+                          focusedCell === `${i}-${day}` && row.values[day] === 0
+                            ? ""
+                            : row.values[day]
+                        }
+                        onFocus={() => setFocusedCell(`${i}-${day}`)}
+                        onBlur={() => setFocusedCell(null)}
                         readOnly={locked}
                         disabled={locked}
                         onChange={(e) =>
-                          updateValue(
+                          onUpdateValue(
                             i,
                             day,
                             Math.max(0, Math.floor(Number(e.target.value) || 0)),

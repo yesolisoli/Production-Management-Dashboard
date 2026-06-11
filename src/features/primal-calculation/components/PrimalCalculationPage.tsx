@@ -16,6 +16,7 @@ import { deriveTotals } from "@/features/hog-intake/calculations";
 import {
   buildAvailabilityRows,
   buildCustomerAvailability,
+  buildCustomGroupAvailability,
   categoryTotals,
   DEFAULT_MIN_COOLER_RESERVE,
   orderFor,
@@ -31,8 +32,10 @@ import {
   groupForCategory,
   PRIMAL_CATEGORIES,
   PRIMAL_GROUPS,
+  type AvailabilityStatus,
   type CustomOrderRow,
   type PrimalCategory,
+  type PrimalGroup,
   type PrimalGroupKey,
 } from "../types";
 import { usePrimalCalculationState } from "../hooks/use-primal-calculation-state";
@@ -60,12 +63,16 @@ export function PrimalCalculationPage() {
     applyImportedOrders,
     customerOrders,
     customCustomers,
+    customGroups,
     customRows,
     openingStock,
     setCustomerOrder,
     addCustomCustomer,
     renameCustomCustomer,
     removeCustomCustomer,
+    addCustomGroup,
+    renameCustomGroup,
+    removeCustomGroup,
     addCustomRow,
     updateCustomRowSpec,
     setCustomRowField,
@@ -112,13 +119,15 @@ export function PrimalCalculationPage() {
     return map;
   }, [orders]);
 
-  // Manually added rows, bucketed by the group their category belongs to.
+  // Manually added rows, bucketed by their owning group. Catalog rows resolve
+  // their group from the category; custom-group rows carry an explicit groupKey
+  // (the custom group's id), so both catalog keys and custom ids appear here.
   const customRowsByGroup = useMemo(() => {
-    const map = {} as Record<PrimalGroupKey, CustomOrderRow[]>;
+    const map: Record<string, CustomOrderRow[]> = {};
     for (const group of PRIMAL_GROUPS) map[group.key] = [];
     for (const row of customRows) {
-      const group = groupForCategory(row.spec.category);
-      map[group.key as PrimalGroupKey].push(row);
+      const key = row.groupKey ?? groupForCategory(row.spec.category).key;
+      (map[key] ??= []).push(row);
     }
     return map;
   }, [customRows]);
@@ -175,22 +184,78 @@ export function PrimalCalculationPage() {
     [availabilityRows],
   );
 
-  // Calculated Ending Stock per group (pieces) — the figure shown read-only in
-  // each group section and pushed to the cooler.
+  // Operator-added availability groups — derived the same way as catalog rows
+  // (Expected Production from the whole-hog pool), but now keyed by their id
+  // they also subtract their own Custom Orders + Sales Orders. Kept
+  // separate from `availabilityRows` so the catalog-only paths (ending-stock
+  // carry-over, cooler push) stay on the fixed primal set.
+  const customGroupRows = useMemo(
+    () =>
+      buildCustomGroupAvailability(
+        customGroups,
+        counts,
+        customerOrders,
+        customRows,
+        DEFAULT_MIN_COOLER_RESERVE,
+      ),
+    [customGroups, counts, customerOrders, customRows],
+  );
+  // Calculated Ending Stock per catalog group (pieces) — shown read-only in
+  // each section and pushed to the cooler. Catalog-only: custom groups are
+  // ephemeral per-date rows and never carry over.
   const endingStockByGroup = useMemo(() => {
     const map = {} as Record<PrimalGroupKey, number>;
     for (const row of availabilityRows) map[row.group] = row.endingStock;
     return map;
   }, [availabilityRows]);
 
-  // Customer chart columns — each category's Available Stock minus the
-  // summed customer orders against it.
+  // Availability status per catalog group — drives each section header's
+  // Ending Stock color. Derived from the same availability rows.
+  const statusByGroup = useMemo(() => {
+    const map = {} as Record<PrimalGroupKey, AvailabilityStatus>;
+    for (const row of availabilityRows) map[row.group] = row.status;
+    return map;
+  }, [availabilityRows]);
+
+  // Custom-group Sales Orders sections — one per operator-added group, holding
+  // only its ad-hoc rows (a custom group has no catalog SKUs). Mirrors the
+  // catalog groupData shape so it renders through the same PrimalGroupSection,
+  // carrying each group's own derived Ending Stock from its availability row.
+  const customGroupData = useMemo(() => {
+    const endingByKey = new Map<string, number>(
+      customGroupRows.map((row) => [row.group, row.endingStock]),
+    );
+    const statusByKey = new Map<string, AvailabilityStatus>(
+      customGroupRows.map((row) => [row.group, row.status]),
+    );
+    return customGroups.map((g) => {
+      const group: PrimalGroup = { key: g.id, label: g.label, categories: [] };
+      const rows = customRowsByGroup[g.id] ?? [];
+      const groupTotals = rows.reduce(
+        (acc, r) => ({
+          today_cases: acc.today_cases + r.order.today_cases,
+          today_pcs: acc.today_pcs + r.order.today_pcs,
+        }),
+        { today_cases: 0, today_pcs: 0 },
+      );
+      return {
+        group,
+        rows,
+        groupTotals,
+        endingStock: endingByKey.get(g.id) ?? 0,
+        status: statusByKey.get(g.id) ?? "OK",
+      };
+    });
+  }, [customGroups, customGroupRows, customRowsByGroup]);
+
+  // Customer chart columns — one per group (catalog + custom), each group's
+  // Available Stock minus the summed customer orders against it.
   const customerColumns = useMemo(
-    () => buildCustomerAvailability(availabilityRows),
-    [availabilityRows],
+    () => buildCustomerAvailability([...availabilityRows, ...customGroupRows]),
+    [availabilityRows, customGroupRows],
   );
 
-  const handleToggle = (groupKey: PrimalGroupKey) =>
+  const handleToggle = (groupKey: string) =>
     setExpanded((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
 
   const handlePush = async () => {
@@ -221,7 +286,7 @@ export function PrimalCalculationPage() {
             <IntakeHeaderStats
               status={intakeStatus.kind}
               primalTotal={primalTotalHogCount(counts)}
-              sow={intake.sow_scheduled}
+              sow={intake.todays_cutting}
               sideOrders={intake.side_orders}
               forCutting={intakeTotals.forCutting}
               nextDayHogs={intake.next_day.hog_count}
@@ -255,8 +320,11 @@ export function PrimalCalculationPage() {
         <div className="flex flex-col gap-4 px-5 py-5 lg:px-6">
           <PrimalAvailabilityChart
             rows={availabilityRows}
-            totals={availabilityTotals}
+            customRows={customGroupRows}
             minReserve={DEFAULT_MIN_COOLER_RESERVE}
+            onAddGroup={addCustomGroup}
+            onRenameGroup={renameCustomGroup}
+            onRemoveGroup={removeCustomGroup}
           />
 
           <PrimalCustomerChart
@@ -293,6 +361,7 @@ export function PrimalCalculationPage() {
               customRows={customRows}
               groupTotals={groupTotals}
               calculatedEndingStockPcs={endingStockByGroup[group.key]}
+              endingStockStatus={statusByGroup[group.key]}
               expanded={!!expanded[group.key]}
               onToggle={() => handleToggle(group.key)}
               activeSku={activeSku}
@@ -310,6 +379,38 @@ export function PrimalCalculationPage() {
               justSaved={
                 saveState.kind === "saved" && saveState.scope === group.key
               }
+              // Rows auto-persist as a per-date draft on every edit, so the
+              // per-group Save/Clear footer is redundant — hidden to match the
+              // custom availability sections below.
+              showSaveClear={false}
+            />
+          ))}
+
+          {/* Custom availability groups — each gets its own ad-hoc Sales Orders
+              section. Rows auto-persist, so Save/Clear is hidden. */}
+          {customGroupData.map(({ group, rows, groupTotals, endingStock, status }) => (
+            <PrimalGroupSection
+              key={group.key}
+              group={group}
+              categoryRows={[]}
+              customRows={rows}
+              groupTotals={groupTotals}
+              calculatedEndingStockPcs={endingStock}
+              endingStockStatus={status}
+              expanded={!!expanded[group.key]}
+              onToggle={() => handleToggle(group.key)}
+              activeSku={activeSku}
+              onRowFocus={setActiveSku}
+              onChangeField={setOrderField}
+              onAddRow={() => addCustomRow(group.key)}
+              onUpdateRowSpec={updateCustomRowSpec}
+              onChangeCustomField={setCustomRowField}
+              onRemoveRow={removeCustomRow}
+              onSave={() => {}}
+              onClear={() => {}}
+              saving={false}
+              justSaved={false}
+              showSaveClear={false}
             />
           ))}
         </div>

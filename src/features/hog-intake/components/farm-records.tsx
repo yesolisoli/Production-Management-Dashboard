@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronDown, Minus, Plus, Trash2, Truck } from "lucide-react";
+import { ChevronDown, Minus, Plus, Truck, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { BaseDropdown, DROPDOWN_WIDTH } from "@/features/assignment-board/components/base-dropdown";
 import { useBlankZeroInput } from "@/hooks/use-blank-zero-input";
@@ -120,7 +120,7 @@ export function FarmRecords({
                       aria-label="Delete row"
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500"
                     >
-                      <Trash2 size={16} />
+                      <X size={16} />
                     </button>
                   </td>
                 </tr>
@@ -136,7 +136,7 @@ export function FarmRecords({
             type="button"
             onClick={onAdd}
             aria-label="Add Record"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-900 bg-white text-slate-900 transition hover:bg-slate-50"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
           >
             <Plus size={16} />
           </button>

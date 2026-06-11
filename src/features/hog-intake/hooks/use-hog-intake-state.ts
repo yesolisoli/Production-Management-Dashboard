@@ -5,19 +5,10 @@ import { getCurrentUserId } from "@/lib/supabase/current-user";
 import {
   clampNonNegativeInt,
   derivedCountsFromFarmRecords,
-  sowRemaining,
+  farmRecordCountForType,
 } from "../calculations";
-import {
-  clearDraft,
-  readDraft,
-  readMostRecentPriorDraft,
-  writeDraft,
-} from "../draft-storage";
-import {
-  fetchHogIntakeByDate,
-  fetchPreviousSowState,
-  upsertHogIntakeRecord,
-} from "../supabase";
+import { clearDraft, readDraft, writeDraft } from "../draft-storage";
+import { fetchHogIntakeByDate, upsertHogIntakeRecord } from "../supabase";
 import {
   emptyHogCounts,
   emptyHogIntakeRecord,
@@ -52,7 +43,14 @@ export type SaveStatus =
 //
 // Drafts are written on every edit and cleared only after a successful
 // DB save.
-export function useHogIntakeState() {
+type UseHogIntakeStateArgs = {
+  // Weekly planned-sow total (JP + ADACA + Custom Sows, Mon–Fri) from the
+  // Weekly Hog Plan. Combined with farm-delivered sows to derive Sow
+  // "Available This Week".
+  sowPlanTotal: number;
+};
+
+export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
   const [date, setDateState] = useState<string>(todayString);
   const [record, setRecord] = useState<HogIntakeRecord>(() =>
     emptyHogIntakeRecord(todayString()),
@@ -104,32 +102,12 @@ export function useHogIntakeState() {
         setStatus({ kind: "idle" });
         return;
       }
-      // No record yet for this date: seed a fresh record whose Sow "Available
-      // This Week" carries over from the most recent prior day's "Remaining
-      // After Schedule". Everything else starts empty. The seed is suppressed
-      // from the draft writer, so merely opening the day doesn't dirty it —
-      // only a real edit persists (and locks in) the carried-over value.
-      //
-      // The prior day's value can live in the DB (saved) or in a local draft
-      // (entered but not yet saved). Take whichever is newer; on a date tie the
-      // draft wins, since it's the unsaved edit on top of the saved row.
-      const dbPrev = await fetchPreviousSowState(nextDate);
-      if (token !== activeFetchToken.current) return; // stale
-      const draftPrev = readMostRecentPriorDraft(nextDate);
-      let seededSow = dbPrev?.remaining ?? 0;
-      if (
-        draftPrev &&
-        (!dbPrev || draftPrev.date >= dbPrev.date)
-      ) {
-        seededSow = sowRemaining(
-          draftPrev.record.hog_counts.Sow,
-          draftPrev.record.sow_scheduled,
-        );
-      }
-      const fresh = emptyHogIntakeRecord(nextDate);
-      fresh.hog_counts.Sow = seededSow;
+      // No record yet for this date: start from an empty record. Sow
+      // "Available This Week" is no longer carried forward day-to-day — it is
+      // derived from the Weekly Hog Plan's sow rows plus farm-delivered sows
+      // (see hogCounts below), so there is nothing to seed here.
       suppressNextWrite.current = true;
-      setRecord(fresh);
+      setRecord(emptyHogIntakeRecord(nextDate));
       setDirty(false);
       setStatus({ kind: "idle" });
     } catch (err) {
@@ -181,16 +159,19 @@ export function useHogIntakeState() {
     setDirty(true);
   }, [record]);
 
-  // Primal hogs (JP / RWA) are derived from Farm Delivery Records — deliveries
-  // are their single entry point — and override the stored values. Every other
-  // type (BK / Sow / Round / Suckling / Customer) stays manual, passing through
-  // from the record's own hog_counts.
+  // Derived counts override the record's stored (input-only) values:
+  //   • JP / RWA / BK roll up from Farm Delivery Records — deliveries are their
+  //     single entry point.
+  //   • Sow "Available This Week" = the Weekly Hog Plan's sow rows (JP / ADACA /
+  //     Custom Sows, summed Mon–Fri) plus any farm deliveries typed "Sow".
+  // Round / Suckling / Customer stay manual, passing through from hog_counts.
   const hogCounts = useMemo<HogCounts>(
     () => ({
       ...record.hog_counts,
       ...derivedCountsFromFarmRecords(record.farm_records),
+      Sow: sowPlanTotal + farmRecordCountForType(record.farm_records, "Sow"),
     }),
-    [record.hog_counts, record.farm_records],
+    [record.hog_counts, record.farm_records, sowPlanTotal],
   );
 
   const setDate = useCallback(
@@ -229,10 +210,10 @@ export function useHogIntakeState() {
     [],
   );
 
-  const setSowScheduled = useCallback((value: number) => {
+  const setTodaysCutting = useCallback((value: number) => {
     setRecord((prev) => ({
       ...prev,
-      sow_scheduled: clampNonNegativeInt(value),
+      todays_cutting: clampNonNegativeInt(value),
     }));
   }, []);
 
@@ -336,7 +317,7 @@ export function useHogIntakeState() {
     setHogCount,
     clearAllHogCounts,
     setProcessField,
-    setSowScheduled,
+    setTodaysCutting,
     setNotes,
     setNextDayField,
     addFarmRecord,

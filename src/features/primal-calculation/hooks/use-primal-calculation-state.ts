@@ -24,10 +24,12 @@ import {
   readCommittedForDate,
   readCustomCustomersForDate,
   readCustomerOrdersForDate,
+  readCustomGroupsForDate,
   readCustomRowsForDate,
   readDraft,
   saveCustomCustomersForDate,
   saveCustomerOrdersForDate,
+  saveCustomGroupsForDate,
   saveCustomRowsForDate,
   saveOrdersForDate,
   writeDraft,
@@ -38,9 +40,11 @@ import {
   emptyCustomSpec,
   emptyEndingStockByGroup,
   emptyProductOrder,
+  PRIMAL_CATEGORIES,
   PRIMAL_GROUPS,
   type CustomCustomersForDate,
   type CustomerOrdersForDate,
+  type CustomGroupsForDate,
   type CustomRowsForDate,
   type EndingStockByGroup,
   type OrderField,
@@ -95,11 +99,15 @@ export function usePrimalCalculationState() {
   const [customerOrders, setCustomerOrders] = useState<CustomerOrdersForDate>(
     {},
   );
-  // Manually added customer rows for the reservation matrix (selected date).
+  // Manually added customer rows for the custom orders matrix (selected date).
   // Identity + display name only; their order pieces live in customerOrders
   // keyed by id. Auto-persisted per date — see addCustomCustomer.
   const [customCustomers, setCustomCustomers] =
     useState<CustomCustomersForDate>([]);
+  // Operator-added availability groups for the selected date. Identity +
+  // display label only; every figure is derived (see buildCustomGroupAvailability).
+  // Auto-persisted per date — see addCustomGroup.
+  const [customGroups, setCustomGroups] = useState<CustomGroupsForDate>([]);
   // Manually added (ad-hoc) order rows for the selected date. Self-contained
   // and auto-persisted per date — see CustomOrderRow.
   const [customRows, setCustomRows] = useState<CustomRowsForDate>([]);
@@ -127,6 +135,7 @@ export function usePrimalCalculationState() {
   // Monotonic suffix so two rows added in the same millisecond get distinct ids.
   const customRowSeq = useRef(0);
   const customCustomerSeq = useRef(0);
+  const customGroupSeq = useRef(0);
 
   // Live mirror of `intake` plus a debounce timer, used to persist Next Day
   // Projection edits back to the hog_intake row without re-saving on load.
@@ -166,6 +175,7 @@ export function usePrimalCalculationState() {
     setOrders(resolved);
     setCustomerOrders(readCustomerOrdersForDate(nextDate));
     setCustomCustomers(readCustomCustomersForDate(nextDate));
+    setCustomGroups(readCustomGroupsForDate(nextDate));
     setCustomRows(readCustomRowsForDate(nextDate));
   }, []);
 
@@ -320,7 +330,7 @@ export function usePrimalCalculationState() {
   );
 
   // ------------------------ Custom customers ------------------------
-  // Ad-hoc customer rows appended to the reservation matrix for the selected
+  // Ad-hoc customer rows appended to the custom orders matrix for the selected
   // date. Identity + display name are tracked here; their per-group order
   // pieces flow through setCustomerOrder keyed by the row's id. Auto-persisted
   // on every edit, mirroring the customer matrix.
@@ -365,25 +375,91 @@ export function usePrimalCalculationState() {
     [date],
   );
 
+  // ------------------------- Custom groups --------------------------
+  // Ad-hoc availability groups appended to the Availability Chart for the
+  // selected date. Identity + label only; their Expected Production is derived
+  // from the shared whole-hog pool (see buildCustomGroupAvailability). Auto-
+  // persisted on every edit, mirroring the custom customers above.
+  const addCustomGroup = useCallback(() => {
+    setCustomGroups((prev) => {
+      const id = `group-${Date.now()}-${customGroupSeq.current++}`;
+      const next: CustomGroupsForDate = [...prev, { id, label: "" }];
+      saveCustomGroupsForDate(date, next);
+      return next;
+    });
+  }, [date]);
+
+  const renameCustomGroup = useCallback(
+    (id: string, label: string) => {
+      setCustomGroups((prev) => {
+        const next = prev.map((row) =>
+          row.id === id ? { ...row, label } : row,
+        );
+        saveCustomGroupsForDate(date, next);
+        return next;
+      });
+    },
+    [date],
+  );
+
+  const removeCustomGroup = useCallback(
+    (id: string) => {
+      setCustomGroups((prev) => {
+        const next = prev.filter((row) => row.id !== id);
+        saveCustomGroupsForDate(date, next);
+        return next;
+      });
+      // Drop the group's Sales Orders rows so they stop pooling once removed.
+      setCustomRows((prev) => {
+        if (!prev.some((row) => row.groupKey === id)) return prev;
+        const next = prev.filter((row) => row.groupKey !== id);
+        saveCustomRowsForDate(date, next);
+        return next;
+      });
+      // Drop every customer's custom order for this group's column.
+      setCustomerOrders((prev) => {
+        if (!Object.values(prev).some((perGroup) => id in perGroup)) {
+          return prev;
+        }
+        const next: CustomerOrdersForDate = {};
+        for (const [customer, perGroup] of Object.entries(prev)) {
+          const copy = { ...perGroup };
+          delete copy[id];
+          next[customer] = copy;
+        }
+        saveCustomerOrdersForDate(date, next);
+        return next;
+      });
+    },
+    [date],
+  );
+
   // -------------------------- Custom rows ---------------------------
   // Ad-hoc rows an operator adds by hand for the selected date. Each is
   // self-contained (its own spec + order) and auto-persisted on every edit —
-  // no draft/commit split, mirroring the customer matrix above. A new row is
-  // filed under the group's first category so it pools into that group.
+  // no draft/commit split, mirroring the customer matrix above. A catalog
+  // group's row is filed under its first category so it pools into that group;
+  // a custom availability group's row is tagged with the group's id (it has no
+  // category) via the row's groupKey, with a placeholder category to satisfy
+  // the spec shape (it's never used for bucketing once groupKey is set).
   const addCustomRow = useCallback(
-    (groupKey: PrimalGroupKey) => {
-      const group = PRIMAL_GROUPS.find((g) => g.key === groupKey);
-      if (!group) return;
+    (groupKey: string) => {
+      const catalogGroup = PRIMAL_GROUPS.find((g) => g.key === groupKey);
       setCustomRows((prev) => {
         const id = `custom-${Date.now()}-${customRowSeq.current++}`;
-        const next: CustomRowsForDate = [
-          ...prev,
-          {
-            id,
-            spec: emptyCustomSpec(group.categories[0]),
-            order: emptyProductOrder(),
-          },
-        ];
+        const row: CustomRowsForDate[number] = catalogGroup
+          ? {
+              id,
+              spec: emptyCustomSpec(catalogGroup.categories[0]),
+              order: emptyProductOrder(),
+            }
+          : {
+              id,
+              spec: emptyCustomSpec(PRIMAL_CATEGORIES[0]),
+              order: emptyProductOrder(),
+              groupKey,
+            };
+        const next: CustomRowsForDate = [...prev, row];
         saveCustomRowsForDate(date, next);
         return next;
       });
@@ -548,6 +624,7 @@ export function usePrimalCalculationState() {
     orders,
     customerOrders,
     customCustomers,
+    customGroups,
     customRows,
     openingStock,
     saveState,
@@ -558,6 +635,9 @@ export function usePrimalCalculationState() {
     addCustomCustomer,
     renameCustomCustomer,
     removeCustomCustomer,
+    addCustomGroup,
+    renameCustomGroup,
+    removeCustomGroup,
     saveGroup,
     saveAll,
     clearGroup,

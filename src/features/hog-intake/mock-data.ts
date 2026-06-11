@@ -22,7 +22,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
       held_over: 5,
       deaths_on_arrival: 1,
       boars_count: 3,
-      sow_scheduled: 10,
+      todays_cutting: 10,
       notes: "Two RWA loads arrived late.",
       farm_records: [
         { id: "fr-d4-1", farm: "ABC Farm", type: "JP", tattoo: "1234", count: 25 },
@@ -41,7 +41,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
       held_over: 4,
       deaths_on_arrival: 1,
       boars_count: 2,
-      sow_scheduled: 9,
+      todays_cutting: 9,
       notes: "",
       farm_records: [
         { id: "fr-d3-1", farm: "ABC Farm", type: "JP", tattoo: "1245", count: 30 },
@@ -59,7 +59,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
       held_over: 7,
       deaths_on_arrival: 0,
       boars_count: 3,
-      sow_scheduled: 11,
+      todays_cutting: 11,
       notes: "Boars count higher than usual — flagged for next sort.",
       farm_records: [
         { id: "fr-d2-1", farm: "ABC Farm", type: "JP", tattoo: "1256", count: 28 },
@@ -77,7 +77,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
       held_over: 3,
       deaths_on_arrival: 1,
       boars_count: 4,
-      sow_scheduled: 9,
+      todays_cutting: 9,
       notes: "Sunrise Farm delivered a partial load — short by ~3.",
       farm_records: [
         { id: "fr-d1-1", farm: "ABC Farm", type: "JP", tattoo: "1267", count: 30 },
@@ -97,7 +97,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
       held_over: 6,
       deaths_on_arrival: 1,
       boars_count: 2,
-      sow_scheduled: 10,
+      todays_cutting: 10,
       notes: "Watch for incoming late delivery from Green Valley.",
       farm_records: [
         { id: "fr-d0-1", farm: "ABC Farm", type: "JP", tattoo: "1278", count: 28 },
