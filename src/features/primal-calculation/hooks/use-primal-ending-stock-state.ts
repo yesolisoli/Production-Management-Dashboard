@@ -150,9 +150,7 @@ export function usePrimalEndingStockState({
 
   return {
     openingStock,
-    openingStockLoaded,
     loadForDate,
-    computeEndingStockByGroup,
     cancelPendingSave,
     persistGroup,
     persistAll,

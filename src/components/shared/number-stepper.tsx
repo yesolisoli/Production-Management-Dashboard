@@ -15,7 +15,7 @@ import { clampNonNegativeInt } from "@/features/hog-intake/calculations";
 //     h-7 buttons, w-12 text-xl input.
 //   • cell   — Primal order-table cell: h-8 buttons, bordered h-10 w-20 text-sm
 //     input with an accent focus ring.
-export type NumberStepperVariant = "inline" | "card" | "cell";
+type NumberStepperVariant = "inline" | "card" | "cell";
 
 // Accent ring used only by the "cell" variant; matches the Primal table accents.
 export type NumberStepperAccent = "blue" | "emerald" | "violet" | "none";

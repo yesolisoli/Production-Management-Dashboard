@@ -3,6 +3,7 @@
 import { CalendarDays } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
+  CUT_ROW_ID,
   WEEKLY_PLAN_DAYS,
   type ScheduleRow,
   type WeeklyPlanDay,
@@ -18,9 +19,6 @@ type EditableNextDayField = "side_orders" | "cooler_overstock";
 // the Sow card's "Available This Week". The persisted rows live in
 // use-weekly-hog-schedule (single source of truth) and arrive via props.
 const COLLAPSED_KEY = "hog-intake.weekly-schedule.collapsed";
-
-// Row the Next Day Hog Count is sourced from.
-const CUT_ROW_LABEL = "Cut - Markets";
 
 // The Weekly Hog Plan only carries Mon–Fri. Given the selected intake date,
 // return the plan day for the following business day (Fri/Sat/Sun → Mon).
@@ -86,7 +84,7 @@ export function WeeklyHogSchedule({
   const nextDayHogCount = useMemo(() => {
     const day = nextPlanDay(date);
     if (!day) return 0;
-    const cutRow = rows.find((row) => row.label === CUT_ROW_LABEL);
+    const cutRow = rows.find((row) => row.id === CUT_ROW_ID);
     return cutRow?.values[day] ?? 0;
   }, [rows, date]);
 
