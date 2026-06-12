@@ -1,25 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { todayString } from "@/lib/date";
 import {
   emptyHogIntakeRecord,
   type HogIntakeRecord,
 } from "@/features/hog-intake/types";
 import { clampNonNegativeInt } from "../calculations";
+import { SAVE_DEBOUNCE_MS } from "../constants";
 import { loadHogIntakeForDate, saveHogIntakeRecord } from "../intake-source";
 import { type PrimalGroup, type PrimalGroupKey } from "../types";
 import { usePrimalCustomerOrdersState } from "./use-primal-customer-orders-state";
 import { usePrimalCustomGroupsState } from "./use-primal-custom-groups-state";
 import { usePrimalEndingStockState } from "./use-primal-ending-stock-state";
 import { usePrimalOrdersState } from "./use-primal-orders-state";
-
-function todayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 export type IntakeStatus =
   | { kind: "loading" }
@@ -209,7 +203,7 @@ export function usePrimalCalculationState() {
             message: "Failed to save Next Day Projection",
           });
         });
-      }, 600);
+      }, SAVE_DEBOUNCE_MS);
     },
     [],
   );

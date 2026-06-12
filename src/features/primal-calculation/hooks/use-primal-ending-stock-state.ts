@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { HogIntakeRecord } from "@/features/hog-intake/types";
 import { buildAvailabilityRows } from "../calculations";
+import { SAVE_DEBOUNCE_MS } from "../constants";
 import {
   fetchPreviousEndingStock,
   saveEndingStockForDate,
@@ -110,7 +111,7 @@ export function usePrimalEndingStockState({
         // Best-effort: a transient persist failure shouldn't block editing;
         // the next recalculation retries.
       });
-    }, 600);
+    }, SAVE_DEBOUNCE_MS);
     return () => {
       if (endingStockSaveTimer.current) clearTimeout(endingStockSaveTimer.current);
     };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { todayString } from "@/lib/date";
 import { getCurrentUserId } from "@/lib/supabase/current-user";
 import {
   clampNonNegativeInt,
@@ -18,14 +19,6 @@ import {
   type HogIntakeRecord,
   type HogType,
 } from "../types";
-
-function todayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 export type SaveStatus =
   | { kind: "idle" }
