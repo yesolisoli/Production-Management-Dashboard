@@ -180,19 +180,25 @@ export type AvailabilityTotals = {
 // -------------------------------------------------------------------
 
 // Fixed customer list, in display (row) order — matches the reference sheet.
+// Each carries a STABLE id that is the storage / row key; `name` is display
+// only. Ids are frozen constants (prefixed `fixed-` so they can never collide
+// with the `cust-…` ids of manually added customers) — renaming a `name` later
+// never moves the key, so saved orders can't be orphaned by a label change.
 export const PRIMAL_CUSTOMERS = [
-  "Curing/Meatcutting",
-  "Sungiven Save Product",
-  "Continental",
-  "Arctic Monday",
-  "Taiwan Monday",
-  "Polonia Tuesday",
-  "Two Rivers Monday",
-  "Hertel Hams",
-  "RWA Save Wednesday/Thursday",
-  "Bradner Freezer/Freezer",
-  "Stapleton",
+  { id: "fixed-curing-meatcutting", name: "Curing/Meatcutting" },
+  { id: "fixed-sungiven-save-product", name: "Sungiven Save Product" },
+  { id: "fixed-continental", name: "Continental" },
+  { id: "fixed-arctic-monday", name: "Arctic Monday" },
+  { id: "fixed-taiwan-monday", name: "Taiwan Monday" },
+  { id: "fixed-polonia-tuesday", name: "Polonia Tuesday" },
+  { id: "fixed-two-rivers-monday", name: "Two Rivers Monday" },
+  { id: "fixed-hertel-hams", name: "Hertel Hams" },
+  { id: "fixed-rwa-save-wednesday-thursday", name: "RWA Save Wednesday/Thursday" },
+  { id: "fixed-bradner-freezer-freezer", name: "Bradner Freezer/Freezer" },
+  { id: "fixed-stapleton", name: "Stapleton" },
 ] as const;
+
+export type PrimalCustomerDef = (typeof PRIMAL_CUSTOMERS)[number];
 
 // One customer's order pieces per production group. Pooled cuts (Ribs) take a
 // single custom order rather than one per type, matching how production is
@@ -200,9 +206,11 @@ export const PRIMAL_CUSTOMERS = [
 // availability group's id (custom groups get their own custom orders column).
 export type CustomerGroupOrders = Record<string, number>;
 
-// Persisted save shape: { "YYYY-MM-DD": { "<customer>": { Butts: n, ... } } }
-// The key is the customer's display name for the fixed PRIMAL_CUSTOMERS, or
-// the stable id of a manually added customer (see CustomCustomer).
+// Persisted save shape: { "YYYY-MM-DD": { "<customerId>": { Butts: n, ... } } }
+// The key is the stable id of the customer — a fixed PRIMAL_CUSTOMERS `fixed-…`
+// id or a manually added customer's `cust-…` id (see CustomCustomer). Older
+// payloads keyed fixed customers by display name; those are remapped to the
+// stable id on read (see migrateCustomerOrders in primal-storage).
 export type CustomerOrdersForDate = Record<string, CustomerGroupOrders>;
 export type CustomerOrdersByDate = Record<string, CustomerOrdersForDate>;
 

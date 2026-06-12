@@ -108,21 +108,21 @@ export function PrimalCustomerChart({
             <tbody className="divide-y divide-slate-100">
               {PRIMAL_CUSTOMERS.map((customer) => {
                 const orders =
-                  customerOrders[customer] ?? emptyCustomerGroupOrders();
+                  customerOrders[customer.id] ?? emptyCustomerGroupOrders();
                 return (
                   <tr
-                    key={customer}
+                    key={customer.id}
                     className="text-center tabular-nums transition-colors hover:bg-slate-50/60"
                   >
                     <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-left font-semibold text-slate-800">
-                      {customer}
+                      {customer.name}
                     </td>
                     {columns.map((col) => (
                       <OrderCell
                         key={col.group}
                         value={orders[col.group] ?? 0}
-                        ariaLabel={`${customer} ${col.label} order`}
-                        onChange={(v) => onChange(customer, col.group, v)}
+                        ariaLabel={`${customer.name} ${col.label} order`}
+                        onChange={(v) => onChange(customer.id, col.group, v)}
                       />
                     ))}
                   </tr>

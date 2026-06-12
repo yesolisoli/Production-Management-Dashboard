@@ -2,6 +2,7 @@ import {
   emptyCustomerGroupOrders,
   emptyProductOrder,
   PRIMAL_CATEGORIES,
+  PRIMAL_CUSTOMERS,
   type CustomCustomer,
   type CustomCustomersByDate,
   type CustomCustomersForDate,
@@ -163,6 +164,48 @@ function coerceCustomerGroupOrders(raw: unknown): CustomerGroupOrders {
   return orders;
 }
 
+// Map a fixed customer's CURRENT display name → its stable id. Drives the
+// migration of payloads saved before fixed customers had stable ids.
+const FIXED_NAME_TO_ID: Record<string, string> = Object.fromEntries(
+  PRIMAL_CUSTOMERS.map((c) => [c.name, c.id]),
+);
+
+// Remap legacy display-name keys for the fixed customers to their stable ids.
+//
+// Idempotent: keys that are already stable ids (fixed-… / cust-…) or otherwise
+// unknown are kept verbatim — only keys that exactly equal a current fixed
+// display name are remapped, and on already-migrated data no key matches a
+// name, so it's a no-op. When both a legacy name key and its target stable id
+// are present, they merge per group preferring the existing stable-id value and
+// filling only the groups it lacks (two passes make this order-independent).
+function migrateCustomerOrders(
+  orders: CustomerOrdersForDate,
+): CustomerOrdersForDate {
+  const out: CustomerOrdersForDate = {};
+  // Pass 1 — copy every already-canonical key (stable fixed id, cust-* custom
+  // id, or unknown). Legacy display-name keys are deferred to pass 2.
+  for (const [key, perGroup] of Object.entries(orders)) {
+    if (FIXED_NAME_TO_ID[key] !== undefined) continue;
+    out[key] = { ...perGroup };
+  }
+  // Pass 2 — remap legacy display-name keys to their stable id. If the id
+  // already exists (from pass 1), keep its values and fill only missing groups.
+  for (const [key, perGroup] of Object.entries(orders)) {
+    const id = FIXED_NAME_TO_ID[key];
+    if (id === undefined) continue;
+    if (out[id] === undefined) {
+      out[id] = { ...perGroup };
+    } else {
+      const merged = { ...out[id] };
+      for (const [group, v] of Object.entries(perGroup)) {
+        if (merged[group] === undefined) merged[group] = v;
+      }
+      out[id] = merged;
+    }
+  }
+  return out;
+}
+
 function coerceCustomerOrdersForDate(raw: unknown): CustomerOrdersForDate {
   if (!raw || typeof raw !== "object") return {};
   const out: CustomerOrdersForDate = {};
@@ -171,7 +214,7 @@ function coerceCustomerOrdersForDate(raw: unknown): CustomerOrdersForDate {
   )) {
     out[customer] = coerceCustomerGroupOrders(value);
   }
-  return out;
+  return migrateCustomerOrders(out);
 }
 
 function readCustomerOrders(): CustomerOrdersByDate {
