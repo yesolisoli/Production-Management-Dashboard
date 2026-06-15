@@ -66,7 +66,7 @@ export function PrimalAvailabilityChart({
           </span>
           <div>
             <h2 className="text-sm font-semibold text-slate-900">
-              Today's Availability
+              Today&apos;s Availability
             </h2>
             <p className="text-xs text-slate-500">
               Available inventory after production, custom orders, and orders

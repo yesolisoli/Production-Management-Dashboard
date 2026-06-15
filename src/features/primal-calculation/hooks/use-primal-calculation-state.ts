@@ -6,9 +6,7 @@ import {
   emptyHogIntakeRecord,
   type HogIntakeRecord,
 } from "@/features/hog-intake/types";
-import { clampNonNegativeInt } from "../calculations";
-import { SAVE_DEBOUNCE_MS } from "../constants";
-import { loadHogIntakeForDate, saveHogIntakeRecord } from "../intake-source";
+import { loadHogIntakeForDate } from "../intake-source";
 import { type PrimalGroup, type PrimalGroupKey } from "../types";
 import { usePrimalCustomerOrdersState } from "./use-primal-customer-orders-state";
 import { usePrimalCustomGroupsState } from "./use-primal-custom-groups-state";
@@ -33,9 +31,10 @@ export type SaveState =
 // Composes four focused hooks — orders (draft/committed), customer orders,
 // custom groups/rows/customers, and the ending-stock carry-over — and owns the
 // cross-cutting concerns that span them: the selected date, the read-only Hog
-// Intake record (with the Next Day Projection write-back), the shared hydration
-// gate, the compound Save / Save All (orders + ending stock), and the
-// cross-store cleanup when a custom customer or group is removed.
+// Intake record (Next Day Projection is displayed here but edited on Hog
+// Intake), the shared hydration gate, the compound Save / Save All (orders +
+// ending stock), and the cross-store cleanup when a custom customer or group is
+// removed.
 //
 // The public API is unchanged from before the split.
 export function usePrimalCalculationState() {
@@ -52,14 +51,6 @@ export function usePrimalCalculationState() {
   // with the orders + ending-stock hooks, which read it in their write effects.
   const hasHydrated = useRef(false);
   const activeIntakeToken = useRef(0);
-
-  // Live mirror of `intake` plus a debounce timer, used to persist Next Day
-  // Projection edits back to the hog_intake row without re-saving on load.
-  const intakeRef = useRef(intake);
-  const nextDaySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    intakeRef.current = intake;
-  }, [intake]);
 
   // -------------------------- Focused hooks --------------------------
   const {
@@ -161,9 +152,7 @@ export function usePrimalCalculationState() {
   const setDate = useCallback(
     (nextDate: string) => {
       if (!nextDate) return;
-      // Drop any pending Next Day / ending stock save so neither lands on
-      // the new date.
-      if (nextDaySaveTimer.current) clearTimeout(nextDaySaveTimer.current);
+      // Drop any pending ending stock save so it doesn't land on the new date.
       cancelPendingSave();
       setSaveState({ kind: "idle" });
       setDateState(nextDate);
@@ -181,31 +170,6 @@ export function usePrimalCalculationState() {
       loadOpeningStock,
       cancelPendingSave,
     ],
-  );
-
-  // Edit the Next Day Projection (owned by Hog Intake, but entered here).
-  // Updates the in-memory intake immediately and debounce-persists the whole
-  // record back to the hog_intake row so the value survives a refresh.
-  const setNextDayField = useCallback(
-    (field: "hog_count" | "side_orders" | "cooler_overstock", value: number) => {
-      const clamped = clampNonNegativeInt(value);
-      setIntake((prev) => ({
-        ...prev,
-        next_day: { ...prev.next_day, [field]: clamped },
-      }));
-      if (nextDaySaveTimer.current) clearTimeout(nextDaySaveTimer.current);
-      nextDaySaveTimer.current = setTimeout(() => {
-        void saveHogIntakeRecord(intakeRef.current).catch(() => {
-          // Persisted-data integrity matters; surface failures to the user.
-          setSaveState({
-            kind: "error",
-            scope: "next_day",
-            message: "Failed to save Next Day Projection",
-          });
-        });
-      }, SAVE_DEBOUNCE_MS);
-    },
-    [],
   );
 
   // Removing a custom customer / group also clears the customer-orders rows or
@@ -277,7 +241,6 @@ export function usePrimalCalculationState() {
     saveState,
     setDate,
     setOrderField,
-    setNextDayField,
     setCustomerOrder,
     addCustomCustomer,
     renameCustomCustomer,

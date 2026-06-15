@@ -93,6 +93,9 @@ export function WeeklyHogSchedule({
     try {
       // Default to collapsed; only honor an explicitly stored preference.
       const storedCollapsed = window.localStorage.getItem(COLLAPSED_KEY);
+      // One-shot hydration from localStorage after mount (SSR-safe) — not a
+      // render-driven sync, so the cascading-render concern doesn't apply.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (storedCollapsed !== null) setCollapsed(storedCollapsed === "true");
     } catch {
       // ignore parse / access errors — fall back to defaults

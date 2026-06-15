@@ -22,7 +22,6 @@ import {
   categoryTotals,
   DEFAULT_MIN_COOLER_RESERVE,
   orderFor,
-  sumAvailability,
   type OrderTotals,
 } from "./calculations";
 import { specsForCategory } from "./product-specs";
@@ -31,7 +30,6 @@ import {
   PRIMAL_CATEGORIES,
   PRIMAL_GROUPS,
   type AvailabilityStatus,
-  type AvailabilityTotals,
   type CustomerAvailabilityColumn,
   type CustomerOrdersForDate,
   type CustomGroupsForDate,
@@ -92,9 +90,7 @@ export type PrimalViewModel = {
   customRowsByGroup: Record<string, CustomOrderRow[]>;
   groupData: GroupSectionData[];
   availabilityRows: GroupAvailability[];
-  availabilityTotals: AvailabilityTotals;
   customGroupRows: GroupAvailability[];
-  endingStockByGroup: Record<PrimalGroupKey, number>;
   statusByGroup: Record<PrimalGroupKey, AvailabilityStatus>;
   customGroupData: CustomGroupSectionData[];
   customerColumns: CustomerAvailabilityColumn[];
@@ -150,13 +146,12 @@ export function derivePrimalViewModel(
     openingStock,
     customRows,
   );
-  const availabilityTotals = sumAvailability(availabilityRows);
 
   // Operator-added availability groups — derived the same way as catalog rows
   // (Expected Production from the whole-hog pool), but keyed by their id they
   // also subtract their own Custom Orders + Sales Orders. Kept separate from
-  // `availabilityRows` so the catalog-only paths (ending-stock carry-over,
-  // cooler push) stay on the fixed primal set.
+  // `availabilityRows` so the catalog-only ending-stock carry-over stays on the
+  // fixed primal set.
   const customGroupRows = buildCustomGroupAvailability(
     customGroups,
     counts,
@@ -166,8 +161,8 @@ export function derivePrimalViewModel(
   );
 
   // Calculated Ending Stock per catalog group (pieces) — shown read-only in
-  // each section and pushed to the cooler. Catalog-only: custom groups are
-  // ephemeral per-date rows and never carry over.
+  // each section. Catalog-only: custom groups are ephemeral per-date rows and
+  // never carry over.
   const endingStockByGroup = {} as Record<PrimalGroupKey, number>;
   for (const row of availabilityRows) endingStockByGroup[row.group] = row.endingStock;
 
@@ -256,9 +251,7 @@ export function derivePrimalViewModel(
     customRowsByGroup,
     groupData,
     availabilityRows,
-    availabilityTotals,
     customGroupRows,
-    endingStockByGroup,
     statusByGroup,
     customGroupData,
     customerColumns,

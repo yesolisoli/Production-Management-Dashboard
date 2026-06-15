@@ -1,11 +1,7 @@
 "use client";
 
 import { SUPABASE_ENABLED } from "@/lib/config";
-import { getCurrentUserId } from "@/lib/supabase/current-user";
-import {
-  fetchHogIntakeByDate,
-  upsertHogIntakeRecord,
-} from "@/features/hog-intake/supabase";
+import { fetchHogIntakeByDate } from "@/features/hog-intake/supabase";
 import type { HogIntakeRecord } from "@/features/hog-intake/types";
 
 // -------------------------------------------------------------------
@@ -20,8 +16,8 @@ import type { HogIntakeRecord } from "@/features/hog-intake/types";
 //   * Throws when the database is unavailable (Supabase not configured, or
 //     the query fails) so the caller can surface an error rather than
 //     silently substituting fabricated data.
-// The Next Day Projection is the one exception: it is entered here and
-// written back to the same hog_intake row (see saveHogIntakeRecord).
+// Read-only: the Next Day Projection is displayed here but owned and edited
+// by the Hog Intake screen, which writes it back to the hog_intake row.
 // -------------------------------------------------------------------
 export async function loadHogIntakeForDate(
   date: string,
@@ -32,17 +28,4 @@ export async function loadHogIntakeForDate(
   // fetchHogIntakeByDate returns null when no row matches the date and
   // throws on a query error — both behaviours are passed straight through.
   return await fetchHogIntakeByDate(date);
-}
-
-// Persist edits to the hog intake row owned by Hog Intake. Primal only edits
-// the Next Day Projection, but the upsert carries the full record so the rest
-// of the row is preserved. Returns the canonical saved record.
-export async function saveHogIntakeRecord(
-  record: HogIntakeRecord,
-): Promise<HogIntakeRecord> {
-  if (!SUPABASE_ENABLED) {
-    throw new Error("Hog Intake database is not configured.");
-  }
-  const userId = await getCurrentUserId();
-  return await upsertHogIntakeRecord(record, userId);
 }

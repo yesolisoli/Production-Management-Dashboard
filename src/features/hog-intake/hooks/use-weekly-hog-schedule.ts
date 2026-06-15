@@ -139,6 +139,9 @@ export function useWeeklyHogSchedule() {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
+      // One-shot hydration from localStorage after mount (SSR-safe) — not a
+      // render-driven sync, so the cascading-render concern doesn't apply.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (raw) setRows(coerceRows(JSON.parse(raw)));
     } catch {
       // ignore parse / access errors — fall back to defaults

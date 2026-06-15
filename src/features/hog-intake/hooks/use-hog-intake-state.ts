@@ -145,6 +145,10 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
     // next load. Clear any leftover instead.
     if (isEmptyHogIntakeRecord(record)) {
       clearDraft(record.date);
+      // Mirrors the just-cleared draft state (no unsaved draft → not dirty).
+      // This effect is the draft-persistence side-effect itself, not a
+      // render-sync, so keep the synchronous flag update as-is.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDirty(false);
       return;
     }

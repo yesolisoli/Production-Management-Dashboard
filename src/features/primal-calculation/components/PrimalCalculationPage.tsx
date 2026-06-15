@@ -4,22 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import {
   AlertTriangle,
-  Boxes,
   Calendar,
   CheckCircle2,
   Loader2,
   Upload,
 } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
-import { Modal } from "@/components/shared/modal";
 import {
   DEFAULT_MIN_COOLER_RESERVE,
   primalTotalHogCount,
 } from "../calculations";
-import {
-  pushEndingStockToCooler,
-  type EndingStockPushResult,
-} from "../cooler-inventory";
 import { usePrimalCalculationState } from "../hooks/use-primal-calculation-state";
 import { derivePrimalViewModel } from "../view-model";
 import { PrimalAvailabilityChart } from "./PrimalAvailabilityChart";
@@ -63,9 +57,7 @@ export function PrimalCalculationPage() {
     Butts: true,
   });
   const [activeSku, setActiveSku] = useState<string | null>(null);
-  const [confirmPush, setConfirmPush] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [pushing, setPushing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   // Auto-dismiss the toast.
@@ -82,9 +74,7 @@ export function PrimalCalculationPage() {
     intakeTotals,
     groupData,
     availabilityRows,
-    availabilityTotals,
     customGroupRows,
-    endingStockByGroup,
     customGroupData,
     customerColumns,
   } = useMemo(
@@ -102,24 +92,6 @@ export function PrimalCalculationPage() {
 
   const handleToggle = (groupKey: string) =>
     setExpanded((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
-
-  const handlePush = async () => {
-    setPushing(true);
-    try {
-      const result: EndingStockPushResult = await pushEndingStockToCooler(
-        date,
-        endingStockByGroup,
-      );
-      setConfirmPush(false);
-      setToast(
-        result.lines.length === 0
-          ? "No ending stock to push."
-          : `Pushed ${result.totalPcs} pcs across ${result.lines.length} groups to Cooler Inventory.`,
-      );
-    } finally {
-      setPushing(false);
-    }
-  };
 
   return (
     <>
@@ -272,49 +244,6 @@ export function PrimalCalculationPage() {
             );
           }}
         />
-      )}
-
-      {confirmPush && (
-        <Modal
-          title="Push Ending Stock to Cooler Inventory"
-          onClose={() => !pushing && setConfirmPush(false)}
-          footer={
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmPush(false)}
-                disabled={pushing}
-                className="rounded-lg px-4 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-40"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void handlePush()}
-                disabled={pushing}
-                className="flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:opacity-60"
-              >
-                {pushing ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <Boxes size={15} />
-                )}
-                {pushing ? "Pushing…" : "Confirm Push"}
-              </button>
-            </div>
-          }
-        >
-          <p className="text-sm text-slate-600">
-            This will move the calculated Ending Stock for{" "}
-            <span className="font-semibold tabular-nums">{date}</span> into
-            Cooler Inventory.
-          </p>
-          <p className="mt-2 text-sm font-semibold text-slate-800 tabular-nums">
-            {availabilityTotals.endingStock.toLocaleString()} pcs
-          </p>
-          <p className="mt-2 text-xs text-slate-400">
-            Cooler Inventory integration is pending — this is a safe preview
-            of what will be transferred.
-          </p>
-        </Modal>
       )}
 
       {toast && (
