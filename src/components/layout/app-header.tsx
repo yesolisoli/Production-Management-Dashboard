@@ -22,7 +22,7 @@ export function AppHeader({
   return (
     <header
       className={clsx(
-        "sticky top-0 z-10 border-b bg-[linear-gradient(135deg,#0f172a_0%,#111827_68%,#0b1220_100%)] text-white",
+        "sticky top-0 z-20 border-b bg-[linear-gradient(135deg,#0f172a_0%,#111827_68%,#0b1220_100%)] text-white",
         variant === "hero"
           ? "border-slate-200 shadow-[0_18px_60px_rgba(15,23,42,0.18)]"
           : "border-slate-700"

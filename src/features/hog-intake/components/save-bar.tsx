@@ -11,18 +11,19 @@ import type { SaveStatus } from "../hooks/use-hog-intake-state";
 
 type SaveBarProps = {
   status: SaveStatus;
+  dirty: boolean;
   onSave: () => void;
   onReset: () => void;
 };
 
-export function SaveBar({ status, onSave, onReset }: SaveBarProps) {
+export function SaveBar({ status, dirty, onSave, onReset }: SaveBarProps) {
   const saving = status.kind === "saving";
   const loading = status.kind === "loading";
   const busy = saving || loading;
 
   return (
     <div className="flex items-center justify-end gap-3">
-      <StatusLine status={status} />
+      <StatusLine status={status} dirty={dirty} />
       <button
         type="button"
         onClick={onReset}
@@ -49,7 +50,13 @@ export function SaveBar({ status, onSave, onReset }: SaveBarProps) {
   );
 }
 
-function StatusLine({ status }: { status: SaveStatus }) {
+function StatusLine({
+  status,
+  dirty,
+}: {
+  status: SaveStatus;
+  dirty: boolean;
+}) {
   if (status.kind === "loading") {
     return (
       <p className="flex items-center gap-1.5 text-xs text-slate-500">
@@ -74,10 +81,18 @@ function StatusLine({ status }: { status: SaveStatus }) {
       </p>
     );
   }
+  if (dirty) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
+        <AlertCircle size={13} />
+        Unsaved changes — click Save to commit to DB
+      </p>
+    );
+  }
   return (
     <p className="flex items-center gap-1.5 text-xs text-slate-500">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-      Draft saved locally · click Save to commit
+      Up to date with saved record
     </p>
   );
 }

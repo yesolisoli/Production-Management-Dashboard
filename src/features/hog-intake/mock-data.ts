@@ -22,6 +22,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
       held_over: 5,
       deaths_on_arrival: 1,
       boars_count: 3,
+      todays_cutting: 10,
       notes: "Two RWA loads arrived late.",
       farm_records: [
         { id: "fr-d4-1", farm: "ABC Farm", type: "JP", tattoo: "1234", count: 25 },
@@ -30,7 +31,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
         { id: "fr-d4-4", farm: "Happy Field Farm", type: "Sow", tattoo: "2468", count: 10 },
         { id: "fr-d4-5", farm: "Golden Farm", type: "Round", tattoo: "1122", count: 20 },
       ],
-      next_day: { hog_count: 220, side_orders: 18 },
+      next_day: { hog_count: 220, side_orders: 18, cooler_overstock: 0 },
     },
     {
       date: dateDaysAgo(3),
@@ -40,6 +41,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
       held_over: 4,
       deaths_on_arrival: 1,
       boars_count: 2,
+      todays_cutting: 9,
       notes: "",
       farm_records: [
         { id: "fr-d3-1", farm: "ABC Farm", type: "JP", tattoo: "1245", count: 30 },
@@ -47,7 +49,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
         { id: "fr-d3-3", farm: "Sunrise Farm", type: "BK", tattoo: "9120", count: 18 },
         { id: "fr-d3-4", farm: "Hilltop Farm", type: "Customer", tattoo: "3355", count: 14 },
       ],
-      next_day: { hog_count: 210, side_orders: 16 },
+      next_day: { hog_count: 210, side_orders: 16, cooler_overstock: 0 },
     },
     {
       date: dateDaysAgo(2),
@@ -57,6 +59,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
       held_over: 7,
       deaths_on_arrival: 0,
       boars_count: 3,
+      todays_cutting: 11,
       notes: "Boars count higher than usual — flagged for next sort.",
       farm_records: [
         { id: "fr-d2-1", farm: "ABC Farm", type: "JP", tattoo: "1256", count: 28 },
@@ -64,7 +67,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
         { id: "fr-d2-3", farm: "Sunrise Farm", type: "BK", tattoo: "9133", count: 18 },
         { id: "fr-d2-4", farm: "Happy Field Farm", type: "Sow", tattoo: "2480", count: 14 },
       ],
-      next_day: { hog_count: 195, side_orders: 15 },
+      next_day: { hog_count: 195, side_orders: 15, cooler_overstock: 0 },
     },
     {
       date: dateDaysAgo(1),
@@ -74,6 +77,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
       held_over: 3,
       deaths_on_arrival: 1,
       boars_count: 4,
+      todays_cutting: 9,
       notes: "Sunrise Farm delivered a partial load — short by ~3.",
       farm_records: [
         { id: "fr-d1-1", farm: "ABC Farm", type: "JP", tattoo: "1267", count: 30 },
@@ -83,7 +87,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
         { id: "fr-d1-5", farm: "Golden Farm", type: "Round", tattoo: "1133", count: 20 },
         { id: "fr-d1-6", farm: "Hilltop Farm", type: "Customer", tattoo: "3366", count: 16 },
       ],
-      next_day: { hog_count: 205, side_orders: 19 },
+      next_day: { hog_count: 205, side_orders: 19, cooler_overstock: 0 },
     },
     {
       date: dateDaysAgo(0),
@@ -93,6 +97,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
       held_over: 6,
       deaths_on_arrival: 1,
       boars_count: 2,
+      todays_cutting: 10,
       notes: "Watch for incoming late delivery from Green Valley.",
       farm_records: [
         { id: "fr-d0-1", farm: "ABC Farm", type: "JP", tattoo: "1278", count: 28 },
@@ -100,7 +105,7 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
         { id: "fr-d0-3", farm: "Sunrise Farm", type: "BK", tattoo: "9155", count: 14 },
         { id: "fr-d0-4", farm: "Happy Field Farm", type: "Sow", tattoo: "2502", count: 12 },
       ],
-      next_day: { hog_count: 210, side_orders: 17 },
+      next_day: { hog_count: 210, side_orders: 17, cooler_overstock: 0 },
     },
   ];
 }

@@ -11,10 +11,23 @@ export const HOG_TYPES = [
 
 export type HogType = (typeof HOG_TYPES)[number];
 
-// Subset of HOG_TYPES that contribute to yield_total.
-// Round / Suckling / Customer are intentionally excluded.
-export const YIELD_HOG_TYPES = ["JP", "RWA", "BK", "Sow"] as const;
-export type YieldHogType = (typeof YIELD_HOG_TYPES)[number];
+// Subset of HOG_TYPES that contribute to yield_total (Primal Calc).
+// BK / Sow / Round / Suckling / Customer are intentionally excluded — they are
+// tracked but never count toward the yield total.
+export const YIELD_HOG_TYPES = ["JP", "RWA"] as const;
+
+// Hog types whose grid counts roll up from Farm Delivery Records (read-only).
+// JP / RWA / BK are tracked per-farm, so deliveries are their single entry
+// point — their counts are summed from the rows, not typed in by hand. BK does
+// NOT feed Primal Calc (see YIELD_HOG_TYPES); it is shown separately. Sow, Round,
+// Suckling and Customer stay manual (their own cards).
+export const FARM_DERIVED_HOG_TYPES = ["JP", "RWA", "BK"] as const;
+export type FarmDerivedHogType = (typeof FARM_DERIVED_HOG_TYPES)[number];
+
+// Types offered in the Farm Delivery Records dropdown. JP / RWA / BK roll up
+// from the rows (FARM_DERIVED_HOG_TYPES); Sow is selectable for labeling a
+// delivery, but its count stays manual (the Sow card), so it is not summed here.
+export const FARM_RECORD_TYPES = ["JP", "RWA", "BK", "Sow"] as const;
 
 export type HogCounts = Record<HogType, number>;
 
@@ -29,6 +42,9 @@ export type FarmRecord = {
 export type NextDay = {
   hog_count: number;
   side_orders: number;
+  // Loins (pieces) already sitting in the cooler, carried into tomorrow's
+  // availability. Added on top of expected production from today's yield.
+  cooler_overstock: number;
 };
 
 // Persisted shape — only raw inputs. Computed values are never stored.
@@ -39,6 +55,12 @@ export type HogIntakeRecord = {
   held_over: number;
   deaths_on_arrival: number;
   boars_count: number;
+  // Sow Processing — a separate operational track. Total Sow Available lives
+  // in hog_counts.Sow; todays_cutting is how many of those are slated for
+  // processing today ("Today's Cutting"). Persisted
+  // (hog_intake_records.todays_cutting) and shown as the Sow figure in the
+  // Primal Calculation banner.
+  todays_cutting: number;
   notes: string;
   farm_records: FarmRecord[];
   next_day: NextDay;
@@ -66,8 +88,28 @@ export function emptyHogIntakeRecord(date: string): HogIntakeRecord {
     held_over: 0,
     deaths_on_arrival: 0,
     boars_count: 0,
+    todays_cutting: 0,
     notes: "",
     farm_records: [],
-    next_day: { hog_count: 0, side_orders: 0 },
+    next_day: { hog_count: 0, side_orders: 0, cooler_overstock: 0 },
   };
+}
+
+// True when the record carries no operator input — every count/field is at
+// its default. Used so an empty local draft never shadows a real DB record
+// (e.g. a date opened before data existed leaves a blank draft behind).
+export function isEmptyHogIntakeRecord(record: HogIntakeRecord): boolean {
+  return (
+    HOG_TYPES.every((type) => record.hog_counts[type] === 0) &&
+    record.side_orders === 0 &&
+    record.held_over === 0 &&
+    record.deaths_on_arrival === 0 &&
+    record.boars_count === 0 &&
+    record.todays_cutting === 0 &&
+    record.notes.trim() === "" &&
+    record.farm_records.length === 0 &&
+    record.next_day.hog_count === 0 &&
+    record.next_day.side_orders === 0 &&
+    record.next_day.cooler_overstock === 0
+  );
 }

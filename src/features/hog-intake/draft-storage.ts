@@ -34,6 +34,11 @@ function coerceDraft(raw: unknown, date: string): HogIntakeRecord | null {
       typeof nextRaw.side_orders === "number" && nextRaw.side_orders >= 0
         ? nextRaw.side_orders
         : 0,
+    cooler_overstock:
+      typeof nextRaw.cooler_overstock === "number" &&
+      nextRaw.cooler_overstock >= 0
+        ? nextRaw.cooler_overstock
+        : 0,
   };
 
   const farm_records = Array.isArray(r.farm_records)
@@ -68,6 +73,7 @@ function coerceDraft(raw: unknown, date: string): HogIntakeRecord | null {
     held_over: num("held_over"),
     deaths_on_arrival: num("deaths_on_arrival"),
     boars_count: num("boars_count"),
+    todays_cutting: num("todays_cutting"),
     notes: typeof r.notes === "string" ? r.notes : "",
     farm_records,
     next_day,

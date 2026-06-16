@@ -1,105 +1,108 @@
 "use client";
 
 import clsx from "clsx";
-import { clampNonNegativeInt, projectedForCutting } from "../calculations";
+import { CalendarPlus } from "lucide-react";
+import { NumberStepper } from "@/components/shared/number-stepper";
+import { projectedForCutting } from "../calculations";
 import type { NextDay } from "../types";
+
+type EditableField = "side_orders" | "cooler_overstock";
 
 type NextDayProjectionProps = {
   nextDay: NextDay;
-  onChange: (field: "hog_count" | "side_orders", value: number) => void;
+  // Next Day Hog Count is read-only — derived from the Weekly Hog Plan's
+  // Cut - Markets count for the day after the selected intake date.
+  hogCount: number;
+  onChange: (field: EditableField, value: number) => void;
 };
 
+const EDITABLE_FIELDS: { key: EditableField; label: string }[] = [
+  { key: "side_orders", label: "Next Day Side Orders" },
+  { key: "cooler_overstock", label: "Cooler Overstock" },
+];
+
+// Next Day Projection embedded at the bottom of the Weekly Hog Plan box on the
+// Hog Intake page (no own card wrapper). Side Orders / Cooler Overstock are
+// stored on the hog_intake row; Hog Count is derived from the Weekly Hog Plan.
+// Styled like the Farm Delivery Records footer summary — flat label-over-value
+// stats laid out as a right-aligned equation.
 export function NextDayProjection({
   nextDay,
+  hogCount,
   onChange,
 }: NextDayProjectionProps) {
-  const projected = projectedForCutting(nextDay);
+  const projected = projectedForCutting({ ...nextDay, hog_count: hogCount });
   const negative = projected < 0;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-4">
-        <h3 className="text-base font-semibold text-slate-900">
-          Next Day Projection
-        </h3>
-        <p className="text-xs text-slate-500">Plan tomorrow&apos;s intake and orders</p>
+    <div className="-mx-4 -mb-4 mt-4 rounded-b-2xl border-t border-slate-200 bg-slate-50/70 px-4 pb-4 pt-4">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
+          <CalendarPlus size={16} />
+        </span>
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">
+            Next Day Projection
+          </h3>
+          <p className="text-xs text-slate-500">
+            Plan tomorrow&apos;s intake and orders
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-        <ProjectionField
-          id="next-day-hogs"
-          label="NEXT DAY HOG COUNT"
-          value={nextDay.hog_count}
-          onChange={(v) => onChange("hog_count", v)}
-        />
-        <ProjectionField
-          id="next-day-side"
-          label="NEXT DAY SIDE ORDERS"
-          value={nextDay.side_orders}
-          onChange={(v) => onChange("side_orders", v)}
-        />
-      </div>
+      <div className="flex flex-wrap items-end justify-start gap-x-6 gap-y-4">
+        <div className="flex flex-col">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            Next Day Hog Count
+          </span>
+          <div className="mt-1 flex h-8 w-36 items-center justify-center">
+            <span className="text-lg font-bold tabular-nums text-slate-900">
+              {hogCount.toLocaleString()}
+            </span>
+          </div>
+        </div>
 
-      <div
-        className={clsx(
-          "mt-3 rounded-xl border px-4 py-2.5",
-          negative
-            ? "border-red-200 bg-red-50"
-            : "border-indigo-100 bg-indigo-50/60",
-        )}
-      >
-        <p
-          className={clsx(
-            "text-xs font-medium",
-            negative ? "text-red-700" : "text-slate-600",
-          )}
-        >
-          Projected For Cutting (Tomorrow)
-        </p>
-        <p className="mt-0.5 flex items-baseline gap-1.5">
+        {EDITABLE_FIELDS.map((field) => (
+          <div key={field.key} className="flex flex-col">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              {field.label}
+            </span>
+            <div className="mt-1 w-36">
+              <NumberStepper
+                ariaLabel={field.label}
+                value={nextDay[field.key]}
+                onChange={(v) => onChange(field.key, v)}
+              />
+            </div>
+          </div>
+        ))}
+
+        <div className="flex h-8 items-center">
+          <span className="text-lg font-light leading-none text-slate-300">
+            =
+          </span>
+        </div>
+
+        <div className="flex flex-col items-center">
           <span
             className={clsx(
-              "text-xl font-extrabold tabular-nums leading-none",
-              negative ? "text-red-700" : "text-slate-900",
+              "text-[11px] font-semibold uppercase tracking-wider",
+              negative ? "text-red-500" : "text-slate-400",
             )}
           >
-            {projected.toLocaleString()}
+            Next day Projected For Cutting
           </span>
-          <span className="text-xs font-medium text-slate-400">head</span>
-        </p>
-      </div>
-    </section>
-  );
-}
-
-type ProjectionFieldProps = {
-  id: string;
-  label: string;
-  value: number;
-  onChange: (next: number) => void;
-};
-
-function ProjectionField({ id, label, value, onChange }: ProjectionFieldProps) {
-  return (
-    <div className="rounded-xl border border-slate-200 p-2.5">
-      <label
-        htmlFor={id}
-        className="text-[10px] font-semibold uppercase tracking-wide text-slate-500"
-      >
-        {label}
-      </label>
-      <div className="mt-0.5 flex items-baseline gap-2">
-        <input
-          id={id}
-          type="number"
-          inputMode="numeric"
-          min={0}
-          step={1}
-          value={value}
-          onChange={(e) => onChange(clampNonNegativeInt(e.target.value))}
-          className="h-9 min-w-0 flex-1 border-0 bg-transparent text-xl font-extrabold tabular-nums text-slate-900 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-        />
-        <span className="text-xs font-medium text-slate-400">head</span>
+          <div className="mt-1 flex h-8 items-center">
+            <span
+              className={clsx(
+                "text-lg font-bold leading-none tabular-nums",
+                negative ? "text-red-700" : "text-slate-900",
+              )}
+            >
+              {projected.toLocaleString()}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );

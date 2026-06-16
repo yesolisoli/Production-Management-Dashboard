@@ -1,104 +1,179 @@
+"use client";
+
 import clsx from "clsx";
+import { Boxes, ClipboardList } from "lucide-react";
 import {
-  Award,
-  ClipboardList,
-  PiggyBank,
-  Wrench,
-  type LucideIcon,
-} from "lucide-react";
+  CardIcon,
+  CardShell,
+  ReadOnlyRow,
+  StepperRow,
+} from "@/components/shared/card";
+import { sowRemaining } from "../calculations";
 import type { HogIntakeTotals } from "../calculations";
 
 type SummaryPanelProps = {
   totals: HogIntakeTotals;
   sideOrders: number;
+  onChangeSideOrders: (value: number) => void;
+  // Rendered as the middle column, between Intake Summary and Sow Availability.
+  middle?: React.ReactNode;
+  // Rendered as the last column, to the right of Sow Availability.
+  after?: React.ReactNode;
+  sowAvailable: number;
+  todaysCutting: number;
+  onChangeTodaysCutting: (value: number) => void;
 };
 
-type Tone = "blue" | "amber" | "emerald" | "violet" | "red";
-
-type Card = {
-  label: string;
-  value: number;
-  tone: Tone;
-  icon: LucideIcon;
-};
-
-const ICON_TONES: Record<
-  Tone,
-  { chipBg: string; chipFg: string }
-> = {
-  blue: { chipBg: "bg-blue-50", chipFg: "text-blue-500" },
-  amber: { chipBg: "bg-amber-50", chipFg: "text-amber-500" },
-  emerald: { chipBg: "bg-emerald-50", chipFg: "text-emerald-500" },
-  violet: { chipBg: "bg-violet-50", chipFg: "text-violet-500" },
-  red: { chipBg: "bg-red-50", chipFg: "text-red-500" },
-};
-
-export function SummaryPanel({ totals, sideOrders }: SummaryPanelProps) {
-  const forCuttingTone: Tone = totals.overSold ? "red" : "emerald";
-
-  const cards: Card[] = [
-    {
-      label: "TOTAL HOGS",
-      value: totals.totalHogs,
-      tone: "blue",
-      icon: PiggyBank,
-    },
-    {
-      label: "SIDE ORDERS",
-      value: sideOrders,
-      tone: "amber",
-      icon: ClipboardList,
-    },
-    {
-      label: "FOR CUTTING (TODAY)",
-      value: totals.forCutting,
-      tone: forCuttingTone,
-      icon: Wrench,
-    },
-    {
-      label: "YIELD TOTAL",
-      value: totals.yieldTotal,
-      tone: "violet",
-      icon: Award,
-    },
-  ];
-
+export function SummaryPanel({
+  totals,
+  sideOrders,
+  onChangeSideOrders,
+  middle,
+  after,
+  sowAvailable,
+  todaysCutting,
+  onChangeTodaysCutting,
+}: SummaryPanelProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {cards.map((card) => (
-        <SummaryCard key={card.label} card={card} />
-      ))}
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <IntakeSummaryCard
+        totalIntake={totals.totalIntake}
+        sideOrders={sideOrders}
+        onChangeSideOrders={onChangeSideOrders}
+        forCutting={totals.forCutting}
+        overSold={totals.overSold}
+      />
+      {middle}
+      <SowProcessingCard
+        available={sowAvailable}
+        todaysCutting={todaysCutting}
+        onChangeTodaysCutting={onChangeTodaysCutting}
+      />
+      {after}
     </div>
   );
 }
 
-function SummaryCard({ card }: { card: Card }) {
-  const Icon = card.icon;
-  const tone = ICON_TONES[card.tone];
-  const valueClass =
-    card.tone === "red" ? "text-red-700" : "text-slate-900";
-
+// Total Intake → Side Orders → For Cutting Today, presented as one grouped
+// flow since the three values are directly related (the third is derived
+// from the first two).
+function IntakeSummaryCard({
+  totalIntake,
+  sideOrders,
+  onChangeSideOrders,
+  forCutting,
+  overSold,
+}: {
+  totalIntake: number;
+  sideOrders: number;
+  onChangeSideOrders: (value: number) => void;
+  forCutting: number;
+  overSold: boolean;
+}) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          {card.label}
-        </p>
+    <CardShell
+      label="Intake Summary"
+      subtitle="Daily intake overview"
+      icon={<CardIcon icon={ClipboardList} tone="blue" />}
+    >
+      <div className="space-y-2">
+        <FlowRow label="Total Intake" value={totalIntake} />
+        <StepperRow
+          label="Side Orders"
+          value={sideOrders}
+          onChange={onChangeSideOrders}
+        />
+        <FlowRow label="For Cutting Today" value={forCutting} danger={overSold} />
+      </div>
+    </CardShell>
+  );
+}
+
+function FlowRow({
+  label,
+  value,
+  muted,
+  emphasis,
+  danger,
+  prefix,
+}: {
+  label: string;
+  value: number;
+  muted?: boolean;
+  emphasis?: boolean;
+  danger?: boolean;
+  prefix?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span
+        className={clsx(
+          "text-sm",
+          emphasis ? "font-semibold text-slate-700" : "text-slate-500",
+        )}
+      >
+        {label}
+      </span>
+      {/* Spacers mirror the stepper rows' -/+ buttons so values share the
+          same centered number column. */}
+      <div className="flex items-center gap-1.5">
+        <span className="h-7 w-7" aria-hidden />
         <span
           className={clsx(
-            "flex h-6 w-6 items-center justify-center rounded-md",
-            tone.chipBg,
+            "w-12 text-center tabular-nums",
+            emphasis ? "text-2xl font-extrabold leading-none" : "text-xl font-bold",
+            danger
+              ? "text-rose-600"
+              : muted
+                ? "text-slate-400"
+                : "text-slate-900",
           )}
         >
-          <Icon size={13} className={tone.chipFg} strokeWidth={2} />
+          {prefix}
+          {value.toLocaleString()}
         </span>
+        <span className="h-7 w-7" aria-hidden />
       </div>
-      <p className="mt-1.5 flex items-baseline gap-1.5">
-        <span className={clsx("text-2xl font-extrabold tabular-nums leading-none", valueClass)}>
-          {card.value.toLocaleString()}
-        </span>
-        <span className="text-xs font-medium text-slate-400">head</span>
-      </p>
     </div>
+  );
+}
+
+// Sow is its own operational track. "Available This Week" is derived (Weekly
+// Hog Plan sow rows + farm-delivered sows) and therefore read-only; only the
+// daily schedule is editable here.
+function SowProcessingCard({
+  available,
+  todaysCutting,
+  onChangeTodaysCutting,
+}: {
+  available: number;
+  todaysCutting: number;
+  onChangeTodaysCutting: (value: number) => void;
+}) {
+  return (
+    <CardShell
+      label="Sow Inventory"
+      subtitle="Sow inventory tracking"
+      icon={<CardIcon icon={Boxes} tone="emerald" />}
+    >
+      <div className="space-y-2">
+        <ReadOnlyRow label="Available This Week" value={available} />
+        <StepperRow
+          label="Today's Cutting"
+          value={todaysCutting}
+          onChange={onChangeTodaysCutting}
+        />
+        <div className="-mt-1 flex items-center justify-between gap-2 border-t border-slate-100 pt-1">
+          <span className="text-sm text-slate-500">Remaining After Cutting</span>
+          <div className="flex items-center gap-1.5">
+            <span className="h-7 w-7" aria-hidden />
+            <span className="w-12 text-center text-xl font-extrabold tabular-nums text-slate-900">
+              {sowRemaining(available, todaysCutting).toLocaleString()}
+            </span>
+            <span className="h-7 w-7" aria-hidden />
+          </div>
+        </div>
+      </div>
+    </CardShell>
   );
 }

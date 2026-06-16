@@ -1,8 +1,15 @@
 "use client";
 
-import { Plus, Trash2, Truck } from "lucide-react";
-import { clampNonNegativeInt } from "../calculations";
-import { HOG_TYPES, type FarmRecord, type HogType } from "../types";
+import clsx from "clsx";
+import { ChevronDown, Plus, Truck, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { BaseDropdown, DROPDOWN_WIDTH } from "@/features/assignment-board/components/base-dropdown";
+import { NumberStepper } from "@/components/shared/number-stepper";
+import {
+  FARM_RECORD_TYPES,
+  type FarmRecord,
+  type HogType,
+} from "../types";
 
 type FarmRecordsProps = {
   rows: FarmRecord[];
@@ -10,6 +17,27 @@ type FarmRecordsProps = {
   onUpdate: (id: string, patch: Partial<Omit<FarmRecord, "id">>) => void;
   onRemove: (id: string) => void;
 };
+
+// Colored pill styling per delivery type. Unassigned rows stay neutral so they
+// read as "not yet counted toward primal".
+const TYPE_PILL: Record<
+  HogType | "",
+  { bg: string; text: string; dot: string }
+> = {
+  "": { bg: "bg-slate-100", text: "text-slate-500", dot: "bg-slate-400" },
+  JP: { bg: "bg-blue-100", text: "text-blue-700", dot: "bg-blue-500" },
+  RWA: { bg: "bg-violet-100", text: "text-violet-700", dot: "bg-violet-500" },
+  BK: { bg: "bg-amber-100", text: "text-amber-700", dot: "bg-amber-500" },
+  Sow: { bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500" },
+  Round: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" },
+  Suckling: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" },
+  Customer: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" },
+};
+
+// Selectable delivery types for a farm row. "" reads as Unassigned.
+const TYPE_OPTIONS: (HogType | "")[] = ["", ...FARM_RECORD_TYPES];
+
+const typeLabel = (type: HogType | "") => (type === "" ? "Unassigned" : type);
 
 export function FarmRecords({
   rows,
@@ -19,112 +47,106 @@ export function FarmRecords({
 }: FarmRecordsProps) {
   const isEmpty = rows.length === 0;
 
+  const awaitingType = rows.reduce(
+    (sum, r) => sum + (r.type === "" ? r.count : 0),
+    0,
+  );
+
   return (
-    <section className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div>
-          <h3 className="text-base font-semibold text-slate-900">
-            Farm Delivery Records
-          </h3>
-          <p className="text-xs text-slate-500">List of farms delivering today</p>
-        </div>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-medium text-white transition hover:bg-slate-800"
-        >
-          <Plus size={13} />
-          Add Record
-        </button>
+    <section className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center gap-3 p-5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
+          <Truck size={16} />
+        </span>
+        <h3 className="text-base font-semibold text-slate-900">
+          Farm Delivery Records
+        </h3>
       </div>
 
-      <table className="w-full table-fixed text-sm">
+      <table className="w-full table-fixed border-t border-slate-100 text-sm">
         <thead>
-          <tr className="border-b border-slate-100 text-left text-[10px] font-medium uppercase tracking-wide text-slate-400">
-            <th className="w-[38%] px-2 py-2">Farm</th>
-            <th className="w-[22%] px-2 py-2">Type</th>
-            <th className="w-[20%] px-2 py-2">Tattoo / Tag</th>
-            <th className="w-[15%] px-2 py-2 text-right">Count</th>
-            {!isEmpty ? <th className="w-12 px-2 py-2" /> : null}
+          <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <th className="w-[40%] pl-7 pr-5 py-3">Farm</th>
+            <th className="w-[18%] pl-6 pr-3 py-3">Type</th>
+            <th className="w-[18%] px-3 py-3 text-center">Tattoo / Tag</th>
+            <th className="w-[18%] px-3 py-3 text-center">Count</th>
+            {!isEmpty ? <th className="w-12 px-3 py-3" /> : null}
           </tr>
         </thead>
         {!isEmpty ? (
           <tbody className="divide-y divide-slate-100">
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td className="px-2 py-1.5">
-                  <input
-                    type="text"
-                    value={row.farm}
-                    onChange={(e) =>
-                      onUpdate(row.id, { farm: e.target.value })
-                    }
-                    placeholder="Farm name"
-                    className="h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-sm outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white"
-                  />
-                </td>
-                <td className="px-2 py-1.5">
-                  <select
-                    value={row.type}
-                    onChange={(e) =>
-                      onUpdate(row.id, {
-                        type: (e.target.value || "") as HogType | "",
-                      })
-                    }
-                    className="h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-sm outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white"
-                  >
-                    <option value="">—</option>
-                    {HOG_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-2 py-1.5">
-                  <input
-                    type="text"
-                    value={row.tattoo}
-                    onChange={(e) =>
-                      onUpdate(row.id, { tattoo: e.target.value })
-                    }
-                    placeholder="1234"
-                    className="h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-sm outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white"
-                  />
-                </td>
-                <td className="px-2 py-1.5 text-right">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1}
-                    value={row.count}
-                    onChange={(e) =>
-                      onUpdate(row.id, {
-                        count: clampNonNegativeInt(e.target.value),
-                      })
-                    }
-                    className="h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-right text-sm tabular-nums outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  />
-                </td>
-                <td className="px-2 py-1.5 text-right">
-                  <button
-                    type="button"
-                    onClick={() => onRemove(row.id)}
-                    aria-label="Delete row"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-50 hover:text-red-600"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              return (
+                <tr key={row.id}>
+                  <td className="px-5 py-2">
+                    <input
+                      type="text"
+                      value={row.farm}
+                      onChange={(e) =>
+                        onUpdate(row.id, { farm: e.target.value })
+                      }
+                      placeholder="Farm name"
+                      className="h-10 w-full rounded-lg border border-transparent bg-transparent px-2 text-base font-normal text-slate-900 outline-none hover:border-slate-200 focus:border-slate-400 focus:bg-white"
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <TypeSelect
+                      value={row.type}
+                      onChange={(type) => onUpdate(row.id, { type })}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="text"
+                      value={row.tattoo}
+                      onChange={(e) =>
+                        onUpdate(row.id, { tattoo: e.target.value })
+                      }
+                      placeholder="1234"
+                      className="h-10 w-24 rounded-lg border border-transparent bg-transparent px-3 text-center text-base font-normal text-slate-900 outline-none transition hover:border-slate-200 focus:border-slate-400 focus:bg-white"
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <NumberStepper
+                      variant="card"
+                      className="inline-flex items-center gap-1.5"
+                      ariaLabel="Count"
+                      value={row.count}
+                      onChange={(count) => onUpdate(row.id, { count })}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => onRemove(row.id)}
+                      aria-label="Delete row"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                    >
+                      <X size={16} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         ) : null}
       </table>
 
+      {!isEmpty ? (
+        <div className="flex justify-center py-3">
+          <button
+            type="button"
+            onClick={onAdd}
+            aria-label="Add Record"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+      ) : null}
+
       {isEmpty ? (
-        <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
             <Truck size={20} />
           </div>
@@ -137,13 +159,96 @@ export function FarmRecords({
           <button
             type="button"
             onClick={onAdd}
-            className="mt-3 flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-600 transition hover:bg-blue-100"
+            className="mt-3 flex h-9 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-600 transition hover:bg-blue-100"
           >
             <Plus size={13} />
             Add first record
           </button>
         </div>
       ) : null}
+
+      {!isEmpty && awaitingType > 0 ? (
+        <div className="mt-auto border-t border-slate-100 bg-slate-50/70 px-5 py-4">
+          <p className="text-sm text-slate-500">
+            <span className="font-semibold text-amber-600">
+              {awaitingType} head awaiting type
+            </span>{" "}
+            <span className="text-slate-400">— not in primal</span>
+          </p>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+// Custom pill dropdown for a row's delivery type. Replaces the native <select>
+// so the whole pill (including the chevron) is a reliable click target.
+function TypeSelect({
+  value,
+  onChange,
+}: {
+  value: HogType | "";
+  onChange: (type: HogType | "") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const pill = TYPE_PILL[value];
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={clsx(
+          "inline-flex items-center rounded-full pl-3 pr-2.5 py-1.5 text-sm font-semibold outline-none",
+          pill.bg,
+          pill.text,
+        )}
+      >
+        <span
+          className={clsx("mr-1.5 h-2 w-2 shrink-0 rounded-full", pill.dot)}
+        />
+        {typeLabel(value)}
+        <ChevronDown size={14} className="ml-1.5 shrink-0" />
+      </button>
+      <BaseDropdown
+        open={open}
+        onClose={() => setOpen(false)}
+        triggerRef={triggerRef}
+        minWidth={DROPDOWN_WIDTH.xsmall}
+        offsetY={4}
+      >
+        <div className="py-1.5">
+          {TYPE_OPTIONS.map((option) => {
+            const opt = TYPE_PILL[option];
+            const active = option === value;
+            return (
+              <button
+                key={option || "unassigned"}
+                type="button"
+                onClick={() => {
+                  onChange(option);
+                  setOpen(false);
+                }}
+                className={clsx(
+                  "flex w-full items-center px-3 py-1.5 text-left text-sm font-semibold transition-colors",
+                  active ? "bg-slate-100" : "hover:bg-slate-50",
+                  opt.text,
+                )}
+              >
+                <span
+                  className={clsx(
+                    "mr-2 h-2 w-2 shrink-0 rounded-full",
+                    opt.dot,
+                  )}
+                />
+                {typeLabel(option)}
+              </button>
+            );
+          })}
+        </div>
+      </BaseDropdown>
+    </div>
   );
 }

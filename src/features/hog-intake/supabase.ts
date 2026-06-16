@@ -16,6 +16,7 @@ type HogIntakeRow = {
   held_over: number;
   deaths_on_arrival: number;
   boars_count: number;
+  todays_cutting: number;
   notes: string | null;
   farm_records: unknown;
   next_day: unknown;
@@ -35,7 +36,8 @@ function coerceCounts(raw: unknown) {
 }
 
 function coerceNextDay(raw: unknown) {
-  if (!raw || typeof raw !== "object") return { hog_count: 0, side_orders: 0 };
+  const fallback = { hog_count: 0, side_orders: 0, cooler_overstock: 0 };
+  if (!raw || typeof raw !== "object") return fallback;
   const obj = raw as Record<string, unknown>;
   return {
     hog_count:
@@ -45,6 +47,10 @@ function coerceNextDay(raw: unknown) {
     side_orders:
       typeof obj.side_orders === "number" && obj.side_orders >= 0
         ? obj.side_orders
+        : 0,
+    cooler_overstock:
+      typeof obj.cooler_overstock === "number" && obj.cooler_overstock >= 0
+        ? obj.cooler_overstock
         : 0,
   };
 }
@@ -77,6 +83,7 @@ function rowToRecord(row: HogIntakeRow): HogIntakeRecord {
     held_over: row.held_over,
     deaths_on_arrival: row.deaths_on_arrival,
     boars_count: row.boars_count,
+    todays_cutting: row.todays_cutting,
     notes: row.notes ?? "",
     farm_records: coerceFarmRecords(row.farm_records),
     next_day: coerceNextDay(row.next_day),
@@ -92,7 +99,7 @@ export async function fetchHogIntakeByDate(
   const { data, error } = await supabase
     .from("hog_intake_records")
     .select(
-      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, notes, farm_records, next_day, updated_at, updated_by",
+      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, todays_cutting, notes, farm_records, next_day, updated_at, updated_by",
     )
     .eq("intake_date", date)
     .maybeSingle();
@@ -118,6 +125,7 @@ export async function upsertHogIntakeRecord(
     held_over: record.held_over,
     deaths_on_arrival: record.deaths_on_arrival,
     boars_count: record.boars_count,
+    todays_cutting: record.todays_cutting,
     notes: record.notes,
     farm_records: record.farm_records,
     next_day: record.next_day,
@@ -128,7 +136,7 @@ export async function upsertHogIntakeRecord(
     .from("hog_intake_records")
     .upsert(payload, { onConflict: "intake_date", ignoreDuplicates: false })
     .select(
-      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, notes, farm_records, next_day, updated_at, updated_by",
+      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, todays_cutting, notes, farm_records, next_day, updated_at, updated_by",
     )
     .single();
 
