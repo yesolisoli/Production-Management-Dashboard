@@ -150,7 +150,12 @@ export function PrimalGroupSection({
         <div className="border-t border-slate-100">
           {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-150 table-fixed border-collapse text-sm">
+            {/* min-width must exceed the sum of the fixed columns (~44rem) plus
+                a usable Item column, otherwise table-fixed shrinks every column
+                proportionally and the flexible Item text collapses to one word
+                per line on tablet/mobile. Keeping it generous makes the table
+                scroll horizontally on small screens instead. */}
+            <table className="w-full min-w-4xl table-fixed border-collapse text-sm">
               {/* Fixed column widths so the layout never shifts when a custom
                   row (whose cells hold wider <input> fields) is added. Item is
                   left flexible to absorb the remaining width; Case Pack / Cases

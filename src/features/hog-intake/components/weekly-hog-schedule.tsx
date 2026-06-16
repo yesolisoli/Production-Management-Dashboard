@@ -152,7 +152,7 @@ export function WeeklyHogSchedule({
 
       {!collapsed && (
       <div className="overflow-x-auto rounded-xl border border-slate-200">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[34rem] text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/80">
               <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" />

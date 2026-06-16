@@ -9,9 +9,9 @@ export default async function SettingsPage() {
     <div className="flex min-h-full flex-col">
       <AppHeader eyebrow="System Module" title="Settings" />
 
-      <div className="p-6">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-bold">Settings</h2>
+      <div className="p-4 sm:p-6">
+        <div className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+          <h2 className="text-xl font-bold sm:text-2xl">Settings</h2>
           <p className="mt-2 text-slate-600">Coming soon.</p>
         </div>
       </div>

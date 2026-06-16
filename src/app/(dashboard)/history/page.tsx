@@ -22,15 +22,16 @@ export default async function HistoryPage() {
           canAccessAssignmentBoard ? (
             <Link
               href="/assignment-board"
-              className="flex h-10 items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700"
+              title="Admin View"
+              className="flex h-10 w-10 items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-900 text-sm font-medium text-white hover:bg-slate-700 sm:w-auto sm:px-4"
             >
               <LayoutGrid size={16} />
-              Admin View
+              <span className="hidden sm:inline">Admin View</span>
             </Link>
           ) : null
         }
       />
-      <div className="min-h-0 flex-1 p-6">
+      <div className="min-h-0 flex-1 p-3 sm:p-6">
         <HistoryClient />
       </div>
     </div>

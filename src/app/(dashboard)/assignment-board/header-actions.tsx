@@ -16,18 +16,20 @@ export function AssignmentBoardHeaderActions() {
 
       <Link
         href="/tv-display"
-        className="flex h-10 items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700"
+        title="TV Display"
+        className="flex h-10 w-10 items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-900 text-sm font-medium text-white hover:bg-slate-700 sm:w-auto sm:px-4"
       >
         <Monitor size={16} />
-        TV Display
+        <span className="hidden sm:inline">TV Display</span>
       </Link>
 
       <Link
         href="/history"
-        className="flex h-10 items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700"
+        title="History"
+        className="flex h-10 w-10 items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-900 text-sm font-medium text-white hover:bg-slate-700 sm:w-auto sm:px-4"
       >
         <Archive size={16} />
-        History
+        <span className="hidden sm:inline">History</span>
       </Link>
     </>
   );

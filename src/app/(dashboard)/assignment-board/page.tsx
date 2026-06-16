@@ -15,7 +15,7 @@ export default async function AssignmentBoardPage() {
         actions={<AssignmentBoardHeaderActions />}
       />
 
-      <div className="min-h-0 flex-1 p-6">
+      <div className="min-h-0 flex-1 p-3 sm:p-6">
         <Suspense fallback={null}>
           <AssignmentBoardClient />
         </Suspense>

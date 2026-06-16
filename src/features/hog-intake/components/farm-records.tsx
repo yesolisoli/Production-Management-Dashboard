@@ -63,7 +63,8 @@ export function FarmRecords({
         </h3>
       </div>
 
-      <table className="w-full table-fixed border-t border-slate-100 text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[30rem] table-fixed border-t border-slate-100 text-sm">
         <thead>
           <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             <th className="w-[40%] pl-7 pr-5 py-3">Farm</th>
@@ -131,6 +132,7 @@ export function FarmRecords({
           </tbody>
         ) : null}
       </table>
+      </div>
 
       {!isEmpty ? (
         <div className="flex justify-center py-3">

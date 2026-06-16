@@ -185,9 +185,11 @@ export function AssignmentBoardClient() {
         />
       )}
 
-      <div className="flex h-full items-stretch gap-0">
-        {/* Sidebar + collapse toggle */}
-        <div className={`relative flex shrink-0 transition-all duration-300 ${sidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-72 opacity-100"}`}>
+      <div className="flex h-full flex-col items-stretch gap-3 md:flex-row md:gap-0">
+        {/* Sidebar + collapse toggle. On mobile the sidebar stacks on top with a
+            capped height and its own scroll; the md+ layout keeps the
+            collapsible side rail. */}
+        <div className={`relative flex max-h-[50vh] shrink-0 transition-all duration-300 md:max-h-none ${sidebarCollapsed ? "w-full md:w-0 md:overflow-hidden md:opacity-0" : "w-full opacity-100 md:w-72"}`}>
           <AssignmentSidebar
             employees={employees}
             statuses={statuses}
@@ -214,7 +216,7 @@ export function AssignmentBoardClient() {
         {sidebarCollapsed ? (
           <button
             onClick={() => setSidebarCollapsed(false)}
-            className="group relative flex h-full w-4 shrink-0 cursor-pointer flex-col items-center justify-center gap-1"
+            className="group relative hidden h-full w-4 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 md:flex"
             title="Show sidebar"
           >
             <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 rounded-full bg-slate-200 transition-colors group-hover:bg-slate-400" />
@@ -223,7 +225,7 @@ export function AssignmentBoardClient() {
             </div>
           </button>
         ) : (
-          <div className="relative flex w-10 shrink-0 items-center justify-center">
+          <div className="relative hidden w-10 shrink-0 items-center justify-center md:flex">
             <button
               onClick={() => setSidebarCollapsed(true)}
               className="z-10 flex h-7 w-4 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm text-slate-400 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
@@ -234,7 +236,7 @@ export function AssignmentBoardClient() {
           </div>
         )}
 
-        <div className={`relative min-w-0 flex-1 overflow-hidden transition-all duration-300 ${sidebarCollapsed ? "ml-4" : "ml-0"}`}>
+        <div className={`relative min-h-[75vh] min-w-0 flex-1 overflow-hidden transition-all duration-300 md:min-h-0 ${sidebarCollapsed ? "md:ml-4" : "ml-0"}`}>
           <AssignmentGrid
             employees={employees}
             statuses={statuses}

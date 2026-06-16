@@ -98,16 +98,26 @@ export function ReadOnlyRow({
         {label}
       </span>
       <div className="flex items-center gap-1.5">
-        {alignWithSteppers ? <span className="h-7 w-7" aria-hidden /> : null}
+        {/* Spacers reserve the +/- button widths. When alignWithSteppers is
+            false the value still lines up with stepper rows on mobile (cards are
+            stacked, so consistent number columns matter) but goes flush-right on
+            desktop where the card sits in its own narrow column. */}
+        <span
+          className={clsx("h-7 w-7", !alignWithSteppers && "lg:hidden")}
+          aria-hidden
+        />
         <span
           className={clsx(
             "flex h-8 items-center justify-center text-xl font-extrabold tabular-nums text-slate-900",
-            alignWithSteppers && "w-12",
+            alignWithSteppers ? "w-12" : "w-12 lg:w-auto",
           )}
         >
           {value}
         </span>
-        {alignWithSteppers ? <span className="h-7 w-7" aria-hidden /> : null}
+        <span
+          className={clsx("h-7 w-7", !alignWithSteppers && "lg:hidden")}
+          aria-hidden
+        />
       </div>
     </div>
   );

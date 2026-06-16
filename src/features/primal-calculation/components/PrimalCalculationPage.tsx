@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckCircle2,
   Loader2,
+  Save,
   Upload,
 } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
@@ -99,7 +100,7 @@ export function PrimalCalculationPage() {
         eyebrow="Operations Module"
         title="Primal Calculation"
         actions={
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <IntakeHeaderStats
               status={intakeStatus.kind}
               primalTotal={primalTotalHogCount(counts)}
@@ -116,17 +117,19 @@ export function PrimalCalculationPage() {
               type="button"
               onClick={() => void saveAll()}
               disabled={saveState.kind === "saving"}
-              className="flex h-10 items-center gap-2 rounded-xl border border-white/30 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+              title="Save All"
+              className="flex h-10 w-10 items-center justify-center gap-2 rounded-xl border border-white/30 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60 sm:w-auto sm:px-4"
             >
-              Save All
+              <Save size={16} />
+              <span className="hidden sm:inline">Save All</span>
             </button>
-            <label className="flex items-center gap-2 rounded-xl border border-white/30 px-3 py-2">
-              <Calendar size={16} className="text-white/70" />
+            <label className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/30 sm:h-auto sm:w-auto sm:justify-start sm:gap-2 sm:px-3 sm:py-2">
+              <Calendar size={16} className="shrink-0 text-white/70" />
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="h-7 border-0 bg-transparent text-sm font-semibold tabular-nums text-white outline-none scheme-dark"
+                className="absolute inset-0 cursor-pointer opacity-0 sm:static sm:h-7 sm:w-auto sm:min-w-0 sm:cursor-auto sm:border-0 sm:bg-transparent sm:text-sm sm:font-semibold sm:tabular-nums sm:text-white sm:opacity-100 sm:outline-none sm:scheme-dark"
               />
             </label>
           </div>
@@ -134,7 +137,7 @@ export function PrimalCalculationPage() {
       />
 
       <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
-        <div className="flex flex-col gap-4 px-5 py-5 lg:px-6">
+        <div className="flex flex-col gap-4 px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
           <PrimalAvailabilityChart
             rows={availabilityRows}
             customRows={customGroupRows}

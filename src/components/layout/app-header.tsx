@@ -30,8 +30,10 @@ export function AppHeader({
     >
       <div
         className={clsx(
-          "flex items-center justify-between gap-6",
-          variant === "hero" ? "px-7 py-7 lg:px-9 lg:py-8" : "px-6 py-4"
+          "flex items-center justify-between gap-3 sm:gap-6",
+          variant === "hero"
+            ? "px-4 py-5 sm:px-7 sm:py-7 lg:px-9 lg:py-8"
+            : "px-4 py-3 sm:px-6 sm:py-4"
         )}
       >
         <div className="min-w-0">
@@ -39,7 +41,7 @@ export function AppHeader({
             <p
               className={clsx(
                 "uppercase tracking-wide text-slate-400",
-                variant === "hero" ? "text-sm" : "text-xs"
+                variant === "hero" ? "text-xs sm:text-sm" : "text-xs"
               )}
             >
               {eyebrow}
@@ -50,8 +52,8 @@ export function AppHeader({
             className={clsx(
               "tracking-tight text-white",
               variant === "hero"
-                ? "text-4xl font-black lg:text-[4rem]"
-                : "text-xl font-bold"
+                ? "text-2xl font-black sm:text-4xl lg:text-[4rem]"
+                : "truncate text-lg font-bold sm:text-xl"
             )}
           >
             {title}
@@ -61,7 +63,9 @@ export function AppHeader({
             <p
               className={clsx(
                 "text-slate-300",
-                variant === "hero" ? "mt-2 text-lg lg:text-xl" : "mt-1 text-sm"
+                variant === "hero"
+                  ? "mt-2 text-base sm:text-lg lg:text-xl"
+                  : "mt-1 text-xs sm:text-sm"
               )}
             >
               {description}
@@ -70,7 +74,7 @@ export function AppHeader({
         </div>
 
         {actions && (
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             {actions}
           </div>
         )}
@@ -92,10 +96,11 @@ export function AssignmentHeaderActions() {
 
       <Link
         href="/tv-display"
-        className="flex h-10 items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700"
+        title="TV Display"
+        className="flex h-10 w-10 items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-900 text-sm font-medium text-white hover:bg-slate-700 sm:w-auto sm:px-4"
       >
         <Monitor size={16} />
-        TV Display
+        <span className="hidden sm:inline">TV Display</span>
       </Link>
     </>
   );

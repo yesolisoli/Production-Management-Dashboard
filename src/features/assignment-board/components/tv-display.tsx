@@ -220,7 +220,7 @@ export function TVDisplay({
         className={`grid shrink-0 transition-[grid-template-rows] duration-300 ease-out ${headerOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
       >
         <div className="overflow-hidden">
-          <div className="flex items-center gap-4 bg-slate-900 px-6 py-3 border-b border-white/10">
+          <div className="flex items-center gap-2 bg-slate-900 px-3 py-2 border-b border-white/10 sm:gap-4 sm:px-6 sm:py-3">
 
         <div className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-1">
           <button
@@ -269,7 +269,7 @@ export function TVDisplay({
                   );
                 }}
               />
-              <div className="flex items-center gap-1">
+              <div className="hidden items-center gap-1 sm:flex">
                 {["06:00","08:00","10:00","12:00","14:00"].map((t) => (
                   <button
                     key={t}
@@ -293,10 +293,10 @@ export function TVDisplay({
           {canAccessAssignmentBoard && (
             <button
               onClick={onClose}
-              className="flex items-center gap-2 rounded-lg border border-white bg-transparent px-3 py-2 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+              className="flex items-center gap-2 rounded-lg border border-white bg-transparent p-2 text-sm font-semibold text-white hover:bg-white/10 transition-colors sm:px-3 sm:py-2"
             >
               <LayoutGrid size={14} />
-              Admin View
+              <span className="hidden sm:inline">Admin View</span>
             </button>
           )}
         </div>
@@ -462,15 +462,15 @@ export function TVDisplay({
       })()}
 
       {/* ── Footer ── */}
-      <div className="flex shrink-0 items-center justify-between border-t border-white/10 bg-slate-900 px-6 py-7">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-slate-900 px-4 py-3 sm:px-6 sm:py-7">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-2">
             <Megaphone size={13} className="text-blue-400 shrink-0" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Announcement</span>
+            <span className="hidden text-[10px] font-bold uppercase tracking-widest text-blue-400 sm:inline">Announcement</span>
           </div>
-          <span className="text-xl text-slate-300">{announcement}</span>
+          <span className="truncate text-sm text-slate-300 sm:text-xl">{announcement}</span>
         </div>
-        <div className="flex items-center gap-6 text-sm text-slate-400 shrink-0">
+        <div className="flex shrink-0 items-center gap-6 text-sm text-slate-400">
           {syncStatus !== undefined && (() => {
             const syncedSecAgo = lastSyncedAt
               ? Math.max(0, Math.floor((now.getTime() - lastSyncedAt.getTime()) / 1000))

@@ -116,7 +116,7 @@ export function AssignmentSidebar({
 
 
   return (
-    <div className="flex h-full w-72 shrink-0 flex-col gap-4 overflow-hidden">
+    <div className="flex h-full w-full shrink-0 flex-col gap-4 overflow-hidden md:w-72">
       {/* Workforce Overview */}
       <div className="shrink-0 rounded-lg border border-slate-300 bg-white p-5">
         <div className="flex items-center justify-between gap-2">

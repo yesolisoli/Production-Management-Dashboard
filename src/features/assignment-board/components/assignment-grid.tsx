@@ -464,19 +464,19 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
         <div className="flex flex-wrap items-center gap-2">
         {sortedWorkAreas.map((wa) => (
           <button key={wa.id} onClick={() => selectWorkArea(wa.id)} onDoubleClick={() => setWorkAreaModal(wa)} title="Double-click to edit"
-            className="cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-all"
+            className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold shadow-sm transition-all md:px-4 md:py-2 md:text-sm"
             style={selectedWorkAreaId === wa.id ? { backgroundColor: wa.color_hex ?? "#334155", color: "#fff" } : { backgroundColor: "#fff", color: "#475569", border: "1px solid #e2e8f0" }}>
             {wa.name}
           </button>
         ))}
         <button onClick={() => setWorkAreaModal("add")}
-          className="rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm text-slate-500 hover:border-slate-400 hover:text-slate-700">
+          className="rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-xs text-slate-500 hover:border-slate-400 hover:text-slate-700 md:px-4 md:py-2 md:text-sm">
           + Add Dept
         </button>
         </div>
         <button
           onClick={() => setConfirmClear(true)}
-          className="mr-8 rounded-lg px-4 py-1.5 text-sm font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+          className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors md:mr-8 md:px-4 md:text-sm"
         >
           Clear All
         </button>
@@ -503,7 +503,7 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
       )}
 
       {/* Table */}
-      <div className="relative min-h-0 flex-1 flex items-start gap-2">
+      <div className="relative min-h-0 flex-1 flex flex-col items-stretch gap-2 md:flex-row md:items-start">
         {!needsShifts && (
           <>
         <div
@@ -734,7 +734,7 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
           onClick={() => setAddingShift({ label: "", startTime: "", endTime: "" })}
           onMouseEnter={() => setHeaderHover(true)}
           onMouseLeave={() => setHeaderHover(false)}
-          className={`shrink-0 mt-3 flex h-6 w-6 items-center justify-center rounded-md border border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-700 text-base leading-none transition-opacity ${headerHover || currentShifts.length === 0 ? "opacity-100" : "opacity-0"}`}
+          className={`shrink-0 mt-3 flex h-6 w-6 items-center justify-center rounded-md border border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-700 text-base leading-none transition-opacity ${headerHover || currentShifts.length === 0 ? "opacity-100" : "opacity-100 md:opacity-0"}`}
           title="Add shift"
         >
           +
