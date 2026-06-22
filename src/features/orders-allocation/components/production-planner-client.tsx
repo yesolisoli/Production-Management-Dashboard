@@ -22,7 +22,6 @@ export function ProductionPlannerClient() {
     draft,
     status,
     isEmpty,
-    cutOrdersTotals,
     setDate,
     addCutOrder,
     updateCutOrder,
@@ -82,7 +81,6 @@ export function ProductionPlannerClient() {
         <div className="flex flex-col gap-4 px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
           <CutOrdersSection
             rows={draft.cut_orders}
-            totals={cutOrdersTotals}
             onAdd={addCutOrder}
             onUpdate={updateCutOrder}
             onRemove={removeCutOrder}

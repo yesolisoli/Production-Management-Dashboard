@@ -1,8 +1,9 @@
 "use client";
 
+import { useCallback, useMemo } from "react";
 import { CustomSelect, type SelectOption } from "./custom-select";
+import { useAllocationAreas } from "../hooks/use-allocation-areas";
 import {
-  ALLOCATION_PRODUCTS,
   PRIORITIES,
   priorityDotClass,
   productDotClass,
@@ -11,15 +12,9 @@ import {
   type Priority,
 } from "../types";
 
-// Dropdown option lists for the Orders & Allocation selectors — each carries
-// its colour dot, derived from the single-source dot helpers in types.ts.
-const PRODUCT_OPTIONS: readonly SelectOption<AllocationProduct>[] =
-  ALLOCATION_PRODUCTS.map((group) => ({
-    value: group.key as AllocationProduct,
-    label: productLabel(group.key),
-    dotClass: productDotClass(group.key),
-  }));
-
+// Dropdown option list for the priority selector — each carries its colour dot,
+// derived from the single-source dot helpers in types.ts. (Product options are
+// built dynamically below from the live area vocabulary.)
 const PRIORITY_OPTIONS: readonly SelectOption<Priority>[] = PRIORITIES.map(
   (p) => ({
     value: p.value,
@@ -28,7 +23,9 @@ const PRIORITY_OPTIONS: readonly SelectOption<Priority>[] = PRIORITIES.map(
   })
 );
 
-// Product picker — custom dropdown with a per-product colour dot.
+// Product picker — custom dropdown with a per-product colour dot. Options are
+// the live area vocabulary (Primal groups + extra / custom areas); the "add"
+// row lets the operator define a new area, which is persisted and selected.
 export function ProductSelect({
   value,
   onChange,
@@ -38,12 +35,34 @@ export function ProductSelect({
   onChange: (value: AllocationProduct) => void;
   id?: string;
 }) {
+  const { areaKeys, addArea } = useAllocationAreas();
+
+  const options = useMemo<readonly SelectOption<AllocationProduct>[]>(
+    () =>
+      areaKeys.map((key) => ({
+        value: key,
+        label: productLabel(key),
+        dotClass: productDotClass(key),
+      })),
+    [areaKeys],
+  );
+
+  const handleAdd = useCallback(
+    (label: string) => {
+      const key = addArea(label);
+      if (key) onChange(key);
+    },
+    [addArea, onChange],
+  );
+
   return (
     <CustomSelect
       id={id}
       value={value}
-      options={PRODUCT_OPTIONS}
+      options={options}
       onChange={onChange}
+      onAdd={handleAdd}
+      addLabel="Add product / area"
     />
   );
 }

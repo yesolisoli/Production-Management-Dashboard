@@ -12,7 +12,6 @@
 import {
   PRIMAL_GROUPS,
   type PrimalGroup,
-  type PrimalGroupKey,
 } from "@/features/primal-calculation/types";
 
 // Seconds of cut time per piece (Est. cut time = pieces × 18s).
@@ -30,21 +29,39 @@ export type CutLocation = (typeof CUT_LOCATIONS)[number]["value"];
 
 // Floor-instruction "Rule type" — drives the colour coding on the sheet.
 //   dont     = Red    ("DO NOT")
-//   do       = Yellow ("DO THIS / HIGH PRIORITY")
+//   do       = Yellow ("DO THIS")
 //   standard = White  ("STANDARD")
-//   note     = Gray   ("GENERAL NOTE")
+// "General Note" is no longer a rule type — it is a Product / Area (see
+// allocation-areas.ts) so its lines can carry any of the rule types above.
 export const PRIORITIES = [
   { value: "dont", label: "DO NOT" },
-  { value: "do", label: "DO THIS / HIGH PRIORITY" },
+  { value: "do", label: "DO THIS" },
   { value: "standard", label: "STANDARD" },
-  { value: "note", label: "GENERAL NOTE" },
 ] as const;
 export type Priority = (typeof PRIORITIES)[number]["value"];
 
-// Products are the Primal production groups (single source of truth).
-export type AllocationProduct = PrimalGroupKey;
+// A product / area key. The five Primal production groups (ALLOCATION_PRODUCTS)
+// remain the single source of truth for anything that reconciles against Primal
+// availability. A key may ALSO be an extra, non-Primal floor area (see
+// allocation-areas.ts) used purely as a cut-order / instruction LABEL — those
+// never reconcile against Primal stock. So the key is a free string, not a
+// closed union over the Primal groups.
+export type AllocationProduct = string;
 export const ALLOCATION_PRODUCTS: readonly PrimalGroup[] = PRIMAL_GROUPS;
 export const DEFAULT_PRODUCT: AllocationProduct = PRIMAL_GROUPS[0].key;
+
+// Canonical ordering for product / area keys: the Primal groups first (in
+// PRIMAL_GROUPS order), then any extra / custom areas alphabetically. Used by
+// the cut-plan filter tabs and the printed allocation sheet so groups list in a
+// stable order regardless of the order rows were entered.
+export function sortProductKeys(keys: readonly string[]): string[] {
+  const order: string[] = PRIMAL_GROUPS.map((g) => g.key);
+  const rank = (key: string) => {
+    const index = order.indexOf(key);
+    return index === -1 ? order.length : index;
+  };
+  return [...keys].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
 
 // -------------------------------------------------------------------
 // Raw input entities — the ONLY values that get persisted (localStorage draft).
@@ -100,7 +117,7 @@ const PRODUCT_BADGE_CLASSES: Record<string, string> = {
   Legs: "bg-sky-100 text-sky-800",
   Loins: "bg-violet-100 text-violet-800",
   Ribs: "bg-emerald-100 text-emerald-800",
-  Picnic: "bg-slate-200 text-slate-700",
+  Picnic: "bg-pink-100 text-pink-800",
 };
 
 // Light-surface badge classes for a product key.
@@ -115,12 +132,27 @@ const PRODUCT_DOT_CLASSES: Record<string, string> = {
   Legs: "bg-sky-500",
   Loins: "bg-violet-500",
   Ribs: "bg-emerald-500",
-  Picnic: "bg-slate-400",
+  Picnic: "bg-pink-500",
 };
 
 // Solid dot class for a product key.
 export function productDotClass(key: string): string {
   return PRODUCT_DOT_CLASSES[key] ?? "bg-slate-400";
+}
+
+// Per-product text colour — same palette as the badge/dot, for colouring a
+// product's name on a light surface (e.g. the sheet's group identity column).
+const PRODUCT_TEXT_CLASSES: Record<string, string> = {
+  Butts: "text-amber-700",
+  Legs: "text-sky-700",
+  Loins: "text-violet-700",
+  Ribs: "text-emerald-700",
+  Picnic: "text-pink-700",
+};
+
+// Text colour class for a product key.
+export function productTextClass(key: string): string {
+  return PRODUCT_TEXT_CLASSES[key] ?? "text-slate-700";
 }
 
 export function locationLabel(value: CutLocation): string {
@@ -132,12 +164,11 @@ export function priorityLabel(value: Priority): string {
 }
 
 // Solid per-priority dot colour — matches the sheet legend
-// (Red = DO NOT · Yellow = DO THIS · White = STANDARD · Gray = GENERAL NOTE).
+// (Red = DO NOT · Yellow = DO THIS · White = STANDARD).
 const PRIORITY_DOT_CLASSES: Record<Priority, string> = {
   dont: "bg-red-500",
   do: "bg-amber-400",
   standard: "bg-slate-300",
-  note: "bg-slate-400",
 };
 
 // Solid dot class for a priority value.

@@ -5,14 +5,8 @@ import { Box, Check, Info, Pencil, Plus, Trash2, X } from "lucide-react";
 import { NumberStepper } from "@/components/shared/number-stepper";
 import { ProductSelect } from "./product-select";
 import { ProductFilterTabs } from "./product-filter-tabs";
+import { cutSeconds, formatMinutes } from "../calculations";
 import {
-  cutSeconds,
-  deriveCutOrdersTotals,
-  formatMinutes,
-  type CutOrdersTotals,
-} from "../calculations";
-import {
-  ALLOCATION_PRODUCTS,
   CUT_LOCATIONS,
   DEFAULT_PRODUCT,
   locationLabel,
@@ -20,6 +14,7 @@ import {
   productBadgeClass,
   productLabel,
   SECONDS_PER_PIECE,
+  sortProductKeys,
   type AllocationProduct,
   type CutLocation,
   type CutOrder,
@@ -29,7 +24,6 @@ import {
 // Presentation only: every change is forwarded to the parent's state hook.
 type CutOrdersSectionProps = {
   rows: CutOrder[];
-  totals: CutOrdersTotals;
   onAdd: (order: Omit<CutOrder, "id">) => void;
   onUpdate: (id: string, patch: Partial<Omit<CutOrder, "id">>) => void;
   onRemove: (id: string) => void;
@@ -43,7 +37,6 @@ const inputClass =
 
 export function CutOrdersSection({
   rows,
-  totals,
   onAdd,
   onUpdate,
   onRemove,
@@ -56,23 +49,20 @@ export function CutOrdersSection({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<AllocationProduct | "all">("all");
 
-  // Products actually present in the plan, in canonical order, with row counts.
-  // Drives the filter tabs — only show a tab for products that exist.
-  const productTabs = ALLOCATION_PRODUCTS.map((group) => ({
-    key: group.key as AllocationProduct,
-    count: rows.filter((row) => row.product === group.key).length,
-  })).filter((tab) => tab.count > 0);
+  // Products actually present in the plan, in canonical order (Primal groups
+  // first, then extra / custom areas), with row counts. Drives the filter tabs
+  // — only show a tab for products that exist.
+  const productTabs = sortProductKeys([
+    ...new Set(rows.map((row) => row.product)),
+  ]).map((key) => ({
+    key: key as AllocationProduct,
+    count: rows.filter((row) => row.product === key).length,
+  }));
 
-  // Keep each row's original plan number stable, then narrow to the active tab.
-  const visibleRows = rows
-    .map((row, index) => ({ row, number: index + 1 }))
-    .filter(({ row }) => filter === "all" || row.product === filter);
-
-  // Summary reflects the active filter; reuse the prop totals when unfiltered.
-  const visibleTotals =
-    filter === "all"
-      ? totals
-      : deriveCutOrdersTotals(visibleRows.map(({ row }) => row));
+  // Narrow to the active tab.
+  const visibleRows = rows.filter(
+    (row) => filter === "all" || row.product === filter
+  );
 
   const resetForm = () => {
     setProduct(DEFAULT_PRODUCT);
@@ -288,7 +278,6 @@ export function CutOrdersSection({
             <table className="w-full min-w-170 border-separate border-spacing-y-1.5 text-sm">
               <thead>
                 <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  <th className="px-3 pb-1">#</th>
                   <th className="px-3 pb-1">Product</th>
                   <th className="px-3 pb-1">Pieces</th>
                   <th className="px-3 pb-1">Location</th>
@@ -298,12 +287,9 @@ export function CutOrdersSection({
                 </tr>
               </thead>
               <tbody>
-                {visibleRows.map(({ row, number }) => (
+                {visibleRows.map((row) => (
                   <tr key={row.id} className="bg-slate-50/60">
-                    <td className="rounded-l-xl px-3 py-3 font-semibold text-blue-600">
-                      {number}
-                    </td>
-                    <td className="px-3 py-3">
+                    <td className="rounded-l-xl px-3 py-3">
                       <span
                         className={`rounded-md px-2 py-1 text-xs font-bold uppercase ${productBadgeClass(
                           row.product
@@ -359,12 +345,6 @@ export function CutOrdersSection({
                 ))}
               </tbody>
             </table>
-          </div>
-
-          <div className="mt-3 flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
-            <Box size={16} className="shrink-0" />
-            {visibleTotals.count} orders · Total {visibleTotals.totalPieces} pcs
-            · Est. Total Time {formatMinutes(visibleTotals.totalSeconds)}
           </div>
         </div>
       )}

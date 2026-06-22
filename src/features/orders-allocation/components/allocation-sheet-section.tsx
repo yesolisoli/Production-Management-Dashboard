@@ -3,9 +3,12 @@
 import { useState } from "react";
 import { Check, ClipboardList, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
-  ALLOCATION_PRODUCTS,
   DEFAULT_PRODUCT,
+  priorityLabel,
+  productDotClass,
   productLabel,
+  productTextClass,
+  sortProductKeys,
   type AllocationInstruction,
   type AllocationProduct,
   type Priority,
@@ -28,67 +31,53 @@ const labelClass =
 const inputClass =
   "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100";
 
-// Rule type → guidance-card styles. Each instruction reads as floor guidance,
-// colour-coded by rule type:
-//   dont = Red (DO NOT) · do = Yellow (DO THIS) · standard = White · note = Gray.
-const RULE_STYLES: Record<
-  Priority,
-  { border: string; tint: string; badge: string; colorWord: string }
-> = {
+// Rule type → guidance styles. The row stays on a plain background; the type is
+// shown by the left accent bar + the colour tag only (no row tint).
+//   dont = Red (DO NOT) · do = Yellow (DO THIS) · standard = White.
+const RULE_STYLES: Record<Priority, { border: string; badge: string }> = {
   dont: {
     border: "border-l-red-500",
-    tint: "bg-red-50",
     badge: "bg-red-100 text-red-700",
-    colorWord: "RED",
   },
   do: {
     border: "border-l-amber-400",
-    tint: "bg-amber-50",
     badge: "bg-amber-100 text-amber-800",
-    colorWord: "YELLOW",
   },
   standard: {
     border: "border-l-slate-300",
-    tint: "bg-white",
     badge: "bg-slate-100 text-slate-600",
-    colorWord: "WHITE",
-  },
-  note: {
-    border: "border-l-slate-400",
-    tint: "bg-slate-50",
-    badge: "bg-slate-200 text-slate-700",
-    colorWord: "GRAY",
   },
 };
 
-// Within a group, red DO NOT rows come first, then yellow, white, then gray.
+// Shared column template for the sheet table: rule tag · QTY · CUSTOMER ·
+// INSTRUCTION (flex) · actions. Used by every data row so they line up.
+const ROW_GRID =
+  "grid grid-cols-[5rem_4.5rem_7rem_minmax(0,1fr)_auto] items-center gap-3 sm:gap-4";
+// Left identity gutter (accent bar + category column) the headers must clear.
+const GROUP_GUTTER = "w-48";
+
+// Within a group, red DO NOT rows come first, then yellow, then white.
 const PRIORITY_RANK: Record<Priority, number> = {
   dont: 0,
   do: 1,
   standard: 2,
-  note: 3,
 };
 
 // Derive the printable sheet from raw rows (no extra state). Product groups
-// follow the Primal group order; GENERAL NOTE lines collapse into one
-// "Daily Allocation Sheet Instructions" → Daily Standing Rules block.
+// cover every category that actually has rows (Primal groups first, then extra
+// / custom areas — including the "General Note" area), in canonical order.
 function buildSheet(rows: AllocationInstruction[]) {
   const byPriority = (a: AllocationInstruction, b: AllocationInstruction) =>
     PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
 
-  const productGroups = ALLOCATION_PRODUCTS.map((group) => ({
-    key: group.key,
-    label: productLabel(group.key),
-    rows: rows
-      .filter((r) => r.category === group.key && r.priority !== "note")
-      .sort(byPriority),
-  })).filter((g) => g.rows.length > 0);
+  const categories = sortProductKeys([...new Set(rows.map((r) => r.category))]);
+  const productGroups = categories.map((key) => ({
+    key,
+    label: productLabel(key),
+    rows: rows.filter((r) => r.category === key).sort(byPriority),
+  }));
 
-  const standingRules = rows
-    .filter((r) => r.priority === "note")
-    .sort(byPriority);
-
-  return { productGroups, standingRules };
+  return { productGroups };
 }
 
 export function AllocationSheetSection({
@@ -108,42 +97,31 @@ export function AllocationSheetSection({
   // every group). Presentation only — the underlying rows are untouched.
   const [filter, setFilter] = useState<AllocationProduct | "all">("all");
 
+  // Top form is add-only — editing happens inline on each row (see editingId).
   const resetForm = () => {
     setCategory(DEFAULT_PRODUCT);
     setQty("");
     setInstruction("");
     setCustomer("");
     setPriority("standard");
-    setEditingId(null);
   };
 
   const submit = () => {
     if (!instruction.trim()) return; // an instruction line needs text
-    const payload = {
+    onAdd({
       category,
       qty: Number(qty) || 0,
       instruction: instruction.trim(),
       customer: customer.trim(),
       priority,
-    };
-    if (editingId) onUpdate(editingId, payload);
-    else onAdd(payload);
+    });
     resetForm();
   };
 
-  const startEdit = (row: AllocationInstruction) => {
-    setCategory(row.category);
-    setQty(row.qty ? String(row.qty) : "");
-    setInstruction(row.instruction);
-    setCustomer(row.customer);
-    setPriority(row.priority);
-    setEditingId(row.id);
-  };
-
-  const { productGroups, standingRules } = buildSheet(rows);
+  const { productGroups } = buildSheet(rows);
 
   // Product / area options that actually have rows, so the filter never offers
-  // an empty group. Standing rules live under "all" only.
+  // an empty group.
   const filterableGroups = productGroups.map((g) => ({
     key: g.key as AllocationProduct,
     count: g.rows.length,
@@ -152,7 +130,6 @@ export function AllocationSheetSection({
   const visibleGroups = filterActive
     ? productGroups.filter((g) => g.key === filter)
     : productGroups;
-  const visibleStandingRules = filterActive ? [] : standingRules;
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -192,6 +169,17 @@ export function AllocationSheetSection({
           />
         </div>
 
+        <div className="lg:col-span-2">
+          <label className={labelClass} htmlFor="ins-priority">
+            Rule type
+          </label>
+          <PrioritySelect
+            id="ins-priority"
+            value={priority}
+            onChange={setPriority}
+          />
+        </div>
+
         <div className="lg:col-span-1">
           <label className={labelClass} htmlFor="ins-qty">
             Qty affected
@@ -203,6 +191,20 @@ export function AllocationSheetSection({
             value={qty}
             onChange={(e) => setQty(e.target.value)}
             placeholder="optional"
+            className={inputClass}
+          />
+        </div>
+
+        <div className="lg:col-span-2">
+          <label className={labelClass} htmlFor="ins-customer">
+            Customer / context
+          </label>
+          <input
+            id="ins-customer"
+            type="text"
+            value={customer}
+            onChange={(e) => setCustomer(e.target.value)}
+            placeholder="e.g. SYSCO VIC MON"
             className={inputClass}
           />
         </div>
@@ -227,31 +229,6 @@ export function AllocationSheetSection({
           />
         </div>
 
-        <div className="lg:col-span-2">
-          <label className={labelClass} htmlFor="ins-customer">
-            Customer / context
-          </label>
-          <input
-            id="ins-customer"
-            type="text"
-            value={customer}
-            onChange={(e) => setCustomer(e.target.value)}
-            placeholder="e.g. SYSCO VIC MON"
-            className={inputClass}
-          />
-        </div>
-
-        <div className="lg:col-span-2">
-          <label className={labelClass} htmlFor="ins-priority">
-            Rule type
-          </label>
-          <PrioritySelect
-            id="ins-priority"
-            value={priority}
-            onChange={setPriority}
-          />
-        </div>
-
         <div className="flex flex-col lg:col-span-2">
           <span className={`${labelClass} opacity-0`} aria-hidden="true">
             Add
@@ -263,19 +240,9 @@ export function AllocationSheetSection({
               disabled={!instruction.trim()}
               className="flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
             >
-              {editingId ? <Check size={16} /> : <Plus size={16} />}
-              {editingId ? "Update" : "Add"}
+              <Plus size={16} />
+              Add
             </button>
-            {editingId && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="flex h-11 items-center gap-1.5 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
-              >
-                <X size={15} />
-                Cancel
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -322,67 +289,87 @@ export function AllocationSheetSection({
             />
           </div>
 
-          <div className="flex flex-col gap-5">
-            {visibleGroups.map((group) => (
-              <SheetGroup key={group.key} title={group.label}>
-                {group.rows.map((row) => (
-                  <SheetRow
-                    key={row.id}
-                    row={row}
-                    onEdit={() => startEdit(row)}
-                    onRemove={() => onRemove(row.id)}
-                  />
+          {visibleGroups.length > 0 ? (
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <div className="divide-y divide-slate-200">
+                {visibleGroups.map((group) => (
+                  <SheetGroup
+                    key={group.key}
+                    productKey={group.key}
+                    title={group.label}
+                  >
+                    {group.rows.map((row) =>
+                      editingId === row.id ? (
+                        <InlineRowEditor
+                          key={row.id}
+                          row={row}
+                          onSave={(patch) => {
+                            onUpdate(row.id, patch);
+                            setEditingId(null);
+                          }}
+                          onCancel={() => setEditingId(null)}
+                        />
+                      ) : (
+                        <SheetRow
+                          key={row.id}
+                          row={row}
+                          onEdit={() => setEditingId(row.id)}
+                          onRemove={() => onRemove(row.id)}
+                        />
+                      ),
+                    )}
+                  </SheetGroup>
                 ))}
-              </SheetGroup>
-            ))}
-
-            {visibleStandingRules.length > 0 && (
-              <SheetGroup title="Daily Standing Rules">
-                {visibleStandingRules.map((row) => (
-                  <StandingRuleRow
-                    key={row.id}
-                    row={row}
-                    onEdit={() => startEdit(row)}
-                    onRemove={() => onRemove(row.id)}
-                  />
-                ))}
-              </SheetGroup>
-            )}
-
-            {filterActive && visibleGroups.length === 0 && (
+              </div>
+            </div>
+          ) : (
+            filterActive && (
               <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
                 No floor instructions for this product.
               </p>
-            )}
-          </div>
+            )
+          )}
         </div>
       )}
     </section>
   );
 }
 
-// One product / area block: an uppercase header, a divider, then its rows.
+// One product / area band: a colour-coded identity column (monogram + name) on
+// the left, its rows on the right — aligned to ROW_GRID.
 function SheetGroup({
+  productKey,
   title,
   children,
 }: {
+  productKey: string;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <h4 className="text-sm font-bold uppercase tracking-wide text-slate-900">
-        {title}
-      </h4>
-      <div className="mt-1 border-t border-slate-300" />
-      <div className="divide-y divide-slate-100">{children}</div>
+    <div className="flex">
+      <div
+        className={`${GROUP_GUTTER} flex shrink-0 flex-col justify-start gap-1 bg-slate-50/60 px-4 py-3`}
+      >
+        <div className="flex items-center gap-2.5">
+          <span
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${productDotClass(productKey)}`}
+          />
+          <span
+            className={`truncate text-sm font-bold uppercase tracking-wide ${productTextClass(productKey)}`}
+          >
+            {title}
+          </span>
+        </div>
+      </div>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }
 
-// A compact, printable sheet line: QTY · INSTRUCTION · CUSTOMER · color tag.
-// Qty/customer support the instruction rather than dominating it. Edit/remove
-// stay available but visually secondary (dim until row hover/focus).
+// One sheet line, laid out on ROW_GRID: ITEM (rule tag + instruction) ·
+// LOCATION · QUANTITY · edit/remove. Edit/remove stay visually secondary
+// (dim until row hover/focus).
 function SheetRow({
   row,
   onEdit,
@@ -395,48 +382,20 @@ function SheetRow({
   const style = RULE_STYLES[row.priority];
   return (
     <div
-      className={`group flex items-baseline gap-3 border-l-2 ${style.border} ${style.tint} py-1.5 pl-3 pr-1`}
+      className={`group ${ROW_GRID} mb-1 border-b border-l-4 border-b-slate-200 ${style.border} py-2.5 pl-3 pr-4 transition hover:bg-slate-50/60`}
     >
-      <span className="w-16 shrink-0 text-xs font-bold uppercase tabular-nums text-slate-700">
+      <span
+        className={`hidden truncate rounded px-1.5 py-0.5 text-center text-[10px] font-bold uppercase sm:inline-block ${style.badge}`}
+      >
+        {priorityLabel(row.priority)}
+      </span>
+      <span className="text-xs font-bold uppercase tabular-nums text-slate-700">
         {row.qty > 0 ? `${row.qty} pc` : ""}
       </span>
-      <span className="min-w-0 flex-1 text-sm font-semibold uppercase text-slate-800">
-        {row.instruction}
-      </span>
-      <span className="hidden w-28 shrink-0 truncate text-xs uppercase text-slate-500 sm:block">
+      <span className="hidden truncate text-xs uppercase text-slate-500 sm:block">
         {row.customer || "—"}
       </span>
-      <RowTrailing
-        colorWord={style.colorWord}
-        badge={style.badge}
-        onEdit={onEdit}
-        onRemove={onRemove}
-      />
-    </div>
-  );
-}
-
-// Standing-rule line mirrors the reference: [COLOR] then the rule text.
-function StandingRuleRow({
-  row,
-  onEdit,
-  onRemove,
-}: {
-  row: AllocationInstruction;
-  onEdit: () => void;
-  onRemove: () => void;
-}) {
-  const style = RULE_STYLES[row.priority];
-  return (
-    <div
-      className={`group flex items-baseline gap-3 border-l-2 ${style.border} ${style.tint} py-1.5 pl-3 pr-1`}
-    >
-      <span
-        className={`w-16 shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-bold uppercase ${style.badge}`}
-      >
-        {style.colorWord}
-      </span>
-      <span className="min-w-0 flex-1 text-sm font-semibold uppercase text-slate-800">
+      <span className="min-w-0 truncate text-sm font-semibold uppercase text-slate-800">
         {row.instruction}
       </span>
       <RowActions onEdit={onEdit} onRemove={onRemove} />
@@ -444,26 +403,103 @@ function StandingRuleRow({
   );
 }
 
-// Right side of a product row: color tag + secondary edit/remove actions.
-function RowTrailing({
-  colorWord,
-  badge,
-  onEdit,
-  onRemove,
+// Inline editor — replaces a row in place when its edit button is clicked, so
+// the operator edits where the row lives instead of jumping to the top form.
+// Mirrors the add form's fields; local state seeds from the row and is committed
+// on Save. Enter saves, Escape cancels.
+function InlineRowEditor({
+  row,
+  onSave,
+  onCancel,
 }: {
-  colorWord: string;
-  badge: string;
-  onEdit: () => void;
-  onRemove: () => void;
+  row: AllocationInstruction;
+  onSave: (patch: Omit<AllocationInstruction, "id">) => void;
+  onCancel: () => void;
 }) {
+  const [category, setCategory] = useState<AllocationProduct>(row.category);
+  const [qty, setQty] = useState(row.qty ? String(row.qty) : "");
+  const [instruction, setInstruction] = useState(row.instruction);
+  const [customer, setCustomer] = useState(row.customer);
+  const [priority, setPriority] = useState<Priority>(row.priority);
+
+  const save = () => {
+    if (!instruction.trim()) return;
+    onSave({
+      category,
+      qty: Number(qty) || 0,
+      instruction: instruction.trim(),
+      customer: customer.trim(),
+      priority,
+    });
+  };
+
   return (
-    <div className="flex shrink-0 items-center gap-2">
-      <span
-        className={`hidden w-16 shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-bold uppercase sm:inline-block ${badge}`}
-      >
-        {colorWord}
-      </span>
-      <RowActions onEdit={onEdit} onRemove={onRemove} />
+    <div className="grid grid-cols-1 gap-3 border-l-4 border-l-slate-400 bg-slate-50 py-3 pl-3 pr-1 lg:grid-cols-12 lg:items-end">
+      <div className="lg:col-span-2">
+        <label className={labelClass}>Product / Area</label>
+        <ProductSelect value={category} onChange={setCategory} />
+      </div>
+      <div className="lg:col-span-2">
+        <label className={labelClass}>Rule type</label>
+        <PrioritySelect value={priority} onChange={setPriority} />
+      </div>
+      <div className="lg:col-span-1">
+        <label className={labelClass}>Qty affected</label>
+        <input
+          type="number"
+          min={0}
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          placeholder="optional"
+          className={inputClass}
+        />
+      </div>
+      <div className="lg:col-span-2">
+        <label className={labelClass}>Customer / context</label>
+        <input
+          type="text"
+          value={customer}
+          onChange={(e) => setCustomer(e.target.value)}
+          className={inputClass}
+        />
+      </div>
+      <div className="lg:col-span-3">
+        <label className={labelClass}>Floor instruction</label>
+        <input
+          type="text"
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            } else if (e.key === "Escape") {
+              onCancel();
+            }
+          }}
+          autoFocus
+          className={inputClass}
+        />
+      </div>
+      <div className="flex items-center justify-end gap-2 lg:col-span-2">
+        <button
+          type="button"
+          onClick={save}
+          disabled={!instruction.trim()}
+          className="flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
+        >
+          <Check size={16} />
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex h-11 items-center gap-1.5 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+        >
+          <X size={15} />
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

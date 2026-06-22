@@ -32,31 +32,20 @@ export function formatMinutes(seconds: number): string {
   return `${Math.round(seconds / 60)} min`;
 }
 
-export type CutOrdersTotals = {
-  count: number;
-  totalPieces: number;
-  totalSeconds: number;
-};
-
-export function deriveCutOrdersTotals(orders: CutOrder[]): CutOrdersTotals {
-  const totalPieces = orders.reduce((sum, o) => sum + o.pieces, 0);
-  return {
-    count: orders.length,
-    totalPieces,
-    totalSeconds: cutSeconds(totalPieces),
-  };
-}
-
 // Pieces ordered per Primal group — used to compare cut orders against the
 // availability that Hog Intake → Primal Calc produced. Every group is present
-// (zeros included) so the strip can render a complete row set.
+// (zeros included) so the strip can render a complete row set. Cut orders for
+// extra, non-Primal areas (see allocation-areas.ts) carry no Primal
+// availability, so their pieces are intentionally excluded here.
 export function piecesByGroup(
   orders: CutOrder[],
 ): Record<PrimalGroupKey, number> {
   const out = {} as Record<PrimalGroupKey, number>;
   for (const group of PRIMAL_GROUPS) out[group.key] = 0;
   for (const order of orders) {
-    out[order.product] = (out[order.product] ?? 0) + order.pieces;
+    if (order.product in out) {
+      out[order.product as PrimalGroupKey] += order.pieces;
+    }
   }
   return out;
 }

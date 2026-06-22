@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { todayString } from "@/lib/date";
 import { clampNonNegativeInt } from "@/features/hog-intake/calculations";
-import {
-  deriveCutOrdersTotals,
-  deriveInstructionsSummary,
-} from "../calculations";
+import { deriveInstructionsSummary } from "../calculations";
 import { clearDraft, readDraft, writeDraft } from "../draft-storage";
 import {
   emptyAllocationDraft,
@@ -202,10 +199,6 @@ export function useOrdersAllocationState() {
     setStatus({ kind: "saved", at: Date.now() });
   }, [draft]);
 
-  const cutOrdersTotals = useMemo(
-    () => deriveCutOrdersTotals(draft.cut_orders),
-    [draft.cut_orders],
-  );
   const instructionsSummary = useMemo(
     () => deriveInstructionsSummary(draft.instructions),
     [draft.instructions],
@@ -217,7 +210,6 @@ export function useOrdersAllocationState() {
     draft,
     status,
     isEmpty,
-    cutOrdersTotals,
     instructionsSummary,
     setDate,
     addCutOrder,

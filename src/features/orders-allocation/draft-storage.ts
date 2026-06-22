@@ -6,7 +6,6 @@
 // without touching the hook or UI (mirrors hog-intake / primal draft storage).
 
 import {
-  ALLOCATION_PRODUCTS,
   CUT_LOCATIONS,
   DEFAULT_PRODUCT,
   PRIORITIES,
@@ -33,10 +32,12 @@ function asString(raw: unknown): string {
   return typeof raw === "string" ? raw : "";
 }
 
+// A product / area key is free text (a Primal group OR an extra / custom area),
+// so any non-empty string is preserved; only missing / non-string values fall
+// back to the default. Label / colour helpers degrade gracefully for unknown
+// keys, and non-Primal keys are simply skipped by the group reconciliation.
 function coerceProduct(raw: unknown): AllocationProduct {
-  return ALLOCATION_PRODUCTS.some((g: { key: string }) => g.key === raw)
-    ? (raw as AllocationProduct)
-    : DEFAULT_PRODUCT;
+  return typeof raw === "string" && raw.trim() ? raw : DEFAULT_PRODUCT;
 }
 
 function coerceLocation(raw: unknown): CutLocation {
