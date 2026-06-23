@@ -1,19 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildSuggestedCutOrders } from "../calculations";
+import { buildProductionRows } from "../calculations";
 import {
   loadPrimalDemand,
   type PrimalDemandSnapshot,
 } from "../primal-demand-source";
-import type { CutOrder } from "../types";
+import type { ProductionRow } from "../types";
 
 export type PrimalDemandStatus = "loading" | "ready" | "missing" | "error";
 
 // Read-only Primal demand for a date (the source/reference for this screen).
 //
 // Loads the demand snapshot (see primal-demand-source — the single swap point
-// for a future Sign Off snapshot) and exposes the suggested cut orders derived
+// for a future Sign Off snapshot) and exposes the production-sheet rows derived
 // from that demand. NOTE: the demand the screen acts on is `salesOrders` per
 // group, never availableStock — availableStock/endingStock/shortage are
 // reference only (surfaced via the snapshot's availability rows).
@@ -46,10 +46,10 @@ export function usePrimalDemand(date: string) {
     load(date);
   }, [date, load]);
 
-  const suggestedCutOrders = useMemo<Omit<CutOrder, "id">[]>(
-    () => (snapshot ? buildSuggestedCutOrders(snapshot) : []),
+  const productionRows = useMemo<ProductionRow[]>(
+    () => (snapshot ? buildProductionRows(snapshot) : []),
     [snapshot],
   );
 
-  return { snapshot, status, suggestedCutOrders };
+  return { snapshot, status, productionRows };
 }

@@ -56,6 +56,8 @@ function coerceDraft(raw: unknown, date: string): HogIntakeRecord | null {
               typeof f.count === "number" && f.count >= 0
                 ? f.count
                 : 0,
+            delivery_time:
+              typeof f.delivery_time === "string" ? f.delivery_time : "",
           };
         })
         .filter((row): row is HogIntakeRecord["farm_records"][number] => row !== null)

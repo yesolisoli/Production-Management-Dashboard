@@ -64,13 +64,14 @@ export function FarmRecords({
       </div>
 
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[30rem] table-fixed border-t border-slate-100 text-sm">
+      <table className="w-full min-w-xl table-fixed border-t border-slate-100 text-sm">
         <thead>
           <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            <th className="w-[40%] pl-7 pr-5 py-3">Farm</th>
-            <th className="w-[18%] pl-6 pr-3 py-3">Type</th>
-            <th className="w-[18%] px-3 py-3 text-center">Tattoo / Tag</th>
-            <th className="w-[18%] px-3 py-3 text-center">Count</th>
+            <th className="w-[32%] pl-7 pr-5 py-3">Farm</th>
+            <th className="w-[15%] pl-6 pr-3 py-3">Type</th>
+            <th className="w-[16%] px-3 py-3 text-center">Tattoo / Tag</th>
+            <th className="w-[15%] px-3 py-3 text-center">Count</th>
+            <th className="w-[18%] px-3 py-3 text-center">Delivery Time</th>
             {!isEmpty ? <th className="w-12 px-3 py-3" /> : null}
           </tr>
         </thead>
@@ -114,6 +115,17 @@ export function FarmRecords({
                       ariaLabel="Count"
                       value={row.count}
                       onChange={(count) => onUpdate(row.id, { count })}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="time"
+                      value={row.delivery_time ?? ""}
+                      onChange={(e) =>
+                        onUpdate(row.id, { delivery_time: e.target.value })
+                      }
+                      aria-label="Delivery time"
+                      className="h-10 w-28 rounded-lg border border-transparent bg-transparent px-3 text-center text-base font-normal text-slate-900 outline-none transition hover:border-slate-200 focus:border-slate-400 focus:bg-white [&::-webkit-calendar-picker-indicator]:hidden"
                     />
                   </td>
                   <td className="px-3 py-2 text-right">

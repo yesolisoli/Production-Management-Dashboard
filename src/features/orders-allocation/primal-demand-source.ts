@@ -1,6 +1,9 @@
 "use client";
 
-import { emptyHogIntakeRecord } from "@/features/hog-intake/types";
+import {
+  emptyHogIntakeRecord,
+  type HogCounts,
+} from "@/features/hog-intake/types";
 import { fetchPreviousEndingStock } from "@/features/primal-calculation/ending-stock-source";
 import { loadHogIntakeForDate } from "@/features/primal-calculation/intake-source";
 import {
@@ -46,6 +49,10 @@ export type PrimalDemandSnapshot = {
   customerOrders: CustomerOrdersForDate;
   // Whether a real Hog Intake record backed the numbers for this date.
   hasIntake: boolean;
+  // The day's Hog Intake counts per hog type (JP / RWA / Sow / ...). Reference
+  // for downstream timing (e.g. the hog-break calculator), zeroed when no intake
+  // record backs the date.
+  hogCounts: HogCounts;
 };
 
 function emptySnapshot(
@@ -54,8 +61,9 @@ function emptySnapshot(
   customerOrders: CustomerOrdersForDate,
   availability: GroupAvailability[],
   hasIntake: boolean,
+  hogCounts: HogCounts,
 ): PrimalDemandSnapshot {
-  return { date, availability, skuOrders, customerOrders, hasIntake };
+  return { date, availability, skuOrders, customerOrders, hasIntake, hogCounts };
 }
 
 export async function loadPrimalDemand(
@@ -68,6 +76,7 @@ export async function loadPrimalDemand(
   const customRows = readCustomRowsForDate(date);
 
   let hasIntake = false;
+  let hogCounts: HogCounts = emptyHogIntakeRecord(date).hog_counts;
   let vm;
   try {
     const [intake, openingStock] = await Promise.all([
@@ -75,6 +84,7 @@ export async function loadPrimalDemand(
       fetchPreviousEndingStock(date),
     ]);
     hasIntake = Boolean(intake);
+    if (intake) hogCounts = intake.hog_counts;
     vm = derivePrimalViewModel({
       intake: intake ?? emptyHogIntakeRecord(date),
       orders: skuOrders,
@@ -103,5 +113,6 @@ export async function loadPrimalDemand(
     customerOrders,
     vm.availabilityRows,
     hasIntake,
+    hogCounts,
   );
 }

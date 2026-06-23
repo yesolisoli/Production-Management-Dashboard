@@ -3,9 +3,8 @@
 // The five Primal production groups (Butts / Legs / Loins / Ribs / Picnic) stay
 // the single product source of truth for anything that reconciles against
 // Primal availability — see types.ts. These EXTRA areas are byproduct / offcut
-// areas (jaws, fat heads, …) that only need a floor-instruction or cut-order
-// LABEL; they never reconcile against Primal stock (piecesByGroup /
-// reconcileByGroup ignore any product key outside PRIMAL_GROUPS).
+// areas (jaws, fat heads, …) that only need a floor-instruction LABEL; they
+// carry no Primal availability and never appear on the derived production sheet.
 //
 // Built-in defaults plus operator-added customs. Unlike the per-date draft, the
 // area vocabulary is global config, so it lives under its own localStorage key

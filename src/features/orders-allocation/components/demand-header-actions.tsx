@@ -1,27 +1,27 @@
 "use client";
 
 import { Calendar } from "lucide-react";
-import type { GroupReconcile } from "../calculations";
+import type { GroupOrdered } from "../calculations";
 import { productLabel } from "../types";
 
 // Shared AppHeader actions for the Primal-demand screens (Production Planner +
 // Orders & Allocation): the per-group ordered counts and the date picker that
 // drives which day's Primal demand / draft is loaded.
 type DemandHeaderActionsProps = {
-  reconcile: GroupReconcile[];
+  ordered: GroupOrdered[];
   date: string;
   onDateChange: (date: string) => void;
 };
 
 export function DemandHeaderActions({
-  reconcile,
+  ordered,
   date,
   onDateChange,
 }: DemandHeaderActionsProps) {
   return (
     <>
       <div className="mr-2 hidden items-center gap-3.5 pr-3 lg:flex">
-        {reconcile.map((group) => (
+        {ordered.map((group) => (
           <div key={group.group} className="flex flex-col items-end leading-tight">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
               {productLabel(group.group)}

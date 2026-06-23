@@ -6,21 +6,25 @@ import { clampNonNegativeInt } from "@/features/hog-intake/calculations";
 import { deriveInstructionsSummary } from "../calculations";
 import { clearDraft, readDraft, writeDraft } from "../draft-storage";
 import {
+  defaultProductionMeta,
   emptyAllocationDraft,
+  HOG_TYPES,
   isEmptyAllocationDraft,
   type AllocationDraft,
   type AllocationInstruction,
-  type CutOrder,
+  type HogBreakCalc,
+  type HogType,
+  type ProductionMeta,
 } from "../types";
 
 export type SaveStatus = { kind: "idle" } | { kind: "saved"; at: number };
 
 // Single source of truth for the Orders & Allocation screen.
 //
-// The draft (cut orders + morning-brief instructions) is the only persisted
-// state — written to localStorage on every edit so a day's work survives a
-// refresh. Totals, estimated times and the per-group ordered counts are DERIVED
-// here with useMemo and never stored.
+// The draft (per-SKU production overlay + morning-brief instructions) is the
+// only persisted state — written to localStorage on every edit so a day's work
+// survives a refresh. The production-sheet rows and per-group ordered counts are
+// DERIVED from the Primal snapshot and never stored.
 export function useOrdersAllocationState() {
   const [date, setDateState] = useState<string>(todayString);
   const [draft, setDraft] = useState<AllocationDraft>(() =>
@@ -71,67 +75,69 @@ export function useOrdersAllocationState() {
     if (nextDate) setDateState(nextDate);
   }, []);
 
-  // ----------------------------- Cut orders ----------------------------
-  const addCutOrder = useCallback((order: Omit<CutOrder, "id">) => {
-    setDraft((prev) => ({
-      ...prev,
-      cut_orders: [
-        ...prev.cut_orders,
-        { ...order, id: crypto.randomUUID(), pieces: clampNonNegativeInt(order.pieces) },
-      ],
-    }));
+  // ------------------------- Production overlay ------------------------
+  // The production-sheet rows are derived from Primal; only the operator's
+  // per-SKU operational fields are stored. Upsert merges the patch onto the
+  // existing meta (or a fresh default), clamping numbers and trimming text.
+  const setProductionMeta = useCallback(
+    (sku: string, patch: Partial<ProductionMeta>) => {
+      setDraft((prev) => {
+        const base = prev.production_meta[sku] ?? defaultProductionMeta();
+        const next: ProductionMeta = {
+          ...base,
+          ...patch,
+          ...(patch.secPerPc !== undefined
+            ? { secPerPc: clampNonNegativeInt(patch.secPerPc) }
+            : {}),
+          ...(patch.cutters !== undefined
+            ? { cutters: clampNonNegativeInt(patch.cutters) }
+            : {}),
+          ...(patch.start !== undefined ? { start: patch.start.trim() } : {}),
+          ...(patch.routes !== undefined
+            ? {
+                routes: patch.routes.map((r) => ({
+                  route: r.route.trim(),
+                  qty: clampNonNegativeInt(r.qty),
+                })),
+              }
+            : {}),
+        };
+        return {
+          ...prev,
+          production_meta: { ...prev.production_meta, [sku]: next },
+        };
+      });
+      setStatus({ kind: "idle" });
+    },
+    [],
+  );
+
+  // ---------------------------- Hog break -----------------------------
+  // Merge a patch onto the morning hog-break calc inputs, clamping the per-type
+  // count / rate records and the main-room buffer to non-negative ints. The
+  // derived timing (total minutes, break end, main-room start) is computed in
+  // the view via deriveHogBreak — never stored.
+  const setHogBreakCalc = useCallback((patch: Partial<HogBreakCalc>) => {
+    setDraft((prev) => {
+      const next: HogBreakCalc = { ...prev.hog_break, ...patch };
+      const counts = {} as Record<HogType, number>;
+      const secPerHead = {} as Record<HogType, number>;
+      for (const t of HOG_TYPES) {
+        counts[t.value] = clampNonNegativeInt(next.counts[t.value]);
+        secPerHead[t.value] = clampNonNegativeInt(next.secPerHead[t.value]);
+      }
+      return {
+        ...prev,
+        hog_break: {
+          counts,
+          secPerHead,
+          start: next.start,
+          mainRoomBufferMin: clampNonNegativeInt(next.mainRoomBufferMin),
+        },
+      };
+    });
     setStatus({ kind: "idle" });
   }, []);
-
-  const updateCutOrder = useCallback(
-    (id: string, patch: Partial<Omit<CutOrder, "id">>) => {
-      setDraft((prev) => ({
-        ...prev,
-        cut_orders: prev.cut_orders.map((row) =>
-          row.id === id
-            ? {
-                ...row,
-                ...patch,
-                ...(patch.pieces !== undefined
-                  ? { pieces: clampNonNegativeInt(patch.pieces) }
-                  : {}),
-              }
-            : row,
-        ),
-      }));
-      setStatus({ kind: "idle" });
-    },
-    [],
-  );
-
-  const removeCutOrder = useCallback((id: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      cut_orders: prev.cut_orders.filter((row) => row.id !== id),
-    }));
-  }, []);
-
-  const clearCutOrders = useCallback(() => {
-    setDraft((prev) => ({ ...prev, cut_orders: [] }));
-  }, []);
-
-  // Replace all cut-order rows in one shot — used to seed (or regenerate) the
-  // day's cut orders from Primal demand. Each row gets a fresh stable id; the
-  // planner then adjusts pieces / location / note as usual.
-  const replaceCutOrders = useCallback(
-    (orders: Omit<CutOrder, "id">[]) => {
-      setDraft((prev) => ({
-        ...prev,
-        cut_orders: orders.map((o) => ({
-          ...o,
-          id: crypto.randomUUID(),
-          pieces: clampNonNegativeInt(o.pieces),
-        })),
-      }));
-      setStatus({ kind: "idle" });
-    },
-    [],
-  );
 
   // ---------------------------- Instructions ---------------------------
   const addInstruction = useCallback(
@@ -212,11 +218,8 @@ export function useOrdersAllocationState() {
     isEmpty,
     instructionsSummary,
     setDate,
-    addCutOrder,
-    updateCutOrder,
-    removeCutOrder,
-    clearCutOrders,
-    replaceCutOrders,
+    setProductionMeta,
+    setHogBreakCalc,
     addInstruction,
     updateInstruction,
     removeInstruction,

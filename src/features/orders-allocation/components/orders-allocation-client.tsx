@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { AppHeader } from "@/components/layout/app-header";
-import { reconcileByGroup } from "../calculations";
+import { orderedByGroup } from "../calculations";
 import { useOrdersAllocationState } from "../hooks/use-orders-allocation-state";
 import { usePrimalDemand } from "../hooks/use-primal-demand";
 import { AllocationSheetSection } from "./allocation-sheet-section";
@@ -30,11 +30,10 @@ export function OrdersAllocationClient() {
 
   const { snapshot } = usePrimalDemand(date);
 
-  // Per-group reconciliation of Primal demand against the cut orders entered
-  // (on Production Planner) — surfaced as the header's ordered counts.
-  const reconcile = useMemo(
-    () => reconcileByGroup(snapshot?.availability ?? [], draft.cut_orders),
-    [snapshot, draft.cut_orders],
+  // Per-group ordered counts from Primal demand — the header strip.
+  const ordered = useMemo(
+    () => orderedByGroup(snapshot?.availability ?? []),
+    [snapshot],
   );
 
   return (
@@ -44,7 +43,7 @@ export function OrdersAllocationClient() {
         title="Orders & Allocation"
         actions={
           <DemandHeaderActions
-            reconcile={reconcile}
+            ordered={ordered}
             date={date}
             onDateChange={setDate}
           />

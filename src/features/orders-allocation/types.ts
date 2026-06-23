@@ -5,27 +5,111 @@
 // Calc already drive (Butts / Legs / Loins / Ribs / Picnic). This keeps a single
 // product source of truth so availability can be compared per group.
 //
-// Only RAW input (cut_orders + instructions) is ever persisted. Everything the
-// screen shows as a total, estimated time, or sheet line is DERIVED in
-// calculations.ts and never stored as independent state.
+// Only RAW input (the per-SKU operational overlay + instructions) is ever
+// persisted. The production-sheet rows themselves — SKU, name, ordered qty — are
+// DERIVED from the Primal demand snapshot in calculations.ts, never stored.
 
 import {
   PRIMAL_GROUPS,
   type PrimalGroup,
+  type PrimalGroupKey,
 } from "@/features/primal-calculation/types";
 
-// Seconds of cut time per piece (Est. cut time = pieces × 18s).
-export const SECONDS_PER_PIECE = 18;
-
-// Quick-add buttons next to the Pieces stepper.
-export const PIECE_QUICK_ADDS = [50, 100, 200] as const;
-
-// A cut order is sent to one of two physical locations.
-export const CUT_LOCATIONS = [
-  { value: "main", label: "Main Line" },
+// A production-sheet row is cut in one of these physical rooms (ROOM column).
+// Single source for the room picker; extend here to add rooms.
+export const PRODUCTION_ROOMS = [
+  { value: "main", label: "Main Room" },
+  { value: "second", label: "Second Cutting Room" },
   { value: "overflow", label: "Overflow Room" },
 ] as const;
-export type CutLocation = (typeof CUT_LOCATIONS)[number]["value"];
+export type ProductionRoom = (typeof PRODUCTION_ROOMS)[number]["value"];
+
+export function productionRoomLabel(value: ProductionRoom): string {
+  return PRODUCTION_ROOMS.find((r) => r.value === value)?.label ?? value;
+}
+
+// The production day is split by the hog break. Each SKU is assigned to exactly
+// one phase (stored in its ProductionMeta); the planner tabs filter the derived
+// rows by that assignment (no parallel state system).
+export const CUT_PHASES = [
+  { value: "hog_break", label: "Hog Break" },
+  { value: "after_hog_break", label: "After Hog Break" },
+] as const;
+export type CutPhase = (typeof CUT_PHASES)[number]["value"];
+export const DEFAULT_CUT_PHASE: CutPhase = "hog_break";
+
+export function cutPhaseLabel(value: CutPhase): string {
+  return CUT_PHASES.find((p) => p.value === value)?.label ?? value;
+}
+
+// Hog-break calculator — the morning's kill counts drive how long the hog break
+// runs, and therefore when the main room can start. Each hog type has a default
+// SEC/HEAD rate (seconds of break work per head). The COUNT for most types is
+// PULLED from the day's Hog Intake (via `intakeKeys` — the intake hog types that
+// sum into this line); types with no `intakeKeys` are entered by hand. TOTAL
+// MINUTES / break end / main-room start are all DERIVED (deriveHogBreak in
+// calculations.ts) — only the rates, manual counts, start and buffer persist.
+export const HOG_TYPES = [
+  {
+    value: "regular",
+    label: "Regular Hog",
+    defaultSecPerHead: 34,
+    intakeKeys: ["JP", "RWA"],
+  },
+  { value: "sow", label: "Sow", defaultSecPerHead: 45, intakeKeys: ["Sow"] },
+  {
+    value: "sow_shoulder",
+    label: "Sow Shoulder",
+    defaultSecPerHead: 15,
+    intakeKeys: [],
+  },
+] as const;
+export type HogType = (typeof HOG_TYPES)[number]["value"];
+
+// Default minutes between the hog break ending and the main room starting
+// (clean-down / changeover buffer).
+export const DEFAULT_MAIN_ROOM_BUFFER_MIN = 10;
+// Default time the hog break begins each morning.
+export const DEFAULT_HOG_BREAK_START = "05:00";
+
+// Raw, persisted inputs for the hog-break calculator.
+export type HogBreakCalc = {
+  counts: Record<HogType, number>; // COUNT per hog type (entered each morning)
+  secPerHead: Record<HogType, number>; // SEC/HEAD per hog type (break rate)
+  start: string; // HOG BREAK START — free time text, e.g. "05:00"
+  mainRoomBufferMin: number; // gap between break end and main-room start
+};
+
+export function defaultHogBreakCalc(): HogBreakCalc {
+  const counts = {} as Record<HogType, number>;
+  const secPerHead = {} as Record<HogType, number>;
+  for (const t of HOG_TYPES) {
+    counts[t.value] = 0;
+    secPerHead[t.value] = t.defaultSecPerHead;
+  }
+  return {
+    counts,
+    secPerHead,
+    start: DEFAULT_HOG_BREAK_START,
+    mainRoomBufferMin: DEFAULT_MAIN_ROOM_BUFFER_MIN,
+  };
+}
+
+// A hog-break calc is "untouched" when it still equals the default (no counts
+// entered, default rate / start / buffer) — used so a day with only the empty
+// calculator still counts as an empty draft.
+export function isDefaultHogBreakCalc(calc: HogBreakCalc): boolean {
+  const d = defaultHogBreakCalc();
+  return (
+    calc.start === d.start &&
+    calc.mainRoomBufferMin === d.mainRoomBufferMin &&
+    HOG_TYPES.every(
+      (t) =>
+        calc.counts[t.value] === d.counts[t.value] &&
+        calc.secPerHead[t.value] === d.secPerHead[t.value],
+    )
+  );
+}
 
 // Floor-instruction "Rule type" — drives the colour coding on the sheet.
 //   dont     = Red    ("DO NOT")
@@ -67,13 +151,49 @@ export function sortProductKeys(keys: readonly string[]): string[] {
 // Raw input entities — the ONLY values that get persisted (localStorage draft).
 // -------------------------------------------------------------------
 
-export type CutOrder = {
-  id: string; // stable id (crypto.randomUUID())
-  product: AllocationProduct;
-  pieces: number; // non-negative integer
-  location: CutLocation;
-  note: string; // free text, e.g. "B'less boxed vac - SYSCO"
+// One SKU-level production-sheet row, DERIVED from the Primal demand snapshot
+// (never persisted — recomputed from Primal on every render). SKU / name / qty
+// come straight from the catalog + the date's orders.
+export type ProductionRow = {
+  sku: string;
+  name: string; // catalog product name, e.g. "PORK LOIN - VAC PAC"
+  group: PrimalGroupKey; // Primal group (badge colour + product filter)
+  qtyCases: number; // QTY C/S — ordered cases
+  qtyPcs: number; // QTY PCS — ordered loose pieces
 };
+
+// The operator-entered overlay for a production row, keyed by SKU. This is the
+// ONLY production-sheet data that is persisted; everything else on the row is
+// derived from Primal. Defaults apply until the operator edits a row.
+// One delivery-route assignment for a production line: which truck route a
+// portion of the line ships on, and how many go on it. A line can split across
+// several routes (e.g. "#9 (5) + #2 (2)").
+export type RouteAssignment = {
+  route: string; // truck route label, e.g. "9" or "PUW"
+  qty: number; // how many go on this route
+};
+
+// FINISH is intentionally NOT here: it is DERIVED from start + secPerPc * pieces
+// (see computeFinish in calculations.ts), never entered or persisted.
+export type ProductionMeta = {
+  phase: CutPhase; // which hog-break phase the SKU is cut in
+  room: ProductionRoom; // ROOM
+  start: string; // START — free time text, e.g. "6:00"
+  secPerPc: number; // SEC/PC — net cutting seconds per piece
+  cutters: number; // CUTTERS
+  routes: RouteAssignment[]; // DELIVERY ROUTE — truck route split for the line
+};
+
+export function defaultProductionMeta(): ProductionMeta {
+  return {
+    phase: DEFAULT_CUT_PHASE,
+    room: PRODUCTION_ROOMS[0].value,
+    start: "",
+    secPerPc: 0,
+    cutters: 0,
+    routes: [],
+  };
+}
 
 export type AllocationInstruction = {
   id: string; // stable id
@@ -84,10 +204,13 @@ export type AllocationInstruction = {
   priority: Priority;
 };
 
-// One day's draft = the unit of local persistence, keyed by date.
+// One day's draft = the unit of local persistence, keyed by date. The cut plan
+// rows are DERIVED from Primal (not stored); only the per-SKU operational
+// overlay (production_meta) and the morning-brief instructions are persisted.
 export type AllocationDraft = {
   date: string; // "YYYY-MM-DD"
-  cut_orders: CutOrder[];
+  hog_break: HogBreakCalc; // morning hog-break calculator inputs
+  production_meta: Record<string /* sku */, ProductionMeta>;
   instructions: AllocationInstruction[];
 };
 
@@ -96,11 +219,20 @@ export type AllocationDraft = {
 // -------------------------------------------------------------------
 
 export function emptyAllocationDraft(date: string): AllocationDraft {
-  return { date, cut_orders: [], instructions: [] };
+  return {
+    date,
+    hog_break: defaultHogBreakCalc(),
+    production_meta: {},
+    instructions: [],
+  };
 }
 
 export function isEmptyAllocationDraft(draft: AllocationDraft): boolean {
-  return draft.cut_orders.length === 0 && draft.instructions.length === 0;
+  return (
+    isDefaultHogBreakCalc(draft.hog_break) &&
+    Object.keys(draft.production_meta).length === 0 &&
+    draft.instructions.length === 0
+  );
 }
 
 // Uppercase display label for a product key, e.g. "Butts" -> "BUTTS".
@@ -153,10 +285,6 @@ const PRODUCT_TEXT_CLASSES: Record<string, string> = {
 // Text colour class for a product key.
 export function productTextClass(key: string): string {
   return PRODUCT_TEXT_CLASSES[key] ?? "text-slate-700";
-}
-
-export function locationLabel(value: CutLocation): string {
-  return CUT_LOCATIONS.find((l) => l.value === value)?.label ?? value;
 }
 
 export function priorityLabel(value: Priority): string {

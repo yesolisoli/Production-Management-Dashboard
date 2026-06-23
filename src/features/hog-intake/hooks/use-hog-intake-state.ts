@@ -239,6 +239,7 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
           type: "",
           tattoo: "",
           count: 0,
+          delivery_time: "",
         },
       ],
     }));

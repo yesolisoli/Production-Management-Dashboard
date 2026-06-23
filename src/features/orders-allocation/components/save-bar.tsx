@@ -19,7 +19,7 @@ export function SaveBar({ status, isEmpty, onSave, onClear }: SaveBarProps) {
   const [confirmClear, setConfirmClear] = useState(false);
 
   return (
-    <div className="sticky bottom-0 z-10 border-t border-slate-200 bg-white/90 px-3 py-3 backdrop-blur sm:px-5">
+    <div className="sticky bottom-0 z-10 bg-slate-50/90 px-3 py-3 backdrop-blur sm:px-5">
       <div className="flex items-center gap-3">
         {status.kind === "saved" && (
           <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">

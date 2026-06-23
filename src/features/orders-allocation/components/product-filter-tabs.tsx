@@ -16,25 +16,31 @@ export function ProductFilterTabs({
   onChange,
   total,
   tabs,
+  showAll = true,
 }: {
   value: AllocationProduct | "all";
   onChange: (value: AllocationProduct | "all") => void;
   total: number;
   tabs: ProductFilterTab[];
+  // When false, the neutral "All" pill is hidden and only per-product tabs are
+  // shown (the caller views one product at a time).
+  showAll?: boolean;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      <button
-        type="button"
-        onClick={() => onChange("all")}
-        className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-          value === "all"
-            ? "border-transparent bg-slate-900 text-white"
-            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-        }`}
-      >
-        All ({total})
-      </button>
+      {showAll && (
+        <button
+          type="button"
+          onClick={() => onChange("all")}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+            value === "all"
+              ? "border-transparent bg-slate-900 text-white"
+              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          All ({total})
+        </button>
+      )}
       {tabs.map((tab) => {
         const active = value === tab.key;
         return (

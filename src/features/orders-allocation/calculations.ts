@@ -1,13 +1,11 @@
 // Pure derivation for Orders & Allocation (no I/O, no state).
 //
-// Everything here is recomputed from the raw draft on every render — none of
-// these values are persisted. Mirrors the Primal Calculation convention where
-// the view-model is derived in one place and the components just render it.
+// Everything here is recomputed from the raw draft / Primal snapshot on every
+// render — none of these values are persisted. Mirrors the Primal Calculation
+// convention where the view-model is derived in one place and the components
+// just render it.
 
-import { casesToPieces } from "@/features/primal-calculation/calculations";
-import {
-  PRODUCT_SPEC_BY_SKU,
-} from "@/features/primal-calculation/product-specs";
+import { PRODUCT_SPEC_BY_SKU } from "@/features/primal-calculation/product-specs";
 import {
   groupForCategory,
   PRIMAL_GROUPS,
@@ -16,38 +14,152 @@ import {
 } from "@/features/primal-calculation/types";
 import type { PrimalDemandSnapshot } from "./primal-demand-source";
 import {
-  SECONDS_PER_PIECE,
+  HOG_TYPES,
   type AllocationInstruction,
-  type AllocationProduct,
-  type CutOrder,
+  type HogBreakCalc,
+  type HogType,
+  type ProductionRow,
+  type RouteAssignment,
 } from "./types";
 
-// Estimated cut time, in seconds, for a piece count (pieces × 18s).
-export function cutSeconds(pieces: number): number {
-  return Math.max(0, Math.round(pieces)) * SECONDS_PER_PIECE;
+// Render a line's delivery-route split for the read row, e.g. "#9 (5) + #2 (2)".
+// Numeric route labels get a "#" prefix (so "9" -> "#9"); named routes are kept
+// verbatim ("PUW"). Entries with a blank route label are skipped; returns "" for
+// no routes (the sheet shows an em-dash).
+export function formatRouteSummary(routes: RouteAssignment[]): string {
+  return routes
+    .map((r) => ({ route: r.route.trim(), qty: r.qty }))
+    .filter((r) => r.route !== "")
+    .map((r) => {
+      const label = /^\d+$/.test(r.route) ? `#${r.route}` : r.route;
+      return `${label} (${r.qty})`;
+    })
+    .join(" + ");
 }
 
-// Human label for a duration in seconds, e.g. 1800 -> "30 min".
-export function formatMinutes(seconds: number): string {
-  return `${Math.round(seconds / 60)} min`;
+// Derive the FINISH clock time from a free-text START ("6:00" or "6:00:30"),
+// SEC/PC (net seconds of work per piece) and the row's PIECE COUNT. FINISH is
+// never entered or stored — the operator sets START and SEC/PC, the work time
+// is secPerPc * pieces, and the end time follows. Returns "" when START is
+// unparseable or the total work time is non-positive (the sheet shows an
+// em-dash until both inputs are present). Wraps within a 24-hour clock and
+// renders as "H:MM:SS" (no leading-zero hour), e.g. "6:00" + 10s/pc * 30pc
+// (300s) -> "6:05:00".
+export function computeFinish(
+  start: string,
+  secPerPc: number,
+  pieces: number,
+): string {
+  const workSec = Math.max(0, Math.floor(secPerPc)) * Math.max(0, pieces);
+  const match = start.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match || workSec <= 0) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = match[3] ? Number(match[3]) : 0;
+  if (hours > 23 || minutes > 59 || seconds > 59) return "";
+  const total = (hours * 3600 + minutes * 60 + seconds + workSec) % (24 * 3600);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-// Pieces ordered per Primal group — used to compare cut orders against the
-// availability that Hog Intake → Primal Calc produced. Every group is present
-// (zeros included) so the strip can render a complete row set. Cut orders for
-// extra, non-Primal areas (see allocation-areas.ts) carry no Primal
-// availability, so their pieces are intentionally excluded here.
-export function piecesByGroup(
-  orders: CutOrder[],
-): Record<PrimalGroupKey, number> {
-  const out = {} as Record<PrimalGroupKey, number>;
-  for (const group of PRIMAL_GROUPS) out[group.key] = 0;
-  for (const order of orders) {
-    if (order.product in out) {
-      out[order.product as PrimalGroupKey] += order.pieces;
-    }
-  }
-  return out;
+// Add `minutes` to a free-text "HH:MM" clock time, returning "HH:MM" on a
+// 24-hour clock (wrapping past midnight). Returns "" when the start is
+// unparseable. The minutes are rounded to the nearest whole minute, matching the
+// hog-break sheet's clock-time display. e.g. "05:00" + 198.3 -> "08:18".
+function addMinutesToClock(start: string, minutes: number): string {
+  const match = start.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const mins = Number(match[2]);
+  if (hours > 23 || mins > 59) return "";
+  const total =
+    (((hours * 60 + mins + Math.round(minutes)) % (24 * 60)) + 24 * 60) %
+    (24 * 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+// One hog type's line on the calculator. COUNT is either PULLED from Hog Intake
+// (sum of the type's `intakeKeys`) or entered by hand (`manual` types); SEC/HEAD
+// is always an input; TOTAL MINUTES is their product (count * secPerHead, in
+// minutes).
+export type HogBreakRow = {
+  type: HogType;
+  label: string;
+  count: number;
+  manual: boolean; // true ⇒ COUNT is entered by hand, not from intake
+  secPerHead: number;
+  totalMinutes: number;
+};
+
+// Derived hog-break timing: per-type rows, the totals, and the clock times the
+// break ends and the main room starts. Pure — recomputed from the raw calc
+// inputs, never stored. END = START + total minutes; MAIN ROOM START = END +
+// buffer. The clock times are "" until START parses (the sheet shows an
+// em-dash).
+export type HogBreakResult = {
+  rows: HogBreakRow[];
+  totalCount: number;
+  totalMinutes: number;
+  end: string; // HOG BREAK END
+  mainRoomStart: string; // MAIN ROOM START
+};
+
+// `intakeCounts` is the day's Hog Intake counts (HogCounts, keyed by intake hog
+// type). A line's COUNT is the sum of its `intakeKeys` from that record; lines
+// with no `intakeKeys` (manual types) fall back to the operator-entered count.
+export function deriveHogBreak(
+  calc: HogBreakCalc,
+  intakeCounts: Partial<Record<string, number>>,
+): HogBreakResult {
+  const rows: HogBreakRow[] = HOG_TYPES.map((t) => {
+    const manual = t.intakeKeys.length === 0;
+    const count = manual
+      ? Math.max(0, Math.floor(calc.counts[t.value] ?? 0))
+      : t.intakeKeys.reduce(
+          (sum, key) => sum + Math.max(0, Math.floor(intakeCounts[key] ?? 0)),
+          0,
+        );
+    const secPerHead = Math.max(0, Math.floor(calc.secPerHead[t.value] ?? 0));
+    return {
+      type: t.value,
+      label: t.label,
+      count,
+      manual,
+      secPerHead,
+      totalMinutes: (count * secPerHead) / 60,
+    };
+  });
+  const totalCount = rows.reduce((sum, r) => sum + r.count, 0);
+  const totalMinutes = rows.reduce((sum, r) => sum + r.totalMinutes, 0);
+  const end = addMinutesToClock(calc.start, totalMinutes);
+  const mainRoomStart = addMinutesToClock(end, calc.mainRoomBufferMin);
+  return { rows, totalCount, totalMinutes, end, mainRoomStart };
+}
+
+// Reconcile a line's delivery-route split against its ordered piece count
+// (Qty Pcs). `assigned` is the sum of route quantities; `remaining` is the
+// target minus that (negative ⇒ more assigned than ordered). Pure derivation —
+// drives the validation badge on the sheet, never stored.
+export type RouteReconciliation = {
+  assigned: number;
+  target: number;
+  remaining: number; // target - assigned (negative = over-assigned)
+  status: "balanced" | "under" | "over";
+};
+
+export function reconcileRoutes(
+  routes: RouteAssignment[],
+  targetPcs: number,
+): RouteReconciliation {
+  const assigned = routes.reduce((sum, r) => sum + Math.max(0, r.qty), 0);
+  const remaining = targetPcs - assigned;
+  const status =
+    remaining === 0 ? "balanced" : remaining > 0 ? "under" : "over";
+  return { assigned, target: targetPcs, remaining, status };
 }
 
 export type InstructionsSummary = {
@@ -61,112 +173,51 @@ export function deriveInstructionsSummary(
 }
 
 // -------------------------------------------------------------------
-// Primal demand → cut orders.
+// Primal demand → production-sheet rows.
 //
-// The pieces a group demands is `salesOrders` (catalog/SKU orders), NOT
-// availableStock. When per-SKU detail exists we split that demand into one
-// labelled row per SKU (note = SKU name); otherwise we fall back to a single
-// group-level row sized to the group's salesOrders. customer_orders are special
-// reservations already netted out of availableStock by Primal, so they are
-// reference only and never seeded here (seeding them would double-count).
+// One row per ordered SKU for the date: SKU, catalog name, Primal group, and the
+// raw ordered quantities (cases + loose pieces). These are DERIVED — the screen
+// overlays the operator's per-SKU operational fields (ProductionMeta) on top.
+// SKUs with no catalog spec, or with zero ordered quantity, are skipped.
 // -------------------------------------------------------------------
-
-// Total demand pieces for one SKU order (reuses Primal's case→piece conversion).
-function skuOrderPieces(sku: string, today_cases: number, today_pcs: number): number {
-  const spec = PRODUCT_SPEC_BY_SKU[sku];
-  if (!spec) return Math.max(0, Math.round(today_pcs));
-  return Math.max(0, Math.round(today_pcs)) + casesToPieces(spec, today_cases);
-}
-
-export function buildSuggestedCutOrders(
+export function buildProductionRows(
   snapshot: PrimalDemandSnapshot,
-): Omit<CutOrder, "id">[] {
-  const availabilityByGroup = new Map<PrimalGroupKey, GroupAvailability>(
-    snapshot.availability.map((row) => [row.group, row]),
-  );
-
-  // Group the raw SKU orders by their production group, keeping the per-SKU
-  // breakdown so each becomes its own labelled row.
-  const skuRowsByGroup = new Map<
-    PrimalGroupKey,
-    { note: string; pieces: number }[]
-  >();
+): ProductionRow[] {
+  const rows: ProductionRow[] = [];
   for (const [sku, order] of Object.entries(snapshot.skuOrders)) {
     const spec = PRODUCT_SPEC_BY_SKU[sku];
     if (!spec) continue;
-    const pieces = skuOrderPieces(sku, order.today_cases, order.today_pcs);
-    if (pieces <= 0) continue;
-    const groupKey = groupForCategory(spec.category).key as PrimalGroupKey;
-    const list = skuRowsByGroup.get(groupKey) ?? [];
-    list.push({ note: spec.name, pieces });
-    skuRowsByGroup.set(groupKey, list);
+    const qtyCases = Math.max(0, Math.round(order.today_cases));
+    const qtyPcs = Math.max(0, Math.round(order.today_pcs));
+    if (qtyCases <= 0 && qtyPcs <= 0) continue;
+    rows.push({
+      sku,
+      name: spec.name,
+      group: groupForCategory(spec.category).key as PrimalGroupKey,
+      qtyCases,
+      qtyPcs,
+    });
   }
-
-  const suggestions: Omit<CutOrder, "id">[] = [];
-  for (const group of PRIMAL_GROUPS) {
-    const groupKey = group.key as PrimalGroupKey;
-    const skuRows = skuRowsByGroup.get(groupKey);
-    if (skuRows && skuRows.length > 0) {
-      for (const row of skuRows) {
-        suggestions.push({
-          product: groupKey as AllocationProduct,
-          pieces: row.pieces,
-          location: "main",
-          note: row.note,
-        });
-      }
-      continue;
-    }
-    // Fallback: one row sized to the group's total demand (salesOrders).
-    const demand = availabilityByGroup.get(groupKey)?.salesOrders ?? 0;
-    if (demand > 0) {
-      suggestions.push({
-        product: groupKey as AllocationProduct,
-        pieces: demand,
-        location: "main",
-        note: "",
-      });
-    }
-  }
-  return suggestions;
+  // Canonical group order (PRIMAL_GROUPS), then SKU ascending within a group.
+  const groupRank = (group: string) => {
+    const i = PRIMAL_GROUPS.findIndex((g) => g.key === group);
+    return i === -1 ? PRIMAL_GROUPS.length : i;
+  };
+  return rows.sort(
+    (a, b) =>
+      groupRank(a.group) - groupRank(b.group) || a.sku.localeCompare(b.sku),
+  );
 }
 
-// Per-group reconciliation of Primal demand against the cut orders entered.
-//   ordered      = salesOrders (Primal demand for the group)
-//   allocated    = pieces summed across cut-order rows for the group
-//   remaining    = ordered − allocated (still to turn into cut orders)
-//   availableStock / endingStock / shortage = Primal reference numbers
-//   overCapacity = allocated exceeds availableStock (capacity warning)
-//   shortageWarning = Primal already reports shortage for the group
-export type GroupReconcile = {
-  group: PrimalGroupKey;
-  ordered: number;
-  allocated: number;
-  remaining: number;
-  availableStock: number;
-  endingStock: number;
-  shortage: number;
-  overCapacity: boolean;
-  shortageWarning: boolean;
-};
+// Per-group ordered count (salesOrders) for the header strip. Every group in the
+// availability set is included, in its given order.
+export type GroupOrdered = { group: PrimalGroupKey; ordered: number };
 
-export function reconcileByGroup(
+export function orderedByGroup(
   availability: GroupAvailability[],
-  cutOrders: CutOrder[],
-): GroupReconcile[] {
-  const allocated = piecesByGroup(cutOrders);
-  return availability.map((row) => {
-    const allocatedPieces = allocated[row.group] ?? 0;
-    return {
-      group: row.group,
-      ordered: row.salesOrders,
-      allocated: allocatedPieces,
-      remaining: row.salesOrders - allocatedPieces,
-      availableStock: row.availableStock,
-      endingStock: row.endingStock,
-      shortage: row.shortage,
-      overCapacity: allocatedPieces > row.availableStock,
-      shortageWarning: row.shortage > 0,
-    };
-  });
+): GroupOrdered[] {
+  return availability.map((row) => ({
+    group: row.group,
+    ordered: row.salesOrders,
+  }));
 }

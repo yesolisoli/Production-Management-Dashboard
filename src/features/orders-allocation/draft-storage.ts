@@ -6,15 +6,24 @@
 // without touching the hook or UI (mirrors hog-intake / primal draft storage).
 
 import {
-  CUT_LOCATIONS,
+  CUT_PHASES,
+  DEFAULT_CUT_PHASE,
   DEFAULT_PRODUCT,
+  defaultHogBreakCalc,
+  defaultProductionMeta,
+  HOG_TYPES,
   PRIORITIES,
+  PRODUCTION_ROOMS,
   type AllocationDraft,
   type AllocationInstruction,
   type AllocationProduct,
-  type CutLocation,
-  type CutOrder,
+  type CutPhase,
+  type HogBreakCalc,
+  type HogType,
   type Priority,
+  type ProductionMeta,
+  type ProductionRoom,
+  type RouteAssignment,
 } from "./types";
 
 const DRAFT_KEY_PREFIX = "orders-allocation.draft.";
@@ -40,10 +49,10 @@ function coerceProduct(raw: unknown): AllocationProduct {
   return typeof raw === "string" && raw.trim() ? raw : DEFAULT_PRODUCT;
 }
 
-function coerceLocation(raw: unknown): CutLocation {
-  return CUT_LOCATIONS.some((l) => l.value === raw)
-    ? (raw as CutLocation)
-    : CUT_LOCATIONS[0].value;
+function coerceRoom(raw: unknown): ProductionRoom {
+  return PRODUCTION_ROOMS.some((r) => r.value === raw)
+    ? (raw as ProductionRoom)
+    : PRODUCTION_ROOMS[0].value;
 }
 
 function coercePriority(raw: unknown): Priority {
@@ -52,15 +61,67 @@ function coercePriority(raw: unknown): Priority {
     : "standard";
 }
 
-function coerceCutOrder(raw: unknown): CutOrder | null {
-  if (!raw || typeof raw !== "object") return null;
+// Older drafts predate the hog-break split — they fall back to the default
+// phase so an existing day's plan stays intact after the upgrade.
+function coercePhase(raw: unknown): CutPhase {
+  return CUT_PHASES.some((p) => p.value === raw)
+    ? (raw as CutPhase)
+    : DEFAULT_CUT_PHASE;
+}
+
+// A line's delivery-route split. Non-array / corrupt values read back as empty
+// (older drafts predate routes); each entry's route label is trimmed and qty
+// clamped to a non-negative int.
+function coerceRoutes(raw: unknown): RouteAssignment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: RouteAssignment[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const o = entry as Record<string, unknown>;
+    out.push({ route: asString(o.route).trim(), qty: asNonNegativeInt(o.qty) });
+  }
+  return out;
+}
+
+// The morning hog-break calculator. Missing / corrupt fields fall back to the
+// defaults (counts to 0, rates to their per-type default, start / buffer to
+// their constants), so older drafts that predate the calculator read back as an
+// untouched calc.
+function coerceHogBreakCalc(raw: unknown): HogBreakCalc {
+  const base = defaultHogBreakCalc();
+  if (!raw || typeof raw !== "object") return base;
+  const o = raw as Record<string, unknown>;
+  const counts = (o.counts ?? {}) as Record<string, unknown>;
+  const secPerHead = (o.secPerHead ?? {}) as Record<string, unknown>;
+  const out: HogBreakCalc = {
+    counts: {} as Record<HogType, number>,
+    secPerHead: {} as Record<HogType, number>,
+    start: typeof o.start === "string" && o.start.trim() ? o.start : base.start,
+    mainRoomBufferMin:
+      typeof o.mainRoomBufferMin === "number"
+        ? asNonNegativeInt(o.mainRoomBufferMin)
+        : base.mainRoomBufferMin,
+  };
+  for (const t of HOG_TYPES) {
+    out.counts[t.value] = asNonNegativeInt(counts[t.value]);
+    out.secPerHead[t.value] =
+      typeof secPerHead[t.value] === "number"
+        ? asNonNegativeInt(secPerHead[t.value])
+        : base.secPerHead[t.value];
+  }
+  return out;
+}
+
+function coerceProductionMeta(raw: unknown): ProductionMeta {
+  if (!raw || typeof raw !== "object") return defaultProductionMeta();
   const o = raw as Record<string, unknown>;
   return {
-    id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
-    product: coerceProduct(o.product),
-    pieces: asNonNegativeInt(o.pieces),
-    location: coerceLocation(o.location),
-    note: asString(o.note),
+    phase: coercePhase(o.phase),
+    room: coerceRoom(o.room),
+    start: asString(o.start),
+    secPerPc: asNonNegativeInt(o.secPerPc),
+    cutters: asNonNegativeInt(o.cutters),
+    routes: coerceRoutes(o.routes),
   };
 }
 
@@ -77,9 +138,19 @@ function coerceInstruction(raw: unknown): AllocationInstruction | null {
   };
 }
 
-function coerceCutOrders(raw: unknown): CutOrder[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map(coerceCutOrder).filter((r): r is CutOrder => r !== null);
+// The persisted overlay is a map keyed by SKU; unknown / corrupt entries fall
+// back to default meta. Older drafts (which stored a `cut_orders` array) have no
+// `production_meta`, so they read back as an empty overlay — harmless, the rows
+// re-derive from Primal.
+function coerceProductionMetaMap(
+  raw: unknown,
+): Record<string, ProductionMeta> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, ProductionMeta> = {};
+  for (const [sku, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (sku) out[sku] = coerceProductionMeta(value);
+  }
+  return out;
 }
 
 function coerceInstructions(raw: unknown): AllocationInstruction[] {
@@ -97,7 +168,8 @@ export function readDraft(date: string): AllocationDraft | null {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     return {
       date,
-      cut_orders: coerceCutOrders(parsed.cut_orders),
+      hog_break: coerceHogBreakCalc(parsed.hog_break),
+      production_meta: coerceProductionMetaMap(parsed.production_meta),
       instructions: coerceInstructions(parsed.instructions),
     };
   } catch {
