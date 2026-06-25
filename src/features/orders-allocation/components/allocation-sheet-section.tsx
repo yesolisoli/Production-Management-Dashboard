@@ -1,7 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ClipboardList, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  Check,
+  ClipboardList,
+  Download,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import { exportAllocationInstructions } from "../allocation-export";
 import {
   DEFAULT_PRODUCT,
   priorityLabel,
@@ -20,6 +29,7 @@ import { ProductFilterTabs } from "./product-filter-tabs";
 // colour code. Presentation only; edits flow up to the state hook.
 type AllocationSheetSectionProps = {
   rows: AllocationInstruction[];
+  date: string;
   onAdd: (instruction: Omit<AllocationInstruction, "id">) => void;
   onUpdate: (id: string, patch: Partial<Omit<AllocationInstruction, "id">>) => void;
   onRemove: (id: string) => void;
@@ -75,6 +85,7 @@ function buildSheet(rows: AllocationInstruction[]) {
 
 export function AllocationSheetSection({
   rows,
+  date,
   onAdd,
   onUpdate,
   onRemove,
@@ -263,13 +274,25 @@ export function AllocationSheetSection({
             <h3 className="text-sm font-semibold text-slate-700">
               Daily Allocation Sheet Instructions
             </h3>
-            <button
-              type="button"
-              onClick={onClear}
-              className="text-xs font-semibold text-red-500 transition hover:text-red-600"
-            >
-              Clear all
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void exportAllocationInstructions(rows, date);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+              >
+                <Download size={14} />
+                Export to Excel
+              </button>
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-xs font-semibold text-red-500 transition hover:text-red-600"
+              >
+                Clear all
+              </button>
+            </div>
           </div>
 
           {/* Product / area tabs — narrow the printed sheet to one group. */}

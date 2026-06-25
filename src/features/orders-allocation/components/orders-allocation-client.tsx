@@ -54,6 +54,7 @@ export function OrdersAllocationClient() {
         <div className="flex flex-col gap-4 px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
           <AllocationSheetSection
             rows={draft.instructions}
+            date={date}
             onAdd={addInstruction}
             onUpdate={updateInstruction}
             onRemove={removeInstruction}
