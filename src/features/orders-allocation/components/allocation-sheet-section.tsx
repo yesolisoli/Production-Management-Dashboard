@@ -49,13 +49,6 @@ const RULE_STYLES: Record<Priority, { border: string; badge: string }> = {
   },
 };
 
-// Shared column template for the sheet table: rule tag · QTY · CUSTOMER ·
-// INSTRUCTION (flex) · actions. Used by every data row so they line up.
-const ROW_GRID =
-  "grid grid-cols-[5rem_4.5rem_7rem_minmax(0,1fr)_auto] items-center gap-3 sm:gap-4";
-// Left identity gutter (accent bar + category column) the headers must clear.
-const GROUP_GUTTER = "w-48";
-
 // Within a group, red DO NOT rows come first, then yellow, then white.
 const PRIORITY_RANK: Record<Priority, number> = {
   dont: 0,
@@ -286,6 +279,7 @@ export function AllocationSheetSection({
               onChange={setFilter}
               total={rows.length}
               tabs={filterableGroups}
+              withDots
             />
           </div>
 
@@ -297,6 +291,7 @@ export function AllocationSheetSection({
                     key={group.key}
                     productKey={group.key}
                     title={group.label}
+                    count={group.rows.length}
                   >
                     {group.rows.map((row) =>
                       editingId === row.id ? (
@@ -335,41 +330,44 @@ export function AllocationSheetSection({
   );
 }
 
-// One product / area band: a colour-coded identity column (monogram + name) on
-// the left, its rows on the right — aligned to ROW_GRID.
+// One product / area band: a full-width colour-coded header (dot + name +
+// count) stacked above its instruction rows. The rule-type accent lives on each
+// row, so the group itself carries no left stripe.
 function SheetGroup({
   productKey,
   title,
+  count,
   children,
 }: {
   productKey: string;
   title: string;
+  count: number;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex">
-      <div
-        className={`${GROUP_GUTTER} flex shrink-0 flex-col justify-start gap-1 bg-slate-50/60 px-4 py-3`}
-      >
-        <div className="flex items-center gap-2.5">
-          <span
-            className={`h-2.5 w-2.5 shrink-0 rounded-full ${productDotClass(productKey)}`}
-          />
-          <span
-            className={`truncate text-sm font-bold uppercase tracking-wide ${productTextClass(productKey)}`}
-          >
-            {title}
-          </span>
-        </div>
+    <div>
+      <div className="flex items-center gap-2.5 bg-slate-50/70 px-4 py-2.5">
+        <span
+          className={`h-2.5 w-2.5 shrink-0 rounded-full ${productDotClass(productKey)}`}
+        />
+        <span
+          className={`text-sm font-bold uppercase tracking-wide ${productTextClass(productKey)}`}
+        >
+          {title}
+        </span>
+        <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-500">
+          {count}
+        </span>
       </div>
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="divide-y divide-slate-100">{children}</div>
     </div>
   );
 }
 
-// One sheet line, laid out on ROW_GRID: ITEM (rule tag + instruction) ·
-// LOCATION · QUANTITY · edit/remove. Edit/remove stay visually secondary
-// (dim until row hover/focus).
+// One sheet line: a rule-type badge, a fixed QTY slot, an optional customer /
+// context pill, then the instruction text — with edit/remove actions that stay
+// dim until the row is hovered or focused. A left accent bar keeps the rule
+// type (DO THIS / DO NOT / STANDARD) readable at a glance.
 function SheetRow({
   row,
   onEdit,
@@ -382,20 +380,22 @@ function SheetRow({
   const style = RULE_STYLES[row.priority];
   return (
     <div
-      className={`group ${ROW_GRID} mb-1 border-b border-l-4 border-b-slate-200 ${style.border} py-2.5 pl-3 pr-4 transition hover:bg-slate-50/60`}
+      className={`group flex items-center gap-3 border-l-4 ${style.border} py-2.5 pl-3 pr-4 transition hover:bg-slate-50/60`}
     >
       <span
-        className={`hidden truncate rounded px-1.5 py-0.5 text-center text-[10px] font-bold uppercase sm:inline-block ${style.badge}`}
+        className={`w-22 shrink-0 rounded-md px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${style.badge}`}
       >
         {priorityLabel(row.priority)}
       </span>
-      <span className="text-xs font-bold uppercase tabular-nums text-slate-700">
+      <span className="w-12 shrink-0 text-xs font-bold uppercase tabular-nums text-slate-700">
         {row.qty > 0 ? `${row.qty} pc` : ""}
       </span>
-      <span className="hidden truncate text-xs uppercase text-slate-500 sm:block">
-        {row.customer || "—"}
-      </span>
-      <span className="min-w-0 truncate text-sm font-semibold uppercase text-slate-800">
+      {row.customer ? (
+        <span className="hidden shrink-0 truncate rounded-md border border-slate-200 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline-block">
+          {row.customer}
+        </span>
+      ) : null}
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase text-slate-800">
         {row.instruction}
       </span>
       <RowActions onEdit={onEdit} onRemove={onRemove} />

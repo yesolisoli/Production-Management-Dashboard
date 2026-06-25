@@ -1,6 +1,11 @@
 "use client";
 
-import { productBadgeClass, productLabel, type AllocationProduct } from "../types";
+import {
+  productBadgeClass,
+  productDotClass,
+  productLabel,
+  type AllocationProduct,
+} from "../types";
 
 // Shared product / area filter tabs for orders & allocation. "All" reads as a
 // neutral dark pill; each product tab fills with its primal tint when active so
@@ -17,6 +22,7 @@ export function ProductFilterTabs({
   total,
   tabs,
   showAll = true,
+  withDots = false,
 }: {
   value: AllocationProduct | "all";
   onChange: (value: AllocationProduct | "all") => void;
@@ -25,6 +31,9 @@ export function ProductFilterTabs({
   // When false, the neutral "All" pill is hidden and only per-product tabs are
   // shown (the caller views one product at a time).
   showAll?: boolean;
+  // When true, each product tab leads with its solid colour dot and the count
+  // reads as a plain trailing number (used by the allocation-sheet view).
+  withDots?: boolean;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -38,7 +47,16 @@ export function ProductFilterTabs({
               : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
           }`}
         >
-          All ({total})
+          {withDots ? (
+            <span className="inline-flex items-center gap-1.5">
+              All
+              <span className="text-[11px] font-bold tabular-nums opacity-70">
+                {total}
+              </span>
+            </span>
+          ) : (
+            `All (${total})`
+          )}
         </button>
       )}
       {tabs.map((tab) => {
@@ -54,7 +72,19 @@ export function ProductFilterTabs({
                 : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
             }`}
           >
-            {productLabel(tab.key)} ({tab.count})
+            {withDots ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${productDotClass(tab.key)}`}
+                />
+                {productLabel(tab.key)}
+                <span className="text-[11px] font-bold tabular-nums opacity-60">
+                  {tab.count}
+                </span>
+              </span>
+            ) : (
+              `${productLabel(tab.key)} (${tab.count})`
+            )}
           </button>
         );
       })}
