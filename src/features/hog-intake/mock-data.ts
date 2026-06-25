@@ -91,21 +91,22 @@ export function buildHogIntakeMockRecords(): HogIntakeRecord[] {
     },
     {
       date: dateDaysAgo(0),
-      // total = 50 + 42 + 24 + 20 + 32 + 12 + 22 = 202
-      hog_counts: { JP: 50, RWA: 42, BK: 24, Sow: 20, Round: 32, Suckling: 12, Customer: 22 },
-      side_orders: 18,
-      held_over: 6,
-      deaths_on_arrival: 1,
-      boars_count: 2,
-      todays_cutting: 10,
-      notes: "Watch for incoming late delivery from Green Valley.",
+      // total = 54 + 41 + 26 + 22 + 33 + 11 + 21 = 208
+      hog_counts: { JP: 54, RWA: 41, BK: 26, Sow: 22, Round: 33, Suckling: 11, Customer: 21 },
+      side_orders: 19,
+      held_over: 4,
+      deaths_on_arrival: 0,
+      boars_count: 3,
+      todays_cutting: 12,
+      notes: "All loads on time. Strong RWA morning run.",
       farm_records: [
-        { id: "fr-d0-1", farm: "ABC Farm", type: "JP", tattoo: "1278", count: 28 },
-        { id: "fr-d0-2", farm: "Green Valley Farm", type: "RWA", tattoo: "5723", count: 22 },
-        { id: "fr-d0-3", farm: "Sunrise Farm", type: "BK", tattoo: "9155", count: 14 },
-        { id: "fr-d0-4", farm: "Happy Field Farm", type: "Sow", tattoo: "2502", count: 12 },
+        { id: "fr-d0-1", farm: "ABC Farm", type: "JP", tattoo: "1289", count: 30, delivery_time: "06:15" },
+        { id: "fr-d0-2", farm: "Green Valley Farm", type: "RWA", tattoo: "5734", count: 24, delivery_time: "07:00" },
+        { id: "fr-d0-3", farm: "Sunrise Farm", type: "BK", tattoo: "9166", count: 16, delivery_time: "07:45" },
+        { id: "fr-d0-4", farm: "Happy Field Farm", type: "Sow", tattoo: "2513", count: 14, delivery_time: "08:30" },
+        { id: "fr-d0-5", farm: "Golden Farm", type: "Round", tattoo: "1144", count: 22, delivery_time: "09:10" },
       ],
-      next_day: { hog_count: 210, side_orders: 17, cooler_overstock: 0 },
+      next_day: { hog_count: 212, side_orders: 18, cooler_overstock: 0 },
     },
   ];
 }

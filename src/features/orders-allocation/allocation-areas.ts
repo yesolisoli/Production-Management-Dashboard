@@ -17,10 +17,16 @@
 export const GENERAL_NOTE_AREA = "General Note";
 
 // Always-available extra areas, shown after the Primal groups in the dropdown.
+// These cover the byproduct / offcut lines that appear on the daily allocation
+// sheet (jowls, fat, heads, blood, long feet, …) so their default instruction
+// rows are first-class and editable, not orphan free-text categories.
 export const BUILT_IN_EXTRA_AREAS = [
-  "Jaws",
-  "Fat Heads",
+  "Jowls",
+  "Fat",
+  "Heads",
   "Masks",
+  "Blood",
+  "Long Feet",
   "Lungs",
   GENERAL_NOTE_AREA,
 ] as const;

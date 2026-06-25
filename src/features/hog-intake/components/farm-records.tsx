@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { ChevronDown, Plus, Truck, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { BaseDropdown, DROPDOWN_WIDTH } from "@/features/assignment-board/components/base-dropdown";
+import { TimePickerInput } from "@/features/assignment-board/components/modals/time-picker-input";
 import { NumberStepper } from "@/components/shared/number-stepper";
 import {
   FARM_RECORD_TYPES,
@@ -118,14 +119,16 @@ export function FarmRecords({
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <input
-                      type="time"
+                    <TimePickerInput
                       value={row.delivery_time ?? ""}
-                      onChange={(e) =>
-                        onUpdate(row.id, { delivery_time: e.target.value })
+                      onChange={(delivery_time) =>
+                        onUpdate(row.id, { delivery_time })
                       }
-                      aria-label="Delivery time"
-                      className="h-10 w-28 rounded-lg border border-transparent bg-transparent px-3 text-center text-base font-normal text-slate-900 outline-none transition hover:border-slate-200 focus:border-slate-400 focus:bg-white [&::-webkit-calendar-picker-indicator]:hidden"
+                      editable
+                      formatDisplay={formatTime12h}
+                      parseInput={parseTimeInput}
+                      placeholder="Set time"
+                      triggerClassName="h-10 w-28 rounded-lg border border-transparent bg-transparent px-3 text-center text-base font-normal text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-200 focus:border-slate-400 focus:bg-white"
                     />
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -193,6 +196,35 @@ export function FarmRecords({
       ) : null}
     </section>
   );
+}
+
+// Formats a stored 24h "HH:MM" as 12h "hh:mm AM/PM" for display.
+function formatTime12h(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+// Parses freely-typed time text into stored 24h "HH:MM". Accepts 24h ("6:15",
+// "06:15", "615") and 12h ("6:15 pm", "6pm"). Returns "" to clear, null to
+// reject (caller keeps the previous value).
+function parseTimeInput(raw: string): string | null {
+  const s = raw.trim().toLowerCase();
+  if (!s) return "";
+  const m = s.match(/^(\d{1,2})\s*[:.]?\s*(\d{2})?\s*(a\.?m\.?|p\.?m\.?)?$/);
+  if (!m) return null;
+  let h = Number(m[1]);
+  const min = m[2] ? Number(m[2]) : 0;
+  const ap = m[3]?.[0];
+  if (min > 59) return null;
+  if (ap) {
+    if (h < 1 || h > 12) return null;
+    h = ap === "p" ? (h === 12 ? 12 : h + 12) : h === 12 ? 0 : h;
+  } else if (h > 23) {
+    return null;
+  }
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
 // Custom pill dropdown for a row's delivery type. Replaces the native <select>

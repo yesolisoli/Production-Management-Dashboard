@@ -227,6 +227,68 @@ export function emptyAllocationDraft(date: string): AllocationDraft {
   };
 }
 
+// Default morning-brief instruction lines, transcribed from the standing daily
+// allocation sheet. Used to pre-fill the sheet for a date that has no saved
+// draft yet so the floor opens to a populated template instead of a blank slate
+// (the operator can edit, add, or clear any line). Ids are stable so re-seeding
+// keeps row identity. Priority maps the sheet's colour code: do = yellow
+// (DO THIS), dont = red (DO NOT), standard = white. Quantities that aren't a
+// plain piece count (cases, kilos, totes) are kept in the instruction text since
+// the qty field is a single piece number.
+export function defaultAllocationInstructions(): AllocationInstruction[] {
+  const rows: Omit<AllocationInstruction, "id">[] = [
+    // BUTTS
+    { category: "Butts", qty: 72, instruction: "BONELESS VAC PAC 2PC PER C/S", customer: "GFS", priority: "standard" },
+    { category: "Butts", qty: 0, instruction: "BOX THE REST BONE IN APROX 10C/S", customer: "O/S", priority: "do" },
+    // LOINS
+    { category: "Loins", qty: 0, instruction: "17 C/S — BONE IN LOINS VAC PAC", customer: "ORDERS THRS / HERTEL FRI", priority: "standard" },
+    { category: "Loins", qty: 15, instruction: "DTS", customer: "TOMORROW ORDERS", priority: "standard" },
+    { category: "Loins", qty: 30, instruction: "LONG S'LESS FRENCH RACKS", customer: "CIOFFIS FRI", priority: "standard" },
+    { category: "Loins", qty: 0, instruction: "24 C/S — BONELESS SHORT VAC PAC", customer: "HERTEL", priority: "standard" },
+    { category: "Loins", qty: 0, instruction: "40 C/S — BLUE WRAP ALL DAMAGED", customer: "", priority: "standard" },
+    { category: "Loins", qty: 0, instruction: "B'LESS SHORT APROX 240 PC", customer: "O/S", priority: "do" },
+    // LEGS
+    { category: "Legs", qty: 0, instruction: "BONE IN TOTE APROX 1.6 TOTE", customer: "", priority: "do" },
+    // PICNIC
+    { category: "Picnic", qty: 0, instruction: "FILL STAPELTON LAST", customer: "", priority: "do" },
+    // RIBONS / RIBS / SPARERIBS
+    { category: "Ribs", qty: 0, instruction: "BOX ALL SPARERIBS APROX 8C/S", customer: "", priority: "do" },
+    // JOWLS
+    { category: "Jowls", qty: 0, instruction: "5 C/S + 75 KG — S'LESS JOWLS", customer: "TODAY ORDERS", priority: "standard" },
+    { category: "Jowls", qty: 0, instruction: "18 C/S + 55 KG — R/ON JOWLS (FILL FIVE BUTCHERS LAST)", customer: "TODAY ORDERS", priority: "standard" },
+    { category: "Jowls", qty: 0, instruction: "BOX THE REST R/ON", customer: "R/ON", priority: "do" },
+    // FAT
+    { category: "Fat", qty: 0, instruction: "BOX ALL BACK FAT", customer: "O/S", priority: "do" },
+    { category: "Fat", qty: 0, instruction: "SAVE ALL BUTT FAT SLAB", customer: "O/S", priority: "do" },
+    { category: "Fat", qty: 0, instruction: "100 KG — RIND TODAY ORDERS", customer: "O/S", priority: "do" },
+    { category: "Fat", qty: 0, instruction: "SAVE ALL LOIN FAT PC", customer: "O/S", priority: "do" },
+    { category: "Fat", qty: 0, instruction: "DO NOT SAVE LEG FAT", customer: "", priority: "dont" },
+    { category: "Fat", qty: 0, instruction: "DO NOT SAVE BUTT FAT PC", customer: "", priority: "dont" },
+    // HEADS
+    { category: "Heads", qty: 120, instruction: "HEADS", customer: "", priority: "do" },
+    // MASKS
+    { category: "Masks", qty: 0, instruction: "MASKS TODAY ORDERS", customer: "", priority: "do" },
+    // BLOOD
+    { category: "Blood", qty: 10, instruction: "LIANG", customer: "", priority: "do" },
+    { category: "Blood", qty: 12, instruction: "ANTI", customer: "", priority: "do" },
+    { category: "Blood", qty: 2, instruction: "SALT", customer: "", priority: "do" },
+    // LONG FEET
+    { category: "Long Feet", qty: 160, instruction: "10 C/S FOR O/S", customer: "", priority: "do" },
+  ];
+  return rows.map((row, i) => ({ ...row, id: `default-instruction-${i + 1}` }));
+}
+
+// A draft pre-filled with the standing allocation-sheet instructions — the
+// fallback for a date with no saved draft, so the screen opens populated. The
+// hog-break calc and production overlay stay at their defaults (those derive
+// from Primal / are entered per day).
+export function seededAllocationDraft(date: string): AllocationDraft {
+  return {
+    ...emptyAllocationDraft(date),
+    instructions: defaultAllocationInstructions(),
+  };
+}
+
 export function isEmptyAllocationDraft(draft: AllocationDraft): boolean {
   return (
     isDefaultHogBreakCalc(draft.hog_break) &&

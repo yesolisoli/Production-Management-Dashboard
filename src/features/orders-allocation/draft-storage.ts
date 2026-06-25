@@ -194,3 +194,55 @@ export function clearDraft(date: string): void {
     // ignore
   }
 }
+
+// ------------------------------------------------------------------
+// Cleared-date registry
+//
+// An empty draft has no stored key (clearDraft removes it), so absence alone
+// can't tell "never opened" (→ seed the standing template) from "opened and
+// explicitly cleared" (→ leave blank). This small set of dates the operator
+// cleared on purpose makes that distinction durable, so a cleared day stays
+// empty across refreshes instead of re-seeding. A date is dropped from the set
+// once it has real saved content again (a saved draft takes precedence anyway).
+// ------------------------------------------------------------------
+
+const CLEARED_DATES_KEY = "orders-allocation.cleared-dates";
+
+function readClearedDates(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(CLEARED_DATES_KEY);
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((d): d is string => typeof d === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeClearedDates(dates: Set<string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CLEARED_DATES_KEY, JSON.stringify([...dates]));
+  } catch {
+    // ignore quota / access errors
+  }
+}
+
+export function isDateCleared(date: string): boolean {
+  return readClearedDates().has(date);
+}
+
+export function markDateCleared(date: string): void {
+  const dates = readClearedDates();
+  if (dates.has(date)) return;
+  dates.add(date);
+  writeClearedDates(dates);
+}
+
+export function unmarkDateCleared(date: string): void {
+  const dates = readClearedDates();
+  if (!dates.delete(date)) return;
+  writeClearedDates(dates);
+}

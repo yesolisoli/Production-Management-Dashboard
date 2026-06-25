@@ -4,12 +4,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { todayString } from "@/lib/date";
 import { clampNonNegativeInt } from "@/features/hog-intake/calculations";
 import { deriveInstructionsSummary } from "../calculations";
-import { clearDraft, readDraft, writeDraft } from "../draft-storage";
+import {
+  clearDraft,
+  isDateCleared,
+  markDateCleared,
+  readDraft,
+  unmarkDateCleared,
+  writeDraft,
+} from "../draft-storage";
 import {
   defaultProductionMeta,
   emptyAllocationDraft,
   HOG_TYPES,
   isEmptyAllocationDraft,
+  seededAllocationDraft,
   type AllocationDraft,
   type AllocationInstruction,
   type HogBreakCalc,
@@ -44,9 +52,20 @@ export function useOrdersAllocationState() {
   // Load the draft for a date from localStorage. Extracted from the effect so
   // the setState happens in a callback (mirrors the Primal hooks' loadForDate)
   // rather than synchronously in the effect body.
+  // A date with no saved draft opens to the standing allocation-sheet template
+  // (seededAllocationDraft) rather than a blank slate — UNLESS the operator
+  // explicitly cleared that date, in which case it stays blank. suppressNextWrite
+  // keeps the seed from being persisted until a line is actually edited, so an
+  // untouched day leaves localStorage clean and re-seeds on next open.
   const loadForDate = useCallback((nextDate: string) => {
     suppressNextWrite.current = true;
-    setDraft(readDraft(nextDate) ?? emptyAllocationDraft(nextDate));
+    const saved = readDraft(nextDate);
+    setDraft(
+      saved ??
+        (isDateCleared(nextDate)
+          ? emptyAllocationDraft(nextDate)
+          : seededAllocationDraft(nextDate)),
+    );
     hasHydrated.current = true;
     setStatus({ kind: "idle" });
   }, []);
@@ -142,17 +161,22 @@ export function useOrdersAllocationState() {
   // ---------------------------- Instructions ---------------------------
   const addInstruction = useCallback(
     (instruction: Omit<AllocationInstruction, "id">) => {
-      setDraft((prev) => ({
-        ...prev,
-        instructions: [
-          ...prev.instructions,
-          {
-            ...instruction,
-            id: crypto.randomUUID(),
-            qty: clampNonNegativeInt(instruction.qty),
-          },
-        ],
-      }));
+      setDraft((prev) => {
+        // Re-adding content lifts an explicit "cleared" mark so the date is
+        // driven by its saved draft again (not the blank-on-purpose path).
+        unmarkDateCleared(prev.date);
+        return {
+          ...prev,
+          instructions: [
+            ...prev.instructions,
+            {
+              ...instruction,
+              id: crypto.randomUUID(),
+              qty: clampNonNegativeInt(instruction.qty),
+            },
+          ],
+        };
+      });
       setStatus({ kind: "idle" });
     },
     [],
@@ -187,11 +211,17 @@ export function useOrdersAllocationState() {
   }, []);
 
   const clearInstructions = useCallback(() => {
-    setDraft((prev) => ({ ...prev, instructions: [] }));
+    setDraft((prev) => {
+      // Mark the date cleared so the standing template doesn't re-seed on the
+      // next open — the operator wanted this day blank, and that must persist.
+      markDateCleared(prev.date);
+      return { ...prev, instructions: [] };
+    });
   }, []);
 
   // ------------------------------- Clear / Save ------------------------
   const clearAll = useCallback(() => {
+    markDateCleared(date);
     setDraft(emptyAllocationDraft(date));
     clearDraft(date);
     setStatus({ kind: "idle" });
