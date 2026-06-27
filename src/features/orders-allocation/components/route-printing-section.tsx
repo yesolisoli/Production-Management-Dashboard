@@ -120,8 +120,8 @@ export function RoutePrintingSection({
                 <col className="w-[35%]" />
               </colgroup>
               <thead>
-                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 [&>th]:border-b [&>th]:border-slate-200 [&>th]:px-3 [&>th]:pb-2">
-                  <th>Route</th>
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 [&>th]:border-b [&>th]:border-slate-200 [&>th]:bg-slate-50 [&>th]:px-3 [&>th]:py-2.5">
+                  <th className="rounded-l-lg">Route</th>
                   <th>Deadline</th>
                   <th>Time Printed</th>
                   <th>Difference</th>
@@ -151,7 +151,7 @@ export function RoutePrintingSection({
                       </div>
                     </span>
                   </th>
-                  <th>Notes</th>
+                  <th className="rounded-r-lg">Notes</th>
                 </tr>
               </thead>
               <tbody>

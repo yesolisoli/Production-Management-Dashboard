@@ -591,7 +591,7 @@ export function AllocationSheetSection({
                               onClick={() => onRemove(row.id)}
                               title="Remove"
                               aria-label="Remove instruction"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-red-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 opacity-0 transition hover:bg-slate-200 hover:text-slate-600 focus:opacity-100 group-hover:opacity-100"
                             >
                               <X size={14} />
                             </button>

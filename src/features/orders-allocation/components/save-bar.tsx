@@ -5,9 +5,10 @@ import { AlertTriangle, CheckCircle2, RotateCcw, Save } from "lucide-react";
 import { Modal } from "@/components/shared/modal";
 import type { SaveStatus } from "../hooks/use-orders-allocation-state";
 
-// Sticky Save / Clear bar. The draft auto-persists to localStorage on every
-// edit; "Save Orders & Allocation" is an explicit commit that flashes a
-// confirmation, and "Clear" discards the day's draft (with confirmation).
+// Footer Save / Clear bar. Sits at the bottom of the page content (not pinned
+// to the viewport). The draft auto-persists to localStorage on every edit;
+// "Save All" is an explicit commit that flashes a confirmation, and "Clear"
+// discards the day's draft (with confirmation).
 type SaveBarProps = {
   status: SaveStatus;
   isEmpty: boolean;
@@ -19,7 +20,7 @@ export function SaveBar({ status, isEmpty, onSave, onClear }: SaveBarProps) {
   const [confirmClear, setConfirmClear] = useState(false);
 
   return (
-    <div className="sticky bottom-0 z-10 bg-slate-50/90 px-3 py-3 backdrop-blur sm:px-5">
+    <div className="border-t border-slate-200 bg-slate-50 px-3 py-3 sm:px-5">
       <div className="flex items-center gap-3">
         {status.kind === "saved" && (
           <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">

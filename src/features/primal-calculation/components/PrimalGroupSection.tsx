@@ -174,7 +174,7 @@ export function PrimalGroupSection({
                   <th className="px-4 py-2.5">SKU</th>
                   <th className="px-2 py-2.5">Item</th>
                   <th className="px-2 py-2.5 text-center">Case Pack</th>
-                  <ColGroupHead tone="text-blue-600" />
+                  <ColGroupHead />
                   <th className="px-1.5 py-2.5" aria-hidden />
                 </tr>
               </thead>
@@ -470,11 +470,11 @@ function StepButton({
 }
 
 // --------------------------- Small parts ----------------------------
-function ColGroupHead({ tone }: { tone: string }) {
+function ColGroupHead() {
   return (
     <>
-      <th className={clsx("px-1.5 py-2.5 text-center", tone)}>Cases</th>
-      <th className="px-1.5 py-2.5 text-center text-slate-400">Pieces</th>
+      <th className="px-1.5 py-2.5 text-center">Cases</th>
+      <th className="px-1.5 py-2.5 text-center">Pieces</th>
     </>
   );
 }

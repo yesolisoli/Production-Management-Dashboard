@@ -67,7 +67,7 @@ export function FarmRecords({
       <div className="overflow-x-auto">
       <table className="w-full min-w-xl table-fixed border-t border-slate-100 text-sm">
         <thead>
-          <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <th className="w-[32%] pl-7 pr-5 py-3">Farm</th>
             <th className="w-[15%] pl-6 pr-3 py-3">Type</th>
             <th className="w-[16%] px-3 py-3 text-center">Tattoo / Tag</th>
