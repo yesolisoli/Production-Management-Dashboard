@@ -6,6 +6,7 @@ import { useAllocationAreas } from "../hooks/use-allocation-areas";
 import {
   PRIORITIES,
   UNITS,
+  priorityBadgeClass,
   priorityDotClass,
   productDotClass,
   productLabel,
@@ -22,6 +23,7 @@ const PRIORITY_OPTIONS: readonly SelectOption<Priority>[] = PRIORITIES.map(
     value: p.value,
     label: p.label,
     dotClass: priorityDotClass(p.value),
+    badgeClass: priorityBadgeClass(p.value),
   })
 );
 
@@ -40,10 +42,14 @@ export function ProductSelect({
   value,
   onChange,
   id,
+  defaultOpen,
+  onClose,
 }: {
   value: AllocationProduct;
   onChange: (value: AllocationProduct) => void;
   id?: string;
+  defaultOpen?: boolean;
+  onClose?: () => void;
 }) {
   const { areaKeys, addArea } = useAllocationAreas();
 
@@ -73,6 +79,8 @@ export function ProductSelect({
       onChange={onChange}
       onAdd={handleAdd}
       addLabel="Add product / area"
+      defaultOpen={defaultOpen}
+      onClose={onClose}
     />
   );
 }
@@ -82,10 +90,18 @@ export function PrioritySelect({
   value,
   onChange,
   id,
+  defaultOpen,
+  onClose,
+  flush,
 }: {
   value: Priority;
   onChange: (value: Priority) => void;
   id?: string;
+  defaultOpen?: boolean;
+  onClose?: () => void;
+  // Inline-table mode — borderless, full-width pill that keeps the cell's
+  // footprint. The standalone form picker leaves this off for a bordered box.
+  flush?: boolean;
 }) {
   return (
     <CustomSelect
@@ -93,6 +109,10 @@ export function PrioritySelect({
       value={value}
       options={PRIORITY_OPTIONS}
       onChange={onChange}
+      defaultOpen={defaultOpen}
+      onClose={onClose}
+      variant="badge"
+      flush={flush}
     />
   );
 }

@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Box,
   Check,
+  ChevronDown,
   Info,
-  Pencil,
   Plus,
   X,
 } from "lucide-react";
@@ -14,12 +14,14 @@ import { clampNonNegativeInt } from "@/features/hog-intake/calculations";
 import {
   computeFinish,
   formatRouteSummary,
+  INSTRUCTION_ROW_SKU_PREFIX,
   reconcileRoutes,
   type RouteReconciliation,
 } from "../calculations";
+import { fromTimeInputValue } from "../route-printing";
 import { CustomSelect, type SelectOption } from "./custom-select";
 import { ProductFilterTabs } from "./product-filter-tabs";
-import { UnitSelect } from "./product-select";
+import { TimeInput } from "./time-input";
 import {
   CUT_PHASES,
   cutPhaseLabel,
@@ -29,13 +31,13 @@ import {
   productionRoomLabel,
   productDotClass,
   sortProductKeys,
+  UNITS,
   unitShort,
   type AllocationProduct,
   type CutPhase,
   type ProductionMeta,
   type ProductionRoom,
   type ProductionRow,
-  type RouteAssignment,
   type Unit,
 } from "../types";
 
@@ -43,6 +45,10 @@ import {
 function routeTarget(row: ProductionRow, unit: Unit): number {
   return unit === "case" ? row.qtyCases : row.qtyPcs;
 }
+
+// The production cells the operator can edit in place (FINISH is derived, the
+// identity columns come from Primal).
+type CellField = "room" | "start" | "secPerPc" | "cutters" | "routes";
 
 // "Today's Production Sheet" — the SKU-level cut plan. The rows are DERIVED from
 // Primal demand (SKU / name / ordered qty); the operator overlays the
@@ -71,8 +77,10 @@ const ROOM_OPTIONS: readonly SelectOption<ProductionRoom>[] =
     dotClass: ROOM_DOT_CLASSES[room.value],
   }));
 
+// min-w-0 keeps the input from forcing its table-fixed column wider than the
+// colgroup size (so the row keeps the same column widths in read and edit mode).
 const cellInputClass =
-  "h-10 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100";
+  "h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100";
 
 // Muted placeholder for an empty operational value in a read row.
 const emptyCell = <span className="text-slate-300">—</span>;
@@ -83,33 +91,158 @@ const emptyCell = <span className="text-slate-300">—</span>;
 function RouteBalance({
   recon,
   unit,
+  piecesPerCase,
 }: {
   recon: RouteReconciliation;
   unit: Unit;
+  piecesPerCase: number;
 }) {
   const { status, remaining, assigned, target } = recon;
   const tag = unitShort(unit);
-  if (status === "balanced") {
-    return (
-      <span className="inline-flex w-fit items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
-        <Check size={11} className="shrink-0" />
-        {target} {tag}
-      </span>
-    );
-  }
+  // Express a route-unit quantity in the other unit so the detail shows both
+  // cases and pieces. Cases scale up cleanly; pieces -> cases can be fractional.
+  const otherUnit: Unit = unit === "case" ? "piece" : "case";
+  const otherTag = unitShort(otherUnit);
+  const toOther = (qty: number) =>
+    unit === "case" ? qty * piecesPerCase : qty / piecesPerCase;
+  const fmt = (n: number) =>
+    Number.isInteger(n) ? String(n) : n.toFixed(1);
+
+  const balanced = status === "balanced";
   const over = status === "over";
+  const left = over ? -remaining : remaining;
+
+  // Compact status icon — the full reconciliation reads out in a hover tooltip
+  // (the original colour-coded chip) so the route cell stays icon-light.
+  // Balanced = green check; otherwise an amber (short) / red (over) triangle.
+  const bg = balanced
+    ? "bg-emerald-50"
+    : over
+      ? "bg-red-50"
+      : "bg-amber-50";
+  const text = balanced
+    ? "text-emerald-700"
+    : over
+      ? "text-red-600"
+      : "text-amber-700";
+  const Icon = balanced ? Check : AlertTriangle;
+  const detail = balanced
+    ? `${target} ${tag} · ${fmt(toOther(target))} ${otherTag}`
+    : `${left} ${tag} · ${fmt(toOther(left))} ${otherTag} ${
+        over ? "over" : "left"
+      } · ${assigned}/${target}`;
+
   return (
     <span
-      className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium ${
-        over ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"
-      }`}
+      className="group/balance relative inline-flex shrink-0"
+      aria-label={detail}
     >
-      <AlertTriangle size={11} className="shrink-0" />
-      {over ? `${-remaining} ${tag} over` : `${remaining} ${tag} left`}
-      <span className="font-normal opacity-70">
-        · {assigned}/{target}
+      <span
+        className={`inline-flex h-5 w-5 items-center justify-center rounded-md ${bg} ${text}`}
+      >
+        <Icon size={12} className="shrink-0" />
+      </span>
+      {/* Reconciliation speech bubble — a white bubble (with padding around the
+          chip) that drops straight below the icon, centred on it, with an upward
+          tail pointing back at the icon. The colour-coded chip sits inside. */}
+      <span
+        role="tooltip"
+        className="pointer-events-none invisible absolute left-1/2 top-full z-30 mt-2 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-2 opacity-0 shadow-lg transition group-hover/balance:visible group-hover/balance:opacity-100"
+      >
+        <span className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border-l border-t border-slate-200 bg-white" />
+        <span
+          className={`inline-flex w-max items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium ${bg} ${text}`}
+        >
+          <Icon size={12} className="shrink-0" />
+          {balanced ? (
+            `${target} ${tag} · ${fmt(toOther(target))} ${otherTag}`
+          ) : (
+            <>
+              {`${left} ${tag} · ${fmt(toOther(left))} ${otherTag} ${
+                over ? "over" : "left"
+              }`}
+              <span className="font-normal opacity-70">
+                · {assigned}/{target}
+              </span>
+            </>
+          )}
+        </span>
       </span>
     </span>
+  );
+}
+
+// The route-split unit picker, rendered inline as the split editor's quantity
+// column header ("C/S" / "PC"). Clicking it opens a compact menu to switch the
+// line's routeUnit — no separate "Split by" control above the routes.
+function RouteUnitHeader({
+  value,
+  onChange,
+}: {
+  value: Unit;
+  onChange: (value: Unit) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on a click anywhere outside this menu (the parent cell stays open).
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Change split unit"
+        className="flex items-center gap-0.5 rounded text-[10px] font-semibold uppercase tracking-wide text-slate-500 transition hover:text-slate-700"
+      >
+        {unitShort(value)}
+        <ChevronDown
+          size={11}
+          className={`shrink-0 transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          className="absolute left-1/2 z-30 mt-1 w-24 -translate-x-1/2 overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+        >
+          {UNITS.map((u) => {
+            const active = u.value === value;
+            return (
+              <li key={u.value}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => {
+                    onChange(u.value);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-semibold normal-case tracking-normal transition ${
+                    active
+                      ? "bg-slate-100 text-slate-900"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {u.short}
+                  {active && <Check size={12} className="shrink-0" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -122,16 +255,28 @@ export function ProductionSheetSection({
   // Which hog-break phase's sheet is being viewed. Pure UI state — a SKU's phase
   // lives in its ProductionMeta; this just filters the derived rows by it.
   const [activePhase, setActivePhase] = useState<CutPhase>(DEFAULT_CUT_PHASE);
-  // Inline row editing — the SKU whose row is open, plus the in-progress draft.
-  const [editingSku, setEditingSku] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<ProductionMeta | null>(null);
+  // Inline per-cell editing — which cell (SKU + field) is open. Each editable
+  // cell commits straight to its ProductionMeta field via onSetMeta, so there is
+  // no separate row draft to reconcile.
+  const [editingCell, setEditingCell] = useState<{
+    sku: string;
+    field: CellField;
+  } | null>(null);
+  // The open cell — used to detect clicks outside it (close on outside click).
+  const activeCellRef = useRef<HTMLTableCellElement>(null);
 
   // A row's operational meta, falling back to defaults until the operator edits.
-  const metaFor = (sku: string): ProductionMeta =>
-    meta[sku] ?? defaultProductionMeta();
+  // The fallback honours the row's defaultPhase (instruction-derived rows open in
+  // After Hog Break), so an unedited row sits in — and a first edit saves into —
+  // the right phase.
+  const metaFor = (row: ProductionRow): ProductionMeta =>
+    meta[row.sku] ?? {
+      ...defaultProductionMeta(),
+      phase: row.defaultPhase ?? DEFAULT_CUT_PHASE,
+    };
 
   // Rows assigned to the active phase (default phase until a SKU is moved).
-  const phaseRows = rows.filter((row) => metaFor(row.sku).phase === activePhase);
+  const phaseRows = rows.filter((row) => metaFor(row).phase === activePhase);
 
   // Products present in this phase, in canonical order — drives the filter tabs.
   const productOrder = sortProductKeys([
@@ -150,53 +295,42 @@ export function ProductionSheetSection({
       : productOrder[0];
   const visibleRows = phaseRows.filter((row) => row.group === activeProduct);
 
-  const cancelEdit = () => {
-    setEditingSku(null);
-    setEditDraft(null);
-  };
+  const closeCell = useCallback(() => setEditingCell(null), []);
 
   const switchPhase = (next: CutPhase) => {
     if (next === activePhase) return;
     setActivePhase(next);
     setFilter("all");
-    cancelEdit();
+    closeCell();
   };
 
-  const startEdit = (row: ProductionRow) => {
-    setEditingSku(row.sku);
-    setEditDraft(metaFor(row.sku));
-  };
-
-  const patchDraft = (patch: Partial<ProductionMeta>) =>
-    setEditDraft((d) => (d ? { ...d, ...patch } : d));
-
-  // Delivery-route list edits on the in-progress draft (a line can split across
-  // several truck routes). Saved with the rest of the draft via saveEdit.
-  const addRoute = () =>
-    setEditDraft((d) =>
-      d ? { ...d, routes: [...d.routes, { route: "", qty: 0 }] } : d,
-    );
-  const patchRoute = (index: number, patch: Partial<RouteAssignment>) =>
-    setEditDraft((d) =>
-      d
-        ? {
-            ...d,
-            routes: d.routes.map((r, i) =>
-              i === index ? { ...r, ...patch } : r,
-            ),
-          }
-        : d,
-    );
-  const removeRoute = (index: number) =>
-    setEditDraft((d) =>
-      d ? { ...d, routes: d.routes.filter((_, i) => i !== index) } : d,
+  // Commit a single cell's edit straight to the SKU's stored meta. On the first
+  // edit of a still-default row, carry its derived phase along so live-committing
+  // one field doesn't pull the row out of its current phase tab.
+  const commitCell = (row: ProductionRow, patch: Partial<ProductionMeta>) =>
+    onSetMeta(
+      row.sku,
+      meta[row.sku] ? patch : { phase: metaFor(row).phase, ...patch },
     );
 
-  const saveEdit = () => {
-    if (!editingSku || !editDraft) return;
-    onSetMeta(editingSku, editDraft);
-    cancelEdit();
-  };
+  // Close the open cell on a click anywhere outside it, or on Escape. The inline
+  // Room / Unit dropdowns render inside the cell, so picking from them counts as
+  // inside and doesn't close the editor prematurely.
+  useEffect(() => {
+    if (!editingCell) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!activeCellRef.current?.contains(e.target as Node)) closeCell();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeCell();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [editingCell, closeCell]);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -229,7 +363,7 @@ export function ProductionSheetSection({
         {CUT_PHASES.map((p) => {
           const active = activePhase === p.value;
           const count = rows.filter(
-            (row) => metaFor(row.sku).phase === p.value,
+            (row) => metaFor(row).phase === p.value,
           ).length;
           return (
             <button
@@ -299,40 +433,38 @@ export function ProductionSheetSection({
           <div className="overflow-x-auto">
             {/* Fixed column widths so the row keeps the exact same layout in read
                 and edit mode — editing a line never shifts a column's position. */}
-            <table className="w-full min-w-385 table-fixed text-sm">
+            <table className="w-full min-w-417 table-fixed text-sm">
               <colgroup>
                 <col className="w-12" />
                 <col className="w-20" />
                 <col />
-                <col className="w-24" />
-                <col className="w-24" />
-                <col className="w-44" />
-                <col className="w-32" />
-                <col className="w-32" />
-                <col className="w-32" />
-                <col className="w-32" />
-                <col className="w-60" />
                 <col className="w-28" />
+                <col className="w-28" />
+                <col className="w-48" />
+                <col className="w-36" />
+                <col className="w-36" />
+                <col className="w-36" />
+                <col className="w-36" />
+                <col className="w-64" />
               </colgroup>
               <thead>
-                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 [&>th]:border-b [&>th]:border-slate-200">
-                  <th className="px-3 pb-2 text-right">#</th>
-                  <th className="px-3 pb-2">SKU</th>
-                  <th className="px-3 pb-2">Product Name</th>
-                  <th className="px-3 pb-2 text-right">Qty C/S</th>
-                  <th className="px-3 pb-2 text-right">Qty Pcs</th>
-                  <th className="px-3 pb-2">Room</th>
-                  <th className="px-3 pb-2">Start</th>
-                  <th className="px-3 pb-2">Finish</th>
-                  <th className="px-3 pb-2 text-center">Sec / Pc</th>
-                  <th className="px-3 pb-2 text-center">Cutters</th>
-                  <th className="px-3 pb-2">Delivery Route</th>
-                  <th className="px-3 pb-2">Action</th>
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 [&>th]:border-b [&>th]:border-slate-200 [&>th]:bg-slate-50 [&>th]:py-2.5">
+                  <th className="rounded-l-lg px-3 text-right">#</th>
+                  <th className="px-3">SKU</th>
+                  <th className="px-3">Product Name</th>
+                  <th className="px-3 text-right">Qty C/S</th>
+                  <th className="px-3 text-right">Qty Pcs</th>
+                  <th className="px-3">Room</th>
+                  <th className="px-3">Start</th>
+                  <th className="px-3">Finish</th>
+                  <th className="px-3 text-center">Sec / Pc</th>
+                  <th className="px-3 text-center">Cutters</th>
+                  <th className="rounded-r-lg px-3">Delivery Route</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleRows.map((row, index) => {
-                  const rowMeta = metaFor(row.sku);
+                  const rowMeta = metaFor(row);
 
                   // Identity cells (SKU / name / qty) are read-only in both modes
                   // — they come from Primal, not the operator.
@@ -342,7 +474,9 @@ export function ProductionSheetSection({
                         {index + 1}
                       </td>
                       <td className="px-3 py-3 font-semibold tabular-nums text-slate-700">
-                        {row.sku}
+                        {row.sku.startsWith(INSTRUCTION_ROW_SKU_PREFIX)
+                          ? emptyCell
+                          : row.sku}
                       </td>
                       <td className="px-3 py-3">
                         <span className="flex items-center gap-2 font-medium text-slate-800">
@@ -363,136 +497,198 @@ export function ProductionSheetSection({
                     </>
                   );
 
-                  if (editingSku === row.sku && editDraft) {
-                    return (
-                      <tr
-                        key={row.sku}
-                        className="[&>td]:border-b [&>td]:border-slate-100"
+                  // Is this row's given cell the one currently open for editing?
+                  const editing = (field: CellField) =>
+                    editingCell?.sku === row.sku && editingCell.field === field;
+                  // Open a cell, and commit a patch straight to this row's meta.
+                  const open = (field: CellField) =>
+                    setEditingCell({ sku: row.sku, field });
+                  const commit = (patch: Partial<ProductionMeta>) =>
+                    commitCell(row, patch);
+                  const routes = rowMeta.routes;
+                  // Read cell shows a hover hint and click target; the active cell
+                  // drops the hint and carries the outside-click ref instead.
+                  const cellClass = (field: CellField) =>
+                    `px-3 align-middle ${
+                      editing(field)
+                        ? "py-2"
+                        : "py-3 cursor-pointer transition hover:bg-slate-50/60"
+                    }`;
+
+                  return (
+                    <tr
+                      key={row.sku}
+                      className="[&>td]:border-b [&>td]:border-slate-100"
+                    >
+                      {identityCells}
+
+                      {/* ROOM — click opens the room picker inline. */}
+                      <td
+                        ref={editing("room") ? activeCellRef : undefined}
+                        onClick={() => !editing("room") && open("room")}
+                        className={cellClass("room")}
                       >
-                        {identityCells}
-                        <td className="px-3 py-2 align-middle">
+                        {editing("room") ? (
                           <CustomSelect
-                            value={editDraft.room}
+                            value={rowMeta.room}
                             options={ROOM_OPTIONS}
-                            onChange={(v) => patchDraft({ room: v })}
+                            defaultOpen
+                            onChange={(v) => commit({ room: v })}
+                            onClose={closeCell}
                           />
-                        </td>
-                        <td className="px-3 py-2 align-middle">
-                          <input
-                            type="text"
-                            value={editDraft.start}
-                            onChange={(e) =>
-                              patchDraft({ start: e.target.value })
-                            }
+                        ) : (
+                          <span className="flex items-center gap-1.5 text-slate-600">
+                            <span
+                              className={`h-2 w-2 rounded-full ${ROOM_DOT_CLASSES[rowMeta.room]}`}
+                            />
+                            {productionRoomLabel(rowMeta.room)}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* START — click to type the time / open the clock picker.
+                          Stays a 24-hour "HH:MM" value so computeFinish parses it;
+                          FINISH (next cell) derives from it live. */}
+                      <td
+                        ref={editing("start") ? activeCellRef : undefined}
+                        onClick={() => !editing("start") && open("start")}
+                        className={`${cellClass("start")} tabular-nums text-slate-600`}
+                      >
+                        {editing("start") ? (
+                          <TimeInput
+                            value={rowMeta.start}
+                            autoFocus
+                            onChange={(v) => commit({ start: v })}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                saveEdit();
-                              } else if (e.key === "Escape") {
-                                e.preventDefault();
-                                cancelEdit();
+                                closeCell();
                               }
                             }}
-                            placeholder="6:00"
-                            className={cellInputClass}
+                            ariaLabel="Start time"
+                            className="h-10 w-full"
                           />
-                        </td>
-                        <td className="px-3 py-2 align-middle">
-                          {/* FINISH is auto-derived from start + sec/pc * pieces
-                              — read-only, updating live as those inputs change. */}
-                          <div
-                            className="flex h-10 items-center rounded-lg border border-dashed border-slate-200 bg-slate-50 px-2.5 text-sm tabular-nums text-slate-500"
-                            aria-label="Finish (auto)"
-                          >
-                            {computeFinish(
-                              editDraft.start,
-                              editDraft.secPerPc,
-                              row.qtyPcs,
-                            ) || <span className="text-slate-300">—</span>}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 align-middle">
+                        ) : (
+                          fromTimeInputValue(rowMeta.start) || emptyCell
+                        )}
+                      </td>
+
+                      {/* FINISH — derived, never editable. */}
+                      <td className="px-3 py-3 tabular-nums text-slate-600">
+                        {computeFinish(
+                          rowMeta.start,
+                          rowMeta.secPerPc,
+                          row.qtyPcs,
+                          rowMeta.cutters,
+                        ) || emptyCell}
+                      </td>
+
+                      {/* SEC / PC */}
+                      <td
+                        ref={editing("secPerPc") ? activeCellRef : undefined}
+                        onClick={() => !editing("secPerPc") && open("secPerPc")}
+                        className={`${cellClass("secPerPc")} text-center tabular-nums text-slate-600`}
+                      >
+                        {editing("secPerPc") ? (
                           <input
                             type="number"
                             inputMode="numeric"
                             min={0}
-                            value={
-                              editDraft.secPerPc === 0 ? "" : editDraft.secPerPc
-                            }
+                            autoFocus
+                            value={rowMeta.secPerPc === 0 ? "" : rowMeta.secPerPc}
                             onChange={(e) =>
-                              patchDraft({
+                              commit({
                                 secPerPc: clampNonNegativeInt(e.target.value),
                               })
                             }
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                saveEdit();
-                              } else if (e.key === "Escape") {
-                                e.preventDefault();
-                                cancelEdit();
+                                closeCell();
                               }
                             }}
                             placeholder="0"
                             aria-label="Seconds per piece"
                             className={`${cellInputClass} text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                           />
-                        </td>
-                        <td className="px-3 py-2 align-middle">
+                        ) : rowMeta.secPerPc > 0 ? (
+                          rowMeta.secPerPc
+                        ) : (
+                          emptyCell
+                        )}
+                      </td>
+
+                      {/* CUTTERS */}
+                      <td
+                        ref={editing("cutters") ? activeCellRef : undefined}
+                        onClick={() => !editing("cutters") && open("cutters")}
+                        className={`${cellClass("cutters")} text-center tabular-nums text-slate-600`}
+                      >
+                        {editing("cutters") ? (
                           <input
                             type="number"
                             inputMode="numeric"
                             min={0}
-                            value={editDraft.cutters === 0 ? "" : editDraft.cutters}
+                            autoFocus
+                            value={rowMeta.cutters === 0 ? "" : rowMeta.cutters}
                             onChange={(e) =>
-                              patchDraft({ cutters: clampNonNegativeInt(e.target.value) })
+                              commit({
+                                cutters: clampNonNegativeInt(e.target.value),
+                              })
                             }
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                saveEdit();
-                              } else if (e.key === "Escape") {
-                                e.preventDefault();
-                                cancelEdit();
+                                closeCell();
                               }
                             }}
                             placeholder="0"
                             aria-label="Cutters"
                             className={`${cellInputClass} text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                           />
-                        </td>
-                        <td className="px-3 py-2 align-middle">
-                          {/* Delivery route split — one row per truck route, each
-                              a route label + count. The split counts in either
-                              cases or pieces (routeUnit); the balance reconciles
-                              against the matching ordered qty. */}
+                        ) : rowMeta.cutters > 0 ? (
+                          rowMeta.cutters
+                        ) : (
+                          emptyCell
+                        )}
+                      </td>
+
+                      {/* DELIVERY ROUTE — click opens the split editor inline. */}
+                      <td
+                        ref={editing("routes") ? activeCellRef : undefined}
+                        onClick={() => !editing("routes") && open("routes")}
+                        className={`${cellClass("routes")} text-slate-600`}
+                      >
+                        {editing("routes") ? (
+                          // One row per truck route (label + count). The split
+                          // counts in cases or pieces (routeUnit); the balance
+                          // reconciles against the matching ordered qty. Each edit
+                          // commits straight to the line's stored routes.
                           <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                                Split by
-                              </span>
-                              <div className="w-28">
-                                <UnitSelect
-                                  value={editDraft.routeUnit}
-                                  onChange={(v) => patchDraft({ routeUnit: v })}
-                                />
-                              </div>
-                            </div>
-                            {editDraft.routes.length > 0 && (
+                            {routes.length > 0 && (
                               <div className="flex items-center gap-1.5 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                                 <span className="w-16">Route #</span>
-                                <span className="w-16 text-center">
-                                  {unitShort(editDraft.routeUnit)}
-                                </span>
+                                <div className="flex w-16 justify-center">
+                                  <RouteUnitHeader
+                                    value={rowMeta.routeUnit}
+                                    onChange={(v) => commit({ routeUnit: v })}
+                                  />
+                                </div>
                               </div>
                             )}
-                            {editDraft.routes.map((r, i) => (
+                            {routes.map((r, i) => (
                               <div key={i} className="flex items-center gap-1.5">
                                 <input
                                   type="text"
                                   value={r.route}
                                   onChange={(e) =>
-                                    patchRoute(i, { route: e.target.value })
+                                    commit({
+                                      routes: routes.map((x, idx) =>
+                                        idx === i
+                                          ? { ...x, route: e.target.value }
+                                          : x,
+                                      ),
+                                    })
                                   }
                                   placeholder="9"
                                   aria-label={`Route ${i + 1} number`}
@@ -504,8 +700,17 @@ export function ProductionSheetSection({
                                   min={0}
                                   value={r.qty === 0 ? "" : r.qty}
                                   onChange={(e) =>
-                                    patchRoute(i, {
-                                      qty: clampNonNegativeInt(e.target.value),
+                                    commit({
+                                      routes: routes.map((x, idx) =>
+                                        idx === i
+                                          ? {
+                                              ...x,
+                                              qty: clampNonNegativeInt(
+                                                e.target.value,
+                                              ),
+                                            }
+                                          : x,
+                                      ),
                                     })
                                   }
                                   placeholder="0"
@@ -514,7 +719,11 @@ export function ProductionSheetSection({
                                 />
                                 <button
                                   type="button"
-                                  onClick={() => removeRoute(i)}
+                                  onClick={() =>
+                                    commit({
+                                      routes: routes.filter((_, idx) => idx !== i),
+                                    })
+                                  }
                                   title="Remove route"
                                   aria-label={`Remove route ${i + 1}`}
                                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"
@@ -525,108 +734,45 @@ export function ProductionSheetSection({
                             ))}
                             <button
                               type="button"
-                              onClick={addRoute}
+                              onClick={() =>
+                                commit({
+                                  routes: [...routes, { route: "", qty: 0 }],
+                                })
+                              }
                               className="flex w-fit items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                             >
                               <Plus size={13} />
                               Add route
                             </button>
-                            {(routeTarget(row, editDraft.routeUnit) > 0 ||
-                              editDraft.routes.length > 0) && (
+                            {(routeTarget(row, rowMeta.routeUnit) > 0 ||
+                              routes.length > 0) && (
                               <RouteBalance
                                 recon={reconcileRoutes(
-                                  editDraft.routes,
-                                  routeTarget(row, editDraft.routeUnit),
+                                  routes,
+                                  routeTarget(row, rowMeta.routeUnit),
                                 )}
-                                unit={editDraft.routeUnit}
+                                unit={rowMeta.routeUnit}
+                                piecesPerCase={row.piecesPerCase}
                               />
                             )}
                           </div>
-                        </td>
-                        <td className="px-3 py-2 align-middle">
-                          <div className="flex items-center justify-start gap-1.5">
-                            <button
-                              type="button"
-                              onClick={saveEdit}
-                              title="Save"
-                              aria-label="Save line"
-                              className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white transition hover:bg-slate-800"
-                            >
-                              <Check size={15} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelEdit}
-                              title="Cancel"
-                              aria-label="Cancel edit"
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"
-                            >
-                              <X size={15} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  }
-
-                  return (
-                    <tr
-                      key={row.sku}
-                      className="[&>td]:border-b [&>td]:border-slate-100"
-                    >
-                      {identityCells}
-                      <td className="px-3 py-3">
-                        <span className="flex items-center gap-1.5 text-slate-600">
-                          <span
-                            className={`h-2 w-2 rounded-full ${ROOM_DOT_CLASSES[rowMeta.room]}`}
-                          />
-                          {productionRoomLabel(rowMeta.room)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 tabular-nums text-slate-600">
-                        {rowMeta.start || emptyCell}
-                      </td>
-                      <td className="px-3 py-3 tabular-nums text-slate-600">
-                        {computeFinish(
-                          rowMeta.start,
-                          rowMeta.secPerPc,
-                          row.qtyPcs,
-                        ) || emptyCell}
-                      </td>
-                      <td className="px-3 py-3 text-center tabular-nums text-slate-600">
-                        {rowMeta.secPerPc > 0 ? rowMeta.secPerPc : emptyCell}
-                      </td>
-                      <td className="px-3 py-3 text-center tabular-nums text-slate-600">
-                        {rowMeta.cutters > 0 ? rowMeta.cutters : emptyCell}
-                      </td>
-                      <td className="px-3 py-3 text-slate-600">
-                        {rowMeta.routes.length === 0 ? (
+                        ) : routes.length === 0 ? (
                           emptyCell
                         ) : (
-                          <div className="flex flex-col items-start gap-1">
-                            <span>{formatRouteSummary(rowMeta.routes)}</span>
+                          <div className="flex items-center gap-2">
                             <RouteBalance
                               recon={reconcileRoutes(
-                                rowMeta.routes,
+                                routes,
                                 routeTarget(row, rowMeta.routeUnit),
                               )}
                               unit={rowMeta.routeUnit}
+                              piecesPerCase={row.piecesPerCase}
                             />
+                            <span className="min-w-0 truncate">
+                              {formatRouteSummary(routes, rowMeta.routeUnit)}
+                            </span>
                           </div>
                         )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center justify-start gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => startEdit(row)}
-                            title="Edit"
-                            aria-label="Edit line"
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"
-                          >
-                            <Pencil size={15} />
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   );

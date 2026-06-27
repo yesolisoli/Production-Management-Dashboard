@@ -106,10 +106,18 @@ function coerceHogBreakCalc(raw: unknown): HogBreakCalc {
     counts: {} as Record<HogType, number>,
     secPerHead: {} as Record<HogType, number>,
     start: typeof o.start === "string" && o.start.trim() ? o.start : base.start,
+    bufferMin:
+      typeof o.bufferMin === "number"
+        ? asNonNegativeInt(o.bufferMin)
+        : base.bufferMin,
     mainRoomBufferMin:
       typeof o.mainRoomBufferMin === "number"
         ? asNonNegativeInt(o.mainRoomBufferMin)
         : base.mainRoomBufferMin,
+    secondlineOffsetMin:
+      typeof o.secondlineOffsetMin === "number"
+        ? asNonNegativeInt(o.secondlineOffsetMin)
+        : base.secondlineOffsetMin,
   };
   for (const t of HOG_TYPES) {
     out.counts[t.value] = asNonNegativeInt(counts[t.value]);
@@ -164,6 +172,32 @@ function coerceProductionMetaMap(
   return out;
 }
 
+// Route Printing actuals: route number (string) → printed time (string). Older
+// drafts predate this field, so a missing / corrupt value reads back as empty.
+// Only non-empty string values are kept.
+function coerceRoutePrints(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [route, value] of Object.entries(raw as Record<string, unknown>)) {
+    const time = asString(value);
+    if (route && time.trim()) out[route] = time;
+  }
+  return out;
+}
+
+// Route Printing notes: route number (string) → free-text note (string). Older
+// drafts predate this field, so a missing / corrupt value reads back as empty.
+// Only non-empty string values are kept (mirrors coerceRoutePrints).
+function coerceRouteNotes(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [route, value] of Object.entries(raw as Record<string, unknown>)) {
+    const note = asString(value);
+    if (route && note.trim()) out[route] = note;
+  }
+  return out;
+}
+
 function coerceInstructions(raw: unknown): AllocationInstruction[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -182,6 +216,8 @@ export function readDraft(date: string): AllocationDraft | null {
       hog_break: coerceHogBreakCalc(parsed.hog_break),
       production_meta: coerceProductionMetaMap(parsed.production_meta),
       instructions: coerceInstructions(parsed.instructions),
+      route_prints: coerceRoutePrints(parsed.route_prints),
+      route_notes: coerceRouteNotes(parsed.route_notes),
     };
   } catch {
     return null;

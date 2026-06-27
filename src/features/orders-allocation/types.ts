@@ -12,8 +12,8 @@
 import {
   PRIMAL_GROUPS,
   type PrimalGroup,
-  type PrimalGroupKey,
 } from "@/features/primal-calculation/types";
+import { defaultRouteNotes, defaultRoutePrints } from "./route-printing";
 
 // A production-sheet row is cut in one of these physical rooms (ROOM column).
 // Single source for the room picker; extend here to add rooms.
@@ -79,15 +79,21 @@ export type HogType = (typeof HOG_TYPES)[number]["value"];
 // Default minutes between the hog break ending and the main room starting
 // (clean-down / changeover buffer).
 export const DEFAULT_MAIN_ROOM_BUFFER_MIN = 10;
+// Default manual buffer minutes folded into the break total (none by default).
+export const DEFAULT_BUFFER_MIN = 0;
 // Default time the hog break begins each morning.
 export const DEFAULT_HOG_BREAK_START = "05:00";
+// Default minutes after the hog break starts that secondline cutting begins.
+export const SECONDLINE_CUTTING_OFFSET_MIN = 30;
 
 // Raw, persisted inputs for the hog-break calculator.
 export type HogBreakCalc = {
   counts: Record<HogType, number>; // COUNT per hog type (entered each morning)
   secPerHead: Record<HogType, number>; // SEC/HEAD per hog type (break rate)
   start: string; // HOG BREAK START — free time text, e.g. "05:00"
+  bufferMin: number; // manual buffer minutes added to the break total
   mainRoomBufferMin: number; // gap between break end and main-room start
+  secondlineOffsetMin: number; // minutes after start that secondline cutting begins
 };
 
 export function defaultHogBreakCalc(): HogBreakCalc {
@@ -101,7 +107,9 @@ export function defaultHogBreakCalc(): HogBreakCalc {
     counts,
     secPerHead,
     start: DEFAULT_HOG_BREAK_START,
+    bufferMin: DEFAULT_BUFFER_MIN,
     mainRoomBufferMin: DEFAULT_MAIN_ROOM_BUFFER_MIN,
+    secondlineOffsetMin: SECONDLINE_CUTTING_OFFSET_MIN,
   };
 }
 
@@ -112,7 +120,9 @@ export function isDefaultHogBreakCalc(calc: HogBreakCalc): boolean {
   const d = defaultHogBreakCalc();
   return (
     calc.start === d.start &&
+    calc.bufferMin === d.bufferMin &&
     calc.mainRoomBufferMin === d.mainRoomBufferMin &&
+    calc.secondlineOffsetMin === d.secondlineOffsetMin &&
     HOG_TYPES.every(
       (t) =>
         calc.counts[t.value] === d.counts[t.value] &&
@@ -181,9 +191,14 @@ export function sortProductKeys(keys: readonly string[]): string[] {
 export type ProductionRow = {
   sku: string;
   name: string; // catalog product name, e.g. "PORK LOIN - VAC PAC"
-  group: PrimalGroupKey; // Primal group (badge colour + product filter)
+  group: AllocationProduct; // Primal group, or an instruction's product / area
   qtyCases: number; // QTY C/S — ordered cases
   qtyPcs: number; // QTY PCS — ordered loose pieces
+  piecesPerCase: number; // catalog case pack — drives the C/S <-> PC conversion
+  // Phase this row falls in until the operator moves it (its ProductionMeta then
+  // takes over). Omitted ⇒ the default Hog Break; instruction-derived rows set
+  // this to After Hog Break.
+  defaultPhase?: CutPhase;
 };
 
 // The operator-entered overlay for a production row, keyed by SKU. This is the
@@ -239,6 +254,14 @@ export type AllocationDraft = {
   hog_break: HogBreakCalc; // morning hog-break calculator inputs
   production_meta: Record<string /* sku */, ProductionMeta>;
   instructions: AllocationInstruction[];
+  // Route Printing Schedule actuals: route number (as string) → the clock time
+  // ("h:mm AM/PM") that route's labels were printed. Entered by the operator;
+  // the deadline/difference/status are DERIVED (route-printing.ts), not stored.
+  route_prints: Record<string, string>;
+  // Route Printing Schedule notes: route number (as string) → free-text note for
+  // that route (off-cuts, special pulls). Operator-owned, independent of the
+  // printed time.
+  route_notes: Record<string, string>;
 };
 
 // -------------------------------------------------------------------
@@ -251,6 +274,8 @@ export function emptyAllocationDraft(date: string): AllocationDraft {
     hog_break: defaultHogBreakCalc(),
     production_meta: {},
     instructions: [],
+    route_prints: {},
+    route_notes: {},
   };
 }
 
@@ -321,6 +346,8 @@ export function seededAllocationDraft(date: string): AllocationDraft {
   return {
     ...emptyAllocationDraft(date),
     instructions: defaultAllocationInstructions(),
+    route_prints: defaultRoutePrints(date),
+    route_notes: defaultRouteNotes(date),
   };
 }
 
@@ -328,7 +355,9 @@ export function isEmptyAllocationDraft(draft: AllocationDraft): boolean {
   return (
     isDefaultHogBreakCalc(draft.hog_break) &&
     Object.keys(draft.production_meta).length === 0 &&
-    draft.instructions.length === 0
+    draft.instructions.length === 0 &&
+    Object.keys(draft.route_prints).length === 0 &&
+    Object.keys(draft.route_notes).length === 0
   );
 }
 
@@ -399,4 +428,17 @@ const PRIORITY_DOT_CLASSES: Record<Priority, string> = {
 // Solid dot class for a priority value.
 export function priorityDotClass(value: Priority): string {
   return PRIORITY_DOT_CLASSES[value];
+}
+
+// Pill (tag) classes for a priority value — the colour-coded badge shown on the
+// sheet row and in the rule-type picker. Single source so both stay in sync.
+const PRIORITY_BADGE_CLASSES: Record<Priority, string> = {
+  dont: "bg-red-100 text-red-700",
+  do: "bg-amber-100 text-amber-800",
+  standard: "bg-slate-100 text-slate-600",
+};
+
+// Badge (pill) class for a priority value.
+export function priorityBadgeClass(value: Priority): string {
+  return PRIORITY_BADGE_CLASSES[value];
 }

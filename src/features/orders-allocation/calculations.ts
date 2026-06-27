@@ -15,42 +15,58 @@ import {
 import type { PrimalDemandSnapshot } from "./primal-demand-source";
 import {
   HOG_TYPES,
+  SECONDLINE_CUTTING_OFFSET_MIN,
+  unitShort,
   type AllocationInstruction,
   type HogBreakCalc,
   type HogType,
   type ProductionRow,
   type RouteAssignment,
+  type Unit,
 } from "./types";
 
-// Render a line's delivery-route split for the read row, e.g. "#9 (5) + #2 (2)".
-// Numeric route labels get a "#" prefix (so "9" -> "#9"); named routes are kept
-// verbatim ("PUW"). Entries with a blank route label are skipped; returns "" for
-// no routes (the sheet shows an em-dash).
-export function formatRouteSummary(routes: RouteAssignment[]): string {
+// Render a line's delivery-route split for the read row, e.g.
+// "#9 (5 C/S) + #2 (2 C/S)". Numeric route labels get a "#" prefix (so "9" ->
+// "#9"); named routes are kept verbatim ("PUW"). The quantity carries the line's
+// route unit tag (PC / C/S) so the split reads unambiguously. Entries with a
+// blank route label are skipped; returns "" for no routes (the sheet shows an
+// em-dash).
+export function formatRouteSummary(
+  routes: RouteAssignment[],
+  unit: Unit,
+): string {
+  const tag = unitShort(unit);
   return routes
     .map((r) => ({ route: r.route.trim(), qty: r.qty }))
     .filter((r) => r.route !== "")
     .map((r) => {
       const label = /^\d+$/.test(r.route) ? `#${r.route}` : r.route;
-      return `${label} (${r.qty})`;
+      return `${label} (${r.qty} ${tag})`;
     })
     .join(" + ");
 }
 
 // Derive the FINISH clock time from a free-text START ("6:00" or "6:00:30"),
-// SEC/PC (net seconds of work per piece) and the row's PIECE COUNT. FINISH is
-// never entered or stored — the operator sets START and SEC/PC, the work time
-// is secPerPc * pieces, and the end time follows. Returns "" when START is
-// unparseable or the total work time is non-positive (the sheet shows an
-// em-dash until both inputs are present). Wraps within a 24-hour clock and
-// renders as "H:MM:SS" (no leading-zero hour), e.g. "6:00" + 10s/pc * 30pc
-// (300s) -> "6:05:00".
+// SEC/PC (net seconds of work per piece), the row's PIECE COUNT and the number
+// of CUTTERS working the line. FINISH is never entered or stored — the operator
+// sets START, SEC/PC and CUTTERS; the work time is `secPerPc * pieces` spread
+// across the cutters working in parallel (`/ cutters`), and the end time
+// follows. More cutters ⇒ a shorter elapsed time. `cutters` defaults to 1, so a
+// missing / zero value means "one cutter" (no speed-up). Returns "" when START
+// is unparseable or the total work time is non-positive (the sheet shows an
+// em-dash until the inputs are present). Wraps within a 24-hour clock and
+// renders in the floor's canonical 12-hour display, zero-padded with seconds:
+// "hh:mm:ss AM/PM", e.g. "6:00" + 10s/pc * 30pc (300s) over 1 cutter ->
+// "06:05:00 AM"; over 3 cutters (100s) -> "06:01:40 AM".
 export function computeFinish(
   start: string,
   secPerPc: number,
   pieces: number,
+  cutters = 1,
 ): string {
-  const workSec = Math.max(0, Math.floor(secPerPc)) * Math.max(0, pieces);
+  const cutterCount = Math.max(1, Math.floor(cutters));
+  const totalSec = Math.max(0, Math.floor(secPerPc)) * Math.max(0, pieces);
+  const workSec = Math.ceil(totalSec / cutterCount);
   const match = start.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (!match || workSec <= 0) return "";
   const hours = Number(match[1]);
@@ -58,10 +74,12 @@ export function computeFinish(
   const seconds = match[3] ? Number(match[3]) : 0;
   if (hours > 23 || minutes > 59 || seconds > 59) return "";
   const total = (hours * 3600 + minutes * 60 + seconds + workSec) % (24 * 3600);
-  const h = Math.floor(total / 3600);
+  const h24 = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  const meridiem = h24 < 12 ? "AM" : "PM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")} ${meridiem}`;
 }
 
 // Add `minutes` to a free-text "HH:MM" clock time, returning "HH:MM" on a
@@ -103,7 +121,10 @@ export type HogBreakRow = {
 export type HogBreakResult = {
   rows: HogBreakRow[];
   totalCount: number;
-  totalMinutes: number;
+  workMinutes: number; // break minutes from the rows only (no buffer)
+  bufferMin: number; // manual buffer folded into the total
+  totalMinutes: number; // workMinutes + bufferMin
+  secondlineCutting: string; // SECONDLINE CUTTING — START + offset
   end: string; // HOG BREAK END
   mainRoomStart: string; // MAIN ROOM START
 };
@@ -135,10 +156,25 @@ export function deriveHogBreak(
     };
   });
   const totalCount = rows.reduce((sum, r) => sum + r.count, 0);
-  const totalMinutes = rows.reduce((sum, r) => sum + r.totalMinutes, 0);
+  const workMinutes = rows.reduce((sum, r) => sum + r.totalMinutes, 0);
+  const bufferMin = Math.max(0, Math.floor(calc.bufferMin ?? 0));
+  const totalMinutes = workMinutes + bufferMin;
+  const secondlineCutting = addMinutesToClock(
+    calc.start,
+    Math.max(0, Math.floor(calc.secondlineOffsetMin ?? SECONDLINE_CUTTING_OFFSET_MIN)),
+  );
   const end = addMinutesToClock(calc.start, totalMinutes);
   const mainRoomStart = addMinutesToClock(end, calc.mainRoomBufferMin);
-  return { rows, totalCount, totalMinutes, end, mainRoomStart };
+  return {
+    rows,
+    totalCount,
+    workMinutes,
+    bufferMin,
+    totalMinutes,
+    secondlineCutting,
+    end,
+    mainRoomStart,
+  };
 }
 
 // Reconcile a line's delivery-route split against its ordered quantity in the
@@ -198,6 +234,7 @@ export function buildProductionRows(
       group: groupForCategory(spec.category).key as PrimalGroupKey,
       qtyCases,
       qtyPcs,
+      piecesPerCase: Math.max(1, Math.round(spec.piecesPerCase)),
     });
   }
   // Canonical group order (PRIMAL_GROUPS), then SKU ascending within a group.
@@ -209,6 +246,34 @@ export function buildProductionRows(
     (a, b) =>
       groupRank(a.group) - groupRank(b.group) || a.sku.localeCompare(b.sku),
   );
+}
+
+// Synthetic SKU prefix for production rows DERIVED from allocation instructions.
+// Those lines have no catalog SKU, so the instruction id keys their operational
+// overlay; the sheet uses this prefix to keep the SKU cell blank for them.
+export const INSTRUCTION_ROW_SKU_PREFIX = "instruction:";
+
+// Convert the morning-brief instructions into production-sheet rows for the
+// After Hog Break phase. Each instruction becomes one row: its text is the line
+// name, its category the product group, and its qty maps to the matching unit
+// column (cases or loose pieces). There is no catalog SKU, so a stable synthetic
+// key (the instruction id) carries the per-row operational overlay. Pure
+// derivation — recomputed from the draft's instructions, never stored.
+export function instructionProductionRows(
+  instructions: AllocationInstruction[],
+): ProductionRow[] {
+  return instructions.map((ins) => {
+    const qty = Math.max(0, Math.round(ins.qty));
+    return {
+      sku: `${INSTRUCTION_ROW_SKU_PREFIX}${ins.id}`,
+      name: ins.instruction,
+      group: ins.category,
+      qtyCases: ins.unit === "case" ? qty : 0,
+      qtyPcs: ins.unit === "case" ? 0 : qty,
+      piecesPerCase: 1,
+      defaultPhase: "after_hog_break",
+    };
+  });
 }
 
 // Per-group ordered count (salesOrders) for the header strip. Every group in the

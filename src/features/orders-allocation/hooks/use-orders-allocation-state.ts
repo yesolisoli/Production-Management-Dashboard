@@ -131,6 +131,33 @@ export function useOrdersAllocationState() {
     [],
   );
 
+  // ------------------------- Route printing ---------------------------
+  // Operator-entered printed time per route (Route Printing Schedule). Stored as
+  // raw text keyed by route number so the deadline/difference/status can derive
+  // from it; a blank value drops the route back to "Not Printed".
+  const setRoutePrint = useCallback((route: string, time: string) => {
+    setDraft((prev) => {
+      const next = { ...prev.route_prints };
+      if (time.trim()) next[route] = time;
+      else delete next[route];
+      return { ...prev, route_prints: next };
+    });
+    setStatus({ kind: "idle" });
+  }, []);
+
+  // Operator-entered free-text note per route (Route Printing Schedule). Stored
+  // keyed by route number; a blank value drops the route's note. Mirrors
+  // setRoutePrint — independent of the printed time.
+  const setRouteNote = useCallback((route: string, note: string) => {
+    setDraft((prev) => {
+      const next = { ...prev.route_notes };
+      if (note.trim()) next[route] = note;
+      else delete next[route];
+      return { ...prev, route_notes: next };
+    });
+    setStatus({ kind: "idle" });
+  }, []);
+
   // ---------------------------- Hog break -----------------------------
   // Merge a patch onto the morning hog-break calc inputs, clamping the per-type
   // count / rate records and the main-room buffer to non-negative ints. The
@@ -151,7 +178,9 @@ export function useOrdersAllocationState() {
           counts,
           secPerHead,
           start: next.start,
+          bufferMin: clampNonNegativeInt(next.bufferMin),
           mainRoomBufferMin: clampNonNegativeInt(next.mainRoomBufferMin),
+          secondlineOffsetMin: clampNonNegativeInt(next.secondlineOffsetMin),
         },
       };
     });
@@ -249,6 +278,8 @@ export function useOrdersAllocationState() {
     instructionsSummary,
     setDate,
     setProductionMeta,
+    setRoutePrint,
+    setRouteNote,
     setHogBreakCalc,
     addInstruction,
     updateInstruction,

@@ -2,11 +2,12 @@
 
 import { useMemo } from "react";
 import { AppHeader } from "@/components/layout/app-header";
-import { orderedByGroup } from "../calculations";
+import { instructionProductionRows, orderedByGroup } from "../calculations";
 import { useOrdersAllocationState } from "../hooks/use-orders-allocation-state";
 import { usePrimalDemand } from "../hooks/use-primal-demand";
 import { HogBreakCalculator } from "./hog-break-calculator";
 import { ProductionSheetSection } from "./production-sheet-section";
+import { RoutePrintingSection } from "./route-printing-section";
 import { DemandHeaderActions } from "./demand-header-actions";
 import { SaveBar } from "./save-bar";
 
@@ -25,6 +26,8 @@ export function ProductionPlannerClient() {
     isEmpty,
     setDate,
     setProductionMeta,
+    setRoutePrint,
+    setRouteNote,
     setHogBreakCalc,
     clearAll,
     save,
@@ -36,6 +39,15 @@ export function ProductionPlannerClient() {
   const ordered = useMemo(
     () => orderedByGroup(snapshot?.availability ?? []),
     [snapshot],
+  );
+
+  // The production sheet shows the Primal-derived SKU rows alongside the
+  // morning-brief instructions, converted to rows that open in the After Hog
+  // Break phase. Both are derived — the per-row operational overlay is the only
+  // persisted part.
+  const productionSheetRows = useMemo(
+    () => [...productionRows, ...instructionProductionRows(draft.instructions)],
+    [productionRows, draft.instructions],
   );
 
   return (
@@ -61,9 +73,17 @@ export function ProductionPlannerClient() {
           />
 
           <ProductionSheetSection
-            rows={productionRows}
+            rows={productionSheetRows}
             meta={draft.production_meta}
             onSetMeta={setProductionMeta}
+          />
+
+          <RoutePrintingSection
+            date={date}
+            prints={draft.route_prints}
+            notes={draft.route_notes}
+            onSetRoutePrint={setRoutePrint}
+            onSetRouteNote={setRouteNote}
           />
 
           <SaveBar

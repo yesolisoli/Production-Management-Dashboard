@@ -1,16 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Check,
   ClipboardList,
   Download,
   Mail,
-  Pencil,
   Plus,
-  Trash2,
   X,
 } from "lucide-react";
+import { clampNonNegativeInt } from "@/features/hog-intake/calculations";
 import {
   emailAllocationInstructions,
   exportAllocationInstructions,
@@ -48,20 +46,33 @@ const labelClass =
 const inputClass =
   "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100";
 
+// Compact input for in-cell editing (smaller than the add form's inputClass).
+// min-w-0 keeps it from forcing its table-fixed column wider than the colgroup.
+const cellInputClass =
+  "h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100";
+
+// Muted placeholder for an empty value in a read cell.
+const emptyCell = <span className="text-slate-300">—</span>;
+
+// The cells an operator can edit in place by clicking them. (Product is
+// read-only — it comes from Primal — so it isn't an editable cell.)
+type CellField = "type" | "qty" | "context" | "customer";
+
 // Rule type → guidance styles. The row stays on a plain background; the type is
-// shown by the left accent bar + the colour tag only (no row tint).
+// shown by the left accent bar (its own table column) + the colour tag only (no
+// row tint).
 //   dont = Red (DO NOT) · do = Yellow (DO THIS) · standard = White.
-const RULE_STYLES: Record<Priority, { border: string; badge: string }> = {
+const RULE_STYLES: Record<Priority, { bar: string; badge: string }> = {
   dont: {
-    border: "border-l-red-500",
+    bar: "bg-red-500",
     badge: "bg-red-100 text-red-700",
   },
   do: {
-    border: "border-l-amber-400",
+    bar: "bg-amber-400",
     badge: "bg-amber-100 text-amber-800",
   },
   standard: {
-    border: "border-l-slate-300",
+    bar: "bg-slate-300",
     badge: "bg-slate-100 text-slate-600",
   },
 };
@@ -104,12 +115,41 @@ export function AllocationSheetSection({
   const [instruction, setInstruction] = useState("");
   const [customer, setCustomer] = useState("");
   const [priority, setPriority] = useState<Priority>("standard");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // Inline per-cell editing — which cell (row id + field) is open. Each editable
+  // cell commits straight to the row via onUpdate, so there is no row draft to
+  // reconcile. A product edit keys on the group's first row and applies to all.
+  const [editingCell, setEditingCell] = useState<{
+    id: string;
+    field: CellField;
+  } | null>(null);
+  // The open cell — used to detect clicks outside it (close on outside click).
+  const activeCellRef = useRef<HTMLTableCellElement>(null);
   // View filter: narrow the printed sheet to one product / area ("all" = show
   // every group). Presentation only — the underlying rows are untouched.
   const [filter, setFilter] = useState<AllocationProduct | "all">("all");
 
-  // Top form is add-only — editing happens inline on each row (see editingId).
+  const closeCell = useCallback(() => setEditingCell(null), []);
+
+  // Close the open cell on a click anywhere outside it, or on Escape. The inline
+  // selects render inside the cell, so picking from them counts as inside and
+  // doesn't close the editor prematurely.
+  useEffect(() => {
+    if (!editingCell) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!activeCellRef.current?.contains(e.target as Node)) closeCell();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeCell();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [editingCell, closeCell]);
+
+  // Top form is add-only — editing happens inline per cell (see editingCell).
   const resetForm = () => {
     setCategory(DEFAULT_PRODUCT);
     setQty("");
@@ -144,6 +184,9 @@ export function AllocationSheetSection({
   const visibleGroups = filterActive
     ? productGroups.filter((g) => g.key === filter)
     : productGroups;
+  // Flatten the product groups into a single ordered list (product, then rule
+  // type within each product) — the sheet is a flat table; product shows per row.
+  const flatRows = visibleGroups.flatMap((g) => g.rows);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -331,39 +374,234 @@ export function AllocationSheetSection({
             />
           </div>
 
-          {visibleGroups.length > 0 ? (
+          {flatRows.length > 0 ? (
             <div className="overflow-hidden rounded-xl border border-slate-200">
-              <div className="divide-y divide-slate-200">
-                {visibleGroups.map((group) => (
-                  <SheetGroup
-                    key={group.key}
-                    productKey={group.key}
-                    title={group.label}
-                    count={group.rows.length}
-                  >
-                    {group.rows.map((row) =>
-                      editingId === row.id ? (
-                        <InlineRowEditor
+              {/* Real table so same-product rows can merge their Product cell
+                  (rowSpan). Fixed widths keep header and rows aligned. */}
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  <col className="w-40" />
+                  <col className="w-1" />
+                  <col className="w-40" />
+                  <col className="w-28" />
+                  <col />
+                  <col className="w-40" />
+                  <col className="w-12" />
+                </colgroup>
+                <thead>
+                  <tr className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 [&>th]:border-b [&>th]:border-slate-200 [&>th]:px-3 [&>th]:py-2.5">
+                    <th>Product</th>
+                    <th aria-hidden="true" />
+                    <th>Type</th>
+                    <th>Qty</th>
+                    <th>Context</th>
+                    <th className="hidden sm:table-cell">Customer</th>
+                    <th aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleGroups.flatMap((group) =>
+                    group.rows.map((row, i) => {
+                      const style = RULE_STYLES[row.priority];
+                      // Is this row's given cell the one currently open?
+                      const editing = (field: CellField) =>
+                        editingCell?.id === row.id &&
+                        editingCell.field === field;
+                      const open = (field: CellField) =>
+                        setEditingCell({ id: row.id, field });
+                      const commit = (
+                        patch: Partial<Omit<AllocationInstruction, "id">>,
+                      ) => onUpdate(row.id, patch);
+                      // Read cell shows a hover hint + click target; the active
+                      // cell drops the hint and carries the outside-click ref.
+                      const cellClass = (field: CellField) =>
+                        `px-3 align-middle ${
+                          editing(field)
+                            ? "py-1.5"
+                            : "py-2.5 cursor-pointer transition hover:bg-slate-100/70"
+                        }`;
+
+                      return (
+                        <tr
                           key={row.id}
-                          row={row}
-                          onSave={(patch) => {
-                            onUpdate(row.id, patch);
-                            setEditingId(null);
-                          }}
-                          onCancel={() => setEditingId(null)}
-                        />
-                      ) : (
-                        <SheetRow
-                          key={row.id}
-                          row={row}
-                          onEdit={() => setEditingId(row.id)}
-                          onRemove={() => onRemove(row.id)}
-                        />
-                      ),
-                    )}
-                  </SheetGroup>
-                ))}
-              </div>
+                          className="group transition hover:bg-slate-50/60 [&>td]:border-b [&>td]:border-slate-100"
+                        >
+                          {/* PRODUCT — merged per group, read-only. The product
+                              comes from Primal, so it isn't edited inline here. */}
+                          {i === 0 && (
+                            <td
+                              rowSpan={group.rows.length}
+                              className="align-top px-3 py-2.5"
+                            >
+                              <span className="flex items-center gap-2">
+                                <span
+                                  className={`h-2 w-2 shrink-0 rounded-full ${productDotClass(group.key)}`}
+                                />
+                                <span
+                                  className={`truncate text-xs font-bold uppercase tracking-wide ${productTextClass(group.key)}`}
+                                >
+                                  {group.label}
+                                </span>
+                              </span>
+                            </td>
+                          )}
+
+                          {/* Rule-type accent bar (its own column). */}
+                          <td className={`p-0 ${style.bar}`} />
+
+                          {/* TYPE */}
+                          <td
+                            ref={editing("type") ? activeCellRef : undefined}
+                            onClick={() => !editing("type") && open("type")}
+                            className={`px-3 py-2.5 align-middle ${
+                              editing("type")
+                                ? ""
+                                : "cursor-pointer transition hover:bg-slate-100/70"
+                            }`}
+                          >
+                            {editing("type") ? (
+                              <PrioritySelect
+                                value={row.priority}
+                                defaultOpen
+                                flush
+                                onChange={(v) => commit({ priority: v })}
+                                onClose={closeCell}
+                              />
+                            ) : (
+                              <span
+                                className={`block rounded-md px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${style.badge}`}
+                              >
+                                {priorityLabel(row.priority)}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* QTY (number + compact unit toggle) */}
+                          <td
+                            ref={editing("qty") ? activeCellRef : undefined}
+                            onClick={() => !editing("qty") && open("qty")}
+                            className={`${cellClass("qty")} text-sm tabular-nums text-slate-900`}
+                          >
+                            {editing("qty") ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={0}
+                                  autoFocus
+                                  value={row.qty === 0 ? "" : row.qty}
+                                  onChange={(e) =>
+                                    commit({
+                                      qty: clampNonNegativeInt(e.target.value),
+                                    })
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      closeCell();
+                                    }
+                                  }}
+                                  placeholder="0"
+                                  aria-label="Quantity"
+                                  className={`${cellInputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                                />
+                                <UnitToggle
+                                  value={row.unit}
+                                  onChange={(u) => commit({ unit: u })}
+                                />
+                              </div>
+                            ) : row.qty > 0 ? (
+                              `${row.qty} ${unitShort(row.unit)}`
+                            ) : (
+                              emptyCell
+                            )}
+                          </td>
+
+                          {/* CONTEXT (instruction) */}
+                          <td
+                            ref={editing("context") ? activeCellRef : undefined}
+                            onClick={() =>
+                              !editing("context") && open("context")
+                            }
+                            className={`${cellClass("context")} text-sm text-slate-900 ${
+                              editing("context") ? "" : "truncate"
+                            }`}
+                          >
+                            {editing("context") ? (
+                              <input
+                                type="text"
+                                autoFocus
+                                value={row.instruction}
+                                onChange={(e) =>
+                                  commit({ instruction: e.target.value })
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    closeCell();
+                                  }
+                                }}
+                                aria-label="Floor instruction"
+                                className={cellInputClass}
+                              />
+                            ) : (
+                              row.instruction
+                            )}
+                          </td>
+
+                          {/* CUSTOMER (plain text) */}
+                          <td
+                            ref={editing("customer") ? activeCellRef : undefined}
+                            onClick={() =>
+                              !editing("customer") && open("customer")
+                            }
+                            className={`hidden sm:table-cell ${cellClass("customer")} text-sm text-slate-900 ${
+                              editing("customer") ? "" : "truncate"
+                            }`}
+                          >
+                            {editing("customer") ? (
+                              <input
+                                type="text"
+                                autoFocus
+                                value={row.customer}
+                                onChange={(e) =>
+                                  commit({ customer: e.target.value })
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    closeCell();
+                                  }
+                                }}
+                                placeholder="e.g. SYSCO VIC MON"
+                                aria-label="Customer / context"
+                                className={cellInputClass}
+                              />
+                            ) : row.customer ? (
+                              row.customer
+                            ) : (
+                              emptyCell
+                            )}
+                          </td>
+
+                          {/* REMOVE — hover-revealed, after Customer. */}
+                          <td className="px-2 py-2.5 text-right align-middle">
+                            <button
+                              type="button"
+                              onClick={() => onRemove(row.id)}
+                              title="Remove"
+                              aria-label="Remove instruction"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-red-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100"
+                            >
+                              <X size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }),
+                  )}
+                </tbody>
+              </table>
             </div>
           ) : (
             filterActive && (
@@ -378,216 +616,25 @@ export function AllocationSheetSection({
   );
 }
 
-// One product / area band: a full-width colour-coded header (dot + name +
-// count) stacked above its instruction rows. The rule-type accent lives on each
-// row, so the group itself carries no left stripe.
-function SheetGroup({
-  productKey,
-  title,
-  count,
-  children,
+// Compact unit switch for the in-cell Qty editor — there are only two units
+// (PC / C/S), so a single toggle button is enough and fits the narrow column.
+function UnitToggle({
+  value,
+  onChange,
 }: {
-  productKey: string;
-  title: string;
-  count: number;
-  children: React.ReactNode;
+  value: Unit;
+  onChange: (value: Unit) => void;
 }) {
   return (
-    <div>
-      <div className="flex items-center gap-2.5 bg-slate-50/70 px-4 py-2.5">
-        <span
-          className={`h-2.5 w-2.5 shrink-0 rounded-full ${productDotClass(productKey)}`}
-        />
-        <span
-          className={`text-sm font-bold uppercase tracking-wide ${productTextClass(productKey)}`}
-        >
-          {title}
-        </span>
-        <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-500">
-          {count}
-        </span>
-      </div>
-      <div className="divide-y divide-slate-100">{children}</div>
-    </div>
-  );
-}
-
-// One sheet line: a rule-type badge, a fixed QTY slot, an optional customer /
-// context pill, then the instruction text — with edit/remove actions that stay
-// dim until the row is hovered or focused. A left accent bar keeps the rule
-// type (DO THIS / DO NOT / STANDARD) readable at a glance.
-function SheetRow({
-  row,
-  onEdit,
-  onRemove,
-}: {
-  row: AllocationInstruction;
-  onEdit: () => void;
-  onRemove: () => void;
-}) {
-  const style = RULE_STYLES[row.priority];
-  return (
-    <div
-      className={`group flex items-center gap-3 border-l-4 ${style.border} py-2.5 pl-3 pr-4 transition hover:bg-slate-50/60`}
+    <button
+      type="button"
+      onClick={() => onChange(value === "piece" ? "case" : "piece")}
+      title="Toggle unit"
+      aria-label={`Unit: ${unitShort(value)} (click to change)`}
+      className="flex h-9 shrink-0 items-center rounded-lg border border-slate-200 px-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
     >
-      <span
-        className={`w-22 shrink-0 rounded-md px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${style.badge}`}
-      >
-        {priorityLabel(row.priority)}
-      </span>
-      <span className="w-16 shrink-0 text-xs font-bold uppercase tabular-nums text-slate-700">
-        {row.qty > 0 ? `${row.qty} ${unitShort(row.unit)}` : ""}
-      </span>
-      {row.customer ? (
-        <span className="hidden shrink-0 truncate rounded-md border border-slate-200 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline-block">
-          {row.customer}
-        </span>
-      ) : null}
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase text-slate-800">
-        {row.instruction}
-      </span>
-      <RowActions onEdit={onEdit} onRemove={onRemove} />
-    </div>
-  );
-}
-
-// Inline editor — replaces a row in place when its edit button is clicked, so
-// the operator edits where the row lives instead of jumping to the top form.
-// Mirrors the add form's fields; local state seeds from the row and is committed
-// on Save. Enter saves, Escape cancels.
-function InlineRowEditor({
-  row,
-  onSave,
-  onCancel,
-}: {
-  row: AllocationInstruction;
-  onSave: (patch: Omit<AllocationInstruction, "id">) => void;
-  onCancel: () => void;
-}) {
-  const [category, setCategory] = useState<AllocationProduct>(row.category);
-  const [qty, setQty] = useState(row.qty ? String(row.qty) : "");
-  const [unit, setUnit] = useState<Unit>(row.unit);
-  const [instruction, setInstruction] = useState(row.instruction);
-  const [customer, setCustomer] = useState(row.customer);
-  const [priority, setPriority] = useState<Priority>(row.priority);
-
-  const save = () => {
-    if (!instruction.trim()) return;
-    onSave({
-      category,
-      qty: Number(qty) || 0,
-      unit,
-      instruction: instruction.trim(),
-      customer: customer.trim(),
-      priority,
-    });
-  };
-
-  return (
-    <div className="grid grid-cols-1 gap-3 border-l-4 border-l-slate-400 bg-slate-50 py-3 pl-3 pr-1 lg:grid-cols-12 lg:items-end">
-      <div className="lg:col-span-2">
-        <label className={labelClass}>Product / Area</label>
-        <ProductSelect value={category} onChange={setCategory} />
-      </div>
-      <div className="lg:col-span-2">
-        <label className={labelClass}>Rule type</label>
-        <PrioritySelect value={priority} onChange={setPriority} />
-      </div>
-      <div className="lg:col-span-2">
-        <label className={labelClass}>Qty affected</label>
-        <div className="flex items-stretch gap-2">
-          <input
-            type="number"
-            min={0}
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            placeholder="optional"
-            className={`${inputClass} min-w-0 flex-1`}
-          />
-          <div className="w-28 shrink-0">
-            <UnitSelect value={unit} onChange={setUnit} />
-          </div>
-        </div>
-      </div>
-      <div className="lg:col-span-2">
-        <label className={labelClass}>Customer / context</label>
-        <input
-          type="text"
-          value={customer}
-          onChange={(e) => setCustomer(e.target.value)}
-          className={inputClass}
-        />
-      </div>
-      <div className="lg:col-span-2">
-        <label className={labelClass}>Floor instruction</label>
-        <input
-          type="text"
-          value={instruction}
-          onChange={(e) => setInstruction(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              save();
-            } else if (e.key === "Escape") {
-              onCancel();
-            }
-          }}
-          autoFocus
-          className={inputClass}
-        />
-      </div>
-      <div className="flex items-center justify-end gap-2 lg:col-span-2">
-        <button
-          type="button"
-          onClick={save}
-          disabled={!instruction.trim()}
-          className="flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
-        >
-          <Check size={16} />
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex h-11 items-center gap-1.5 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
-        >
-          <X size={15} />
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Edit/remove buttons — dim by default, full strength on row hover or focus.
-function RowActions({
-  onEdit,
-  onRemove,
-}: {
-  onEdit: () => void;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="flex shrink-0 items-center gap-0.5 opacity-40 transition group-hover:opacity-100 focus-within:opacity-100">
-      <button
-        type="button"
-        onClick={onEdit}
-        title="Edit"
-        aria-label="Edit instruction"
-        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"
-      >
-        <Pencil size={14} />
-      </button>
-      <button
-        type="button"
-        onClick={onRemove}
-        title="Remove"
-        aria-label="Remove instruction"
-        className="flex h-7 w-7 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-50 hover:text-red-600"
-      >
-        <Trash2 size={14} />
-      </button>
-    </div>
+      {unitShort(value)}
+    </button>
   );
 }
 

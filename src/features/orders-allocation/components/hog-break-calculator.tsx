@@ -33,6 +33,10 @@ type HogBreakCalculatorProps = {
 const numberInputClass =
   "h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-right text-sm tabular-nums text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 
+// Compact inline offset input shown beneath a derived clock time.
+const inlineOffsetInputClass =
+  "h-6 w-10 rounded border border-slate-200 bg-white px-1 text-right text-xs tabular-nums text-slate-700 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+
 const emptyCell = <span className="text-slate-300">—</span>;
 
 // One decimal place, or an em-dash when there is no work time yet.
@@ -86,7 +90,7 @@ export function HogBreakCalculator({
       {open && (
         <div className="border-t border-slate-100 p-4 sm:p-5">
           {/* Timing strip — START is entered, END and MAIN ROOM START are derived. */}
-          <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
             <label className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Hog Break Start
@@ -102,6 +106,36 @@ export function HogBreakCalculator({
             </label>
             <div className="flex flex-col gap-1 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Secondline Cutting
+              </span>
+              <span className="text-base font-semibold tabular-nums text-slate-700">
+                {result.secondlineCutting || emptyCell}
+              </span>
+              <label className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
+                <span>Start +</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={
+                    calc.secondlineOffsetMin === 0
+                      ? ""
+                      : calc.secondlineOffsetMin
+                  }
+                  onChange={(e) =>
+                    onChange({
+                      secondlineOffsetMin: clampNonNegativeInt(e.target.value),
+                    })
+                  }
+                  placeholder="0"
+                  aria-label="Minutes after hog break start that secondline cutting begins"
+                  className={inlineOffsetInputClass}
+                />
+                <span>min</span>
+              </label>
+            </div>
+            <div className="flex flex-col gap-1 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Hog Break End
               </span>
               <span className="text-base font-semibold tabular-nums text-slate-700">
@@ -115,6 +149,26 @@ export function HogBreakCalculator({
               <span className="text-base font-semibold tabular-nums text-emerald-700">
                 {result.mainRoomStart || emptyCell}
               </span>
+              <label className="mt-0.5 flex items-center gap-1 text-[11px] text-emerald-600/70">
+                <span>End +</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={
+                    calc.mainRoomBufferMin === 0 ? "" : calc.mainRoomBufferMin
+                  }
+                  onChange={(e) =>
+                    onChange({
+                      mainRoomBufferMin: clampNonNegativeInt(e.target.value),
+                    })
+                  }
+                  placeholder="0"
+                  aria-label="Minutes between hog break end and main room start"
+                  className={`${inlineOffsetInputClass} border-emerald-200 text-emerald-700`}
+                />
+                <span>min</span>
+              </label>
             </div>
           </div>
 
@@ -185,15 +239,36 @@ export function HogBreakCalculator({
             })}
           </div>
 
-          {/* Totals across all hog types. */}
-          <div className="mt-2 flex items-center justify-end gap-4 px-3 py-2.5 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            <span>Total</span>
-            <span className="flex items-center gap-4 text-base normal-case tracking-normal text-slate-800">
-              <span className="tabular-nums">
-                {result.totalCount > 0 ? result.totalCount : emptyCell} head
+          {/* Totals across all hog types — a manual buffer (left) is folded
+              into the TOTAL minutes alongside the break work time. */}
+          <div className="mt-2 flex flex-wrap items-center justify-end gap-6 px-3 py-2.5 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            <label className="flex items-center gap-3">
+              <span>Buffer</span>
+              <span className="flex items-center gap-1 text-base normal-case tracking-normal text-slate-800">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={calc.bufferMin === 0 ? "" : calc.bufferMin}
+                  onChange={(e) =>
+                    onChange({ bufferMin: clampNonNegativeInt(e.target.value) })
+                  }
+                  placeholder="0"
+                  aria-label="Buffer minutes added to the total"
+                  className={numberInputClass.replace("w-full", "w-20")}
+                />
+                <span>min</span>
               </span>
-              <span className="tabular-nums">
-                {formatMinutes(result.totalMinutes)} min
+            </label>
+            <span className="flex items-center gap-4">
+              <span>Total</span>
+              <span className="flex items-center gap-4 text-base normal-case tracking-normal text-slate-800">
+                <span className="tabular-nums">
+                  {result.totalCount > 0 ? result.totalCount : emptyCell} head
+                </span>
+                <span className="tabular-nums">
+                  {formatMinutes(result.totalMinutes)} min
+                </span>
               </span>
             </span>
           </div>

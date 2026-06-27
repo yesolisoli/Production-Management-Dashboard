@@ -9,6 +9,8 @@ export type SelectOption<T extends string> = {
   value: T;
   label: string;
   dotClass: string; // solid colour dot, e.g. "bg-amber-500"
+  // Pill classes for the "badge" variant, e.g. "bg-amber-100 text-amber-800".
+  badgeClass?: string;
 };
 
 type CustomSelectProps<T extends string> = {
@@ -20,6 +22,20 @@ type CustomSelectProps<T extends string> = {
   // forwarded here (the parent decides how to persist and select it).
   onAdd?: (label: string) => void;
   addLabel?: string;
+  // Open the panel as soon as it mounts — for click-to-edit cells that render
+  // the select only once the cell is activated, so the dropdown shows at once.
+  defaultOpen?: boolean;
+  // Called whenever the panel closes (selection, outside click or Escape), so a
+  // host cell can drop back out of edit mode in step with the dropdown.
+  onClose?: () => void;
+  // "dot" (default) shows a colour dot + label. "badge" shows the label inside a
+  // colour-coded pill (option.badgeClass) with no dot — for tag-style pickers.
+  variant?: "dot" | "badge";
+  // Badge-only. When true, the trigger drops its border/chevron and the pill
+  // fills the full width, centred — for an inline table cell that must keep the
+  // same footprint as its read-mode badge (open expands downward, never resizes).
+  // Default (false) keeps the standard bordered dropdown box with a chevron.
+  flush?: boolean;
 };
 
 export function CustomSelect<T extends string>({
@@ -29,8 +45,24 @@ export function CustomSelect<T extends string>({
   id,
   onAdd,
   addLabel = "Add new",
+  defaultOpen = false,
+  onClose,
+  variant = "dot",
+  flush = false,
 }: CustomSelectProps<T>) {
-  const [open, setOpen] = useState(false);
+  const isBadge = variant === "badge";
+  // A flush badge picker drops the border/chevron and shows a full-width centred
+  // pill (matches the read-cell badge so opening keeps the same footprint). A
+  // boxed picker (the default) sits in a bordered dropdown box with a chevron.
+  const flushBadge = isBadge && flush;
+  // The pill: full-width centred when flush, otherwise a compact inline pill.
+  const badgeClass = flushBadge
+    ? "block rounded-md px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wide"
+    : "inline-block rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide";
+  // Bordered box chrome — used by every picker except the flush badge.
+  const boxChrome =
+    "h-11 border border-slate-200 bg-white px-3 focus:border-slate-400 focus:ring-2 focus:ring-slate-100";
+  const [open, setOpen] = useState(defaultOpen);
   const [adding, setAdding] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -41,7 +73,8 @@ export function CustomSelect<T extends string>({
     setOpen(false);
     setAdding(false);
     setDraftLabel("");
-  }, []);
+    onClose?.();
+  }, [onClose]);
 
   // Close on outside click or Escape.
   useEffect(() => {
@@ -83,16 +116,30 @@ export function CustomSelect<T extends string>({
         onClick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex h-11 w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+        className={`flex w-full items-center gap-2.5 rounded-xl text-sm font-semibold text-slate-900 outline-none transition ${
+          flushBadge ? "" : boxChrome
+        }`}
       >
-        <span
-          className={`h-2.5 w-2.5 shrink-0 rounded-full ${selected?.dotClass ?? "bg-slate-300"}`}
-        />
-        <span className="flex-1 truncate text-left">{selected?.label}</span>
-        <ChevronDown
-          size={16}
-          className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`}
-        />
+        {isBadge ? (
+          <span className={flushBadge ? "flex-1" : "flex-1 truncate text-left"}>
+            <span className={`${badgeClass} ${selected?.badgeClass ?? ""}`}>
+              {selected?.label}
+            </span>
+          </span>
+        ) : (
+          <>
+            <span
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${selected?.dotClass ?? "bg-slate-300"}`}
+            />
+            <span className="flex-1 truncate text-left">{selected?.label}</span>
+          </>
+        )}
+        {!flushBadge && (
+          <ChevronDown
+            size={16}
+            className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`}
+          />
+        )}
       </button>
 
       {open && (
@@ -115,11 +162,21 @@ export function CustomSelect<T extends string>({
                       : "text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  <span
-                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${option.dotClass}`}
-                  />
-                  <span className="flex-1 text-left">{option.label}</span>
-                  {active && (
+                  {isBadge ? (
+                    <span className={flushBadge ? "flex-1" : "flex-1 text-left"}>
+                      <span className={`${badgeClass} ${option.badgeClass ?? ""}`}>
+                        {option.label}
+                      </span>
+                    </span>
+                  ) : (
+                    <>
+                      <span
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${option.dotClass}`}
+                      />
+                      <span className="flex-1 text-left">{option.label}</span>
+                    </>
+                  )}
+                  {!flushBadge && active && (
                     <Check size={16} className="shrink-0 text-slate-500" />
                   )}
                 </button>
