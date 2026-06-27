@@ -5,11 +5,13 @@ import { CustomSelect, type SelectOption } from "./custom-select";
 import { useAllocationAreas } from "../hooks/use-allocation-areas";
 import {
   PRIORITIES,
+  UNITS,
   priorityDotClass,
   productDotClass,
   productLabel,
   type AllocationProduct,
   type Priority,
+  type Unit,
 } from "../types";
 
 // Dropdown option list for the priority selector — each carries its colour dot,
@@ -22,6 +24,14 @@ const PRIORITY_OPTIONS: readonly SelectOption<Priority>[] = PRIORITIES.map(
     dotClass: priorityDotClass(p.value),
   })
 );
+
+// Qty-unit options (Pieces / Cases). Units have no colour identity, so each
+// carries a neutral dot to satisfy the shared dropdown's option shape.
+const UNIT_OPTIONS: readonly SelectOption<Unit>[] = UNITS.map((u) => ({
+  value: u.value,
+  label: `${u.label} (${u.short})`,
+  dotClass: "bg-slate-300",
+}));
 
 // Product picker — custom dropdown with a per-product colour dot. Options are
 // the live area vocabulary (Primal groups + extra / custom areas); the "add"
@@ -82,6 +92,26 @@ export function PrioritySelect({
       id={id}
       value={value}
       options={PRIORITY_OPTIONS}
+      onChange={onChange}
+    />
+  );
+}
+
+// Qty-unit picker — Pieces or Cases (C/S), paired with the qty number input.
+export function UnitSelect({
+  value,
+  onChange,
+  id,
+}: {
+  value: Unit;
+  onChange: (value: Unit) => void;
+  id?: string;
+}) {
+  return (
+    <CustomSelect
+      id={id}
+      value={value}
+      options={UNIT_OPTIONS}
       onChange={onChange}
     />
   );

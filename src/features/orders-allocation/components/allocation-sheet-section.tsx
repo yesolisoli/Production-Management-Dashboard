@@ -5,24 +5,31 @@ import {
   Check,
   ClipboardList,
   Download,
+  Mail,
   Pencil,
   Plus,
   Trash2,
   X,
 } from "lucide-react";
-import { exportAllocationInstructions } from "../allocation-export";
+import {
+  emailAllocationInstructions,
+  exportAllocationInstructions,
+} from "../allocation-export";
 import {
   DEFAULT_PRODUCT,
+  DEFAULT_UNIT,
   priorityLabel,
   productDotClass,
   productLabel,
   productTextClass,
   sortProductKeys,
+  unitShort,
   type AllocationInstruction,
   type AllocationProduct,
   type Priority,
+  type Unit,
 } from "../types";
-import { PrioritySelect, ProductSelect } from "./product-select";
+import { PrioritySelect, ProductSelect, UnitSelect } from "./product-select";
 import { ProductFilterTabs } from "./product-filter-tabs";
 
 // "Allocation Sheet — Morning Brief" — daily instruction lines with a priority
@@ -93,6 +100,7 @@ export function AllocationSheetSection({
 }: AllocationSheetSectionProps) {
   const [category, setCategory] = useState<AllocationProduct>(DEFAULT_PRODUCT);
   const [qty, setQty] = useState("");
+  const [unit, setUnit] = useState<Unit>(DEFAULT_UNIT);
   const [instruction, setInstruction] = useState("");
   const [customer, setCustomer] = useState("");
   const [priority, setPriority] = useState<Priority>("standard");
@@ -105,6 +113,7 @@ export function AllocationSheetSection({
   const resetForm = () => {
     setCategory(DEFAULT_PRODUCT);
     setQty("");
+    setUnit(DEFAULT_UNIT);
     setInstruction("");
     setCustomer("");
     setPriority("standard");
@@ -115,6 +124,7 @@ export function AllocationSheetSection({
     onAdd({
       category,
       qty: Number(qty) || 0,
+      unit,
       instruction: instruction.trim(),
       customer: customer.trim(),
       priority,
@@ -184,19 +194,24 @@ export function AllocationSheetSection({
           />
         </div>
 
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-2">
           <label className={labelClass} htmlFor="ins-qty">
             Qty affected
           </label>
-          <input
-            id="ins-qty"
-            type="number"
-            min={0}
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            placeholder="optional"
-            className={inputClass}
-          />
+          <div className="flex items-stretch gap-2">
+            <input
+              id="ins-qty"
+              type="number"
+              min={0}
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              placeholder="optional"
+              className={`${inputClass} min-w-0 flex-1`}
+            />
+            <div className="w-28 shrink-0">
+              <UnitSelect value={unit} onChange={setUnit} />
+            </div>
+          </div>
         </div>
 
         <div className="lg:col-span-2">
@@ -213,7 +228,7 @@ export function AllocationSheetSection({
           />
         </div>
 
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-2">
           <label className={labelClass} htmlFor="ins-text">
             Floor instruction
           </label>
@@ -284,6 +299,16 @@ export function AllocationSheetSection({
               >
                 <Download size={14} />
                 Export to Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void emailAllocationInstructions(rows, date);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+              >
+                <Mail size={14} />
+                Send by Email
               </button>
               <button
                 type="button"
@@ -410,8 +435,8 @@ function SheetRow({
       >
         {priorityLabel(row.priority)}
       </span>
-      <span className="w-12 shrink-0 text-xs font-bold uppercase tabular-nums text-slate-700">
-        {row.qty > 0 ? `${row.qty} pc` : ""}
+      <span className="w-16 shrink-0 text-xs font-bold uppercase tabular-nums text-slate-700">
+        {row.qty > 0 ? `${row.qty} ${unitShort(row.unit)}` : ""}
       </span>
       {row.customer ? (
         <span className="hidden shrink-0 truncate rounded-md border border-slate-200 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline-block">
@@ -441,6 +466,7 @@ function InlineRowEditor({
 }) {
   const [category, setCategory] = useState<AllocationProduct>(row.category);
   const [qty, setQty] = useState(row.qty ? String(row.qty) : "");
+  const [unit, setUnit] = useState<Unit>(row.unit);
   const [instruction, setInstruction] = useState(row.instruction);
   const [customer, setCustomer] = useState(row.customer);
   const [priority, setPriority] = useState<Priority>(row.priority);
@@ -450,6 +476,7 @@ function InlineRowEditor({
     onSave({
       category,
       qty: Number(qty) || 0,
+      unit,
       instruction: instruction.trim(),
       customer: customer.trim(),
       priority,
@@ -466,16 +493,21 @@ function InlineRowEditor({
         <label className={labelClass}>Rule type</label>
         <PrioritySelect value={priority} onChange={setPriority} />
       </div>
-      <div className="lg:col-span-1">
+      <div className="lg:col-span-2">
         <label className={labelClass}>Qty affected</label>
-        <input
-          type="number"
-          min={0}
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          placeholder="optional"
-          className={inputClass}
-        />
+        <div className="flex items-stretch gap-2">
+          <input
+            type="number"
+            min={0}
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            placeholder="optional"
+            className={`${inputClass} min-w-0 flex-1`}
+          />
+          <div className="w-28 shrink-0">
+            <UnitSelect value={unit} onChange={setUnit} />
+          </div>
+        </div>
       </div>
       <div className="lg:col-span-2">
         <label className={labelClass}>Customer / context</label>
@@ -486,7 +518,7 @@ function InlineRowEditor({
           className={inputClass}
         />
       </div>
-      <div className="lg:col-span-3">
+      <div className="lg:col-span-2">
         <label className={labelClass}>Floor instruction</label>
         <input
           type="text"

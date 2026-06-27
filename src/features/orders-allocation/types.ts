@@ -46,22 +46,32 @@ export function cutPhaseLabel(value: CutPhase): string {
 // runs, and therefore when the main room can start. Each hog type has a default
 // SEC/HEAD rate (seconds of break work per head). The COUNT for most types is
 // PULLED from the day's Hog Intake (via `intakeKeys` — the intake hog types that
-// sum into this line); types with no `intakeKeys` are entered by hand. TOTAL
-// MINUTES / break end / main-room start are all DERIVED (deriveHogBreak in
-// calculations.ts) — only the rates, manual counts, start and buffer persist.
+// sum into this line, multiplied by `intakeMultiplier`); types with no
+// `intakeKeys` are entered by hand. TOTAL MINUTES / break end / main-room start
+// are all DERIVED (deriveHogBreak in calculations.ts) — only the rates, manual
+// counts, start and buffer persist.
 export const HOG_TYPES = [
   {
     value: "regular",
     label: "Regular Hog",
     defaultSecPerHead: 34,
     intakeKeys: ["JP", "RWA"],
+    intakeMultiplier: 1,
   },
-  { value: "sow", label: "Sow", defaultSecPerHead: 45, intakeKeys: ["Sow"] },
   {
+    value: "sow",
+    label: "Sow",
+    defaultSecPerHead: 45,
+    intakeKeys: ["Sow"],
+    intakeMultiplier: 1,
+  },
+  {
+    // Two shoulders per sow — pulled from the Sow intake count, doubled.
     value: "sow_shoulder",
     label: "Sow Shoulder",
     defaultSecPerHead: 15,
-    intakeKeys: [],
+    intakeKeys: ["Sow"],
+    intakeMultiplier: 2,
   },
 ] as const;
 export type HogType = (typeof HOG_TYPES)[number]["value"];
@@ -124,6 +134,20 @@ export const PRIORITIES = [
 ] as const;
 export type Priority = (typeof PRIORITIES)[number]["value"];
 
+// Qty unit for an instruction line — the floor counts either loose pieces or
+// packed cases (C/S on the paper sheet). The qty number is read against this.
+export const UNITS = [
+  { value: "piece", label: "Pieces", short: "PC" },
+  { value: "case", label: "Cases", short: "C/S" },
+] as const;
+export type Unit = (typeof UNITS)[number]["value"];
+export const DEFAULT_UNIT: Unit = "piece";
+
+// Short tag for a qty unit, e.g. "PC" / "C/S" — used on the sheet row and export.
+export function unitShort(value: Unit): string {
+  return UNITS.find((u) => u.value === value)?.short ?? value;
+}
+
 // A product / area key. The five Primal production groups (ALLOCATION_PRODUCTS)
 // remain the single source of truth for anything that reconciles against Primal
 // availability. A key may ALSO be an extra, non-Primal floor area (see
@@ -182,6 +206,7 @@ export type ProductionMeta = {
   secPerPc: number; // SEC/PC — net cutting seconds per piece
   cutters: number; // CUTTERS
   routes: RouteAssignment[]; // DELIVERY ROUTE — truck route split for the line
+  routeUnit: Unit; // whether the route split counts cases or pieces
 };
 
 export function defaultProductionMeta(): ProductionMeta {
@@ -192,6 +217,7 @@ export function defaultProductionMeta(): ProductionMeta {
     secPerPc: 0,
     cutters: 0,
     routes: [],
+    routeUnit: DEFAULT_UNIT,
   };
 }
 
@@ -199,6 +225,7 @@ export type AllocationInstruction = {
   id: string; // stable id
   category: AllocationProduct;
   qty: number; // optional — 0 means unspecified (shown as "-")
+  unit: Unit; // qty unit — pieces or cases (C/S)
   instruction: string; // free text, e.g. "B'LESS SHORT — BOX THE REST"
   customer: string; // free text, e.g. "SYSCO VIC MON"
   priority: Priority;
@@ -236,7 +263,11 @@ export function emptyAllocationDraft(date: string): AllocationDraft {
 // plain piece count (cases, kilos, totes) are kept in the instruction text since
 // the qty field is a single piece number.
 export function defaultAllocationInstructions(): AllocationInstruction[] {
-  const rows: Omit<AllocationInstruction, "id">[] = [
+  // Unit defaults to pieces (the historical qty) unless a row sets it; the
+  // map below fills it in so the literals stay terse.
+  const rows: (Omit<AllocationInstruction, "id" | "unit"> & {
+    unit?: Unit;
+  })[] = [
     // BUTTS
     { category: "Butts", qty: 72, instruction: "BONELESS VAC PAC 2PC PER C/S", customer: "GFS", priority: "standard" },
     { category: "Butts", qty: 0, instruction: "BOX THE REST BONE IN APROX 10C/S", customer: "O/S", priority: "do" },
@@ -275,7 +306,11 @@ export function defaultAllocationInstructions(): AllocationInstruction[] {
     // LONG FEET
     { category: "Long Feet", qty: 160, instruction: "10 C/S FOR O/S", customer: "", priority: "do" },
   ];
-  return rows.map((row, i) => ({ ...row, id: `default-instruction-${i + 1}` }));
+  return rows.map((row, i) => ({
+    ...row,
+    unit: row.unit ?? DEFAULT_UNIT,
+    id: `default-instruction-${i + 1}`,
+  }));
 }
 
 // A draft pre-filled with the standing allocation-sheet instructions — the

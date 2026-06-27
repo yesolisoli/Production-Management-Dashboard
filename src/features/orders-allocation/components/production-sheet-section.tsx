@@ -19,6 +19,7 @@ import {
 } from "../calculations";
 import { CustomSelect, type SelectOption } from "./custom-select";
 import { ProductFilterTabs } from "./product-filter-tabs";
+import { UnitSelect } from "./product-select";
 import {
   CUT_PHASES,
   cutPhaseLabel,
@@ -28,13 +29,20 @@ import {
   productionRoomLabel,
   productDotClass,
   sortProductKeys,
+  unitShort,
   type AllocationProduct,
   type CutPhase,
   type ProductionMeta,
   type ProductionRoom,
   type ProductionRow,
   type RouteAssignment,
+  type Unit,
 } from "../types";
+
+// Ordered quantity a route split reconciles against, in the line's chosen unit.
+function routeTarget(row: ProductionRow, unit: Unit): number {
+  return unit === "case" ? row.qtyCases : row.qtyPcs;
+}
 
 // "Today's Production Sheet" — the SKU-level cut plan. The rows are DERIVED from
 // Primal demand (SKU / name / ordered qty); the operator overlays the
@@ -69,15 +77,23 @@ const cellInputClass =
 // Muted placeholder for an empty operational value in a read row.
 const emptyCell = <span className="text-slate-300">—</span>;
 
-// Validation chip for a line's route split vs its ordered Qty Pcs: green when
-// fully assigned, amber when pieces are still unrouted, red when over-assigned.
-function RouteBalance({ recon }: { recon: RouteReconciliation }) {
+// Validation chip for a line's route split vs its ordered qty in the line's
+// chosen unit: green when fully assigned, amber when some are still unrouted,
+// red when over-assigned. The unit tag (PC / C/S) follows the line's routeUnit.
+function RouteBalance({
+  recon,
+  unit,
+}: {
+  recon: RouteReconciliation;
+  unit: Unit;
+}) {
   const { status, remaining, assigned, target } = recon;
+  const tag = unitShort(unit);
   if (status === "balanced") {
     return (
       <span className="inline-flex w-fit items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
         <Check size={11} className="shrink-0" />
-        {target} pcs
+        {target} {tag}
       </span>
     );
   }
@@ -89,7 +105,7 @@ function RouteBalance({ recon }: { recon: RouteReconciliation }) {
       }`}
     >
       <AlertTriangle size={11} className="shrink-0" />
-      {over ? `${-remaining} pcs over` : `${remaining} pcs left`}
+      {over ? `${-remaining} ${tag} over` : `${remaining} ${tag} left`}
       <span className="font-normal opacity-70">
         · {assigned}/{target}
       </span>
@@ -447,12 +463,27 @@ export function ProductionSheetSection({
                         </td>
                         <td className="px-3 py-2 align-middle">
                           {/* Delivery route split — one row per truck route, each
-                              a route label + count. Add / remove as needed. */}
+                              a route label + count. The split counts in either
+                              cases or pieces (routeUnit); the balance reconciles
+                              against the matching ordered qty. */}
                           <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                                Split by
+                              </span>
+                              <div className="w-28">
+                                <UnitSelect
+                                  value={editDraft.routeUnit}
+                                  onChange={(v) => patchDraft({ routeUnit: v })}
+                                />
+                              </div>
+                            </div>
                             {editDraft.routes.length > 0 && (
                               <div className="flex items-center gap-1.5 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                                 <span className="w-16">Route #</span>
-                                <span className="w-16 text-center">Pcs</span>
+                                <span className="w-16 text-center">
+                                  {unitShort(editDraft.routeUnit)}
+                                </span>
                               </div>
                             )}
                             {editDraft.routes.map((r, i) => (
@@ -500,12 +531,14 @@ export function ProductionSheetSection({
                               <Plus size={13} />
                               Add route
                             </button>
-                            {(row.qtyPcs > 0 || editDraft.routes.length > 0) && (
+                            {(routeTarget(row, editDraft.routeUnit) > 0 ||
+                              editDraft.routes.length > 0) && (
                               <RouteBalance
                                 recon={reconcileRoutes(
                                   editDraft.routes,
-                                  row.qtyPcs,
+                                  routeTarget(row, editDraft.routeUnit),
                                 )}
+                                unit={editDraft.routeUnit}
                               />
                             )}
                           </div>
@@ -575,8 +608,9 @@ export function ProductionSheetSection({
                             <RouteBalance
                               recon={reconcileRoutes(
                                 rowMeta.routes,
-                                row.qtyPcs,
+                                routeTarget(row, rowMeta.routeUnit),
                               )}
+                              unit={rowMeta.routeUnit}
                             />
                           </div>
                         )}

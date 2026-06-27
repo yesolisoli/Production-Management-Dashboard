@@ -12,8 +12,10 @@ import writeXlsxFile, {
 import {
   productLabel,
   sortProductKeys,
+  unitShort,
   type AllocationInstruction,
   type Priority,
+  type Unit,
 } from "./types";
 
 // DO NOT first, then DO THIS, then STANDARD — same order as the printed sheet.
@@ -71,10 +73,14 @@ function productCell(value: string, rowSpan: number): XlsxCell {
   });
 }
 
-function qtyCell(qty: number, fill: string | undefined): XlsxCell {
+function qtyCell(
+  qty: number,
+  unit: Unit,
+  fill: string | undefined,
+): XlsxCell {
   return cell({
     type: String,
-    value: qty > 0 ? `${qty}PC` : "",
+    value: qty > 0 ? `${qty} ${unitShort(unit)}` : "",
     align: "center",
     backgroundColor: fill,
   });
@@ -123,7 +129,7 @@ function buildSheet(
         i === 0 ? productCell(productLabel(key), groupRows.length) : null;
       data.push([
         productSlot,
-        qtyCell(row.qty, fill),
+        qtyCell(row.qty, row.unit, fill),
         textCell(row.instruction, fill),
         textCell(row.customer, fill),
       ]);
@@ -141,13 +147,47 @@ function buildSheet(
   };
 }
 
+function fileName(date: string): string {
+  return `allocation_instructions_${date}.xlsx`;
+}
+
+// Build the .xlsx workbook handle (exposes toFile / toBlob).
+function buildWorkbook(rows: AllocationInstruction[], date: string) {
+  const { data, columns } = buildSheet(rows, date);
+  return writeXlsxFile(data, { columns });
+}
+
 // Download the day's allocation instructions as an .xlsx file.
 export async function exportAllocationInstructions(
   rows: AllocationInstruction[],
   date: string,
 ): Promise<void> {
-  const { data, columns } = buildSheet(rows, date);
-  await writeXlsxFile(data, { columns }).toFile(
-    `allocation_instructions_${date}.xlsx`,
-  );
+  await buildWorkbook(rows, date).toFile(fileName(date));
+}
+
+// Email the day's allocation sheet: download the .xlsx, then open the computer's
+// default mail app (via a mailto: link) with the subject / body pre-filled. A
+// mailto: link can't carry an attachment, so the operator attaches the
+// just-downloaded file in the compose window.
+export async function emailAllocationInstructions(
+  rows: AllocationInstruction[],
+  date: string,
+): Promise<void> {
+  const pretty = formatSheetDate(date);
+  const subject = `Daily Allocation Sheet — ${pretty}`;
+  const body = [
+    `Daily allocation sheet for ${pretty} is attached.`,
+    "",
+    `Please attach the downloaded file: ${fileName(date)}`,
+  ].join("\n");
+  const mailtoUrl =
+    "mailto:?subject=" +
+    encodeURIComponent(subject) +
+    "&body=" +
+    encodeURIComponent(body);
+
+  // Download the file first so it's ready to attach, then hand off to the
+  // default mail client.
+  await buildWorkbook(rows, date).toFile(fileName(date));
+  window.location.href = mailtoUrl;
 }

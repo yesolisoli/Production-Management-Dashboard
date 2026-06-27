@@ -9,11 +9,13 @@ import {
   CUT_PHASES,
   DEFAULT_CUT_PHASE,
   DEFAULT_PRODUCT,
+  DEFAULT_UNIT,
   defaultHogBreakCalc,
   defaultProductionMeta,
   HOG_TYPES,
   PRIORITIES,
   PRODUCTION_ROOMS,
+  UNITS,
   type AllocationDraft,
   type AllocationInstruction,
   type AllocationProduct,
@@ -24,6 +26,7 @@ import {
   type ProductionMeta,
   type ProductionRoom,
   type RouteAssignment,
+  type Unit,
 } from "./types";
 
 const DRAFT_KEY_PREFIX = "orders-allocation.draft.";
@@ -59,6 +62,12 @@ function coercePriority(raw: unknown): Priority {
   return PRIORITIES.some((p) => p.value === raw)
     ? (raw as Priority)
     : "standard";
+}
+
+// Older drafts predate the qty-unit field — they fall back to pieces (the unit
+// the qty number always meant before cases were selectable).
+function coerceUnit(raw: unknown): Unit {
+  return UNITS.some((u) => u.value === raw) ? (raw as Unit) : DEFAULT_UNIT;
 }
 
 // Older drafts predate the hog-break split — they fall back to the default
@@ -122,6 +131,7 @@ function coerceProductionMeta(raw: unknown): ProductionMeta {
     secPerPc: asNonNegativeInt(o.secPerPc),
     cutters: asNonNegativeInt(o.cutters),
     routes: coerceRoutes(o.routes),
+    routeUnit: coerceUnit(o.routeUnit),
   };
 }
 
@@ -132,6 +142,7 @@ function coerceInstruction(raw: unknown): AllocationInstruction | null {
     id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
     category: coerceProduct(o.category),
     qty: asNonNegativeInt(o.qty),
+    unit: coerceUnit(o.unit),
     instruction: asString(o.instruction),
     customer: asString(o.customer),
     priority: coercePriority(o.priority),

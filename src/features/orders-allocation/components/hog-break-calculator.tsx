@@ -16,8 +16,8 @@ const HOG_ICONS: Record<HogType, LucideIcon> = {
 
 // "Hog Break Calculator" — a standalone section above the production sheet. The
 // morning kill counts decide how long the hog break runs and therefore when the
-// main room can start. Most COUNTs are PULLED from the day's Hog Intake (Regular
-// Hog = JP + RWA, Sow = Sow); only the manual types (Sow Shoulder) are typed in.
+// main room can start. COUNTs are PULLED from the day's Hog Intake (Regular Hog =
+// JP + RWA, Sow = Sow, Sow Shoulder = Sow × 2).
 // The operator may tune SEC/HEAD; TOTAL MINUTES, the break END and the MAIN ROOM
 // START are all DERIVED (deriveHogBreak). It is collapsed by default.
 // Presentation only — every change is forwarded to the parent's state hook,

@@ -109,20 +109,21 @@ export type HogBreakResult = {
 };
 
 // `intakeCounts` is the day's Hog Intake counts (HogCounts, keyed by intake hog
-// type). A line's COUNT is the sum of its `intakeKeys` from that record; lines
-// with no `intakeKeys` (manual types) fall back to the operator-entered count.
+// type). A line's COUNT is the sum of its `intakeKeys` from that record, scaled
+// by `intakeMultiplier` (e.g. Sow Shoulder = Sow × 2); lines with no
+// `intakeKeys` (manual types) fall back to the operator-entered count.
 export function deriveHogBreak(
   calc: HogBreakCalc,
   intakeCounts: Partial<Record<string, number>>,
 ): HogBreakResult {
   const rows: HogBreakRow[] = HOG_TYPES.map((t) => {
-    const manual = t.intakeKeys.length === 0;
+    const manual = (t.intakeKeys as readonly string[]).length === 0;
     const count = manual
       ? Math.max(0, Math.floor(calc.counts[t.value] ?? 0))
       : t.intakeKeys.reduce(
           (sum, key) => sum + Math.max(0, Math.floor(intakeCounts[key] ?? 0)),
           0,
-        );
+        ) * t.intakeMultiplier;
     const secPerHead = Math.max(0, Math.floor(calc.secPerHead[t.value] ?? 0));
     return {
       type: t.value,
@@ -140,10 +141,11 @@ export function deriveHogBreak(
   return { rows, totalCount, totalMinutes, end, mainRoomStart };
 }
 
-// Reconcile a line's delivery-route split against its ordered piece count
-// (Qty Pcs). `assigned` is the sum of route quantities; `remaining` is the
-// target minus that (negative ⇒ more assigned than ordered). Pure derivation —
-// drives the validation badge on the sheet, never stored.
+// Reconcile a line's delivery-route split against its ordered quantity in the
+// line's chosen unit (cases or pieces). `assigned` is the sum of route
+// quantities; `remaining` is the target minus that (negative ⇒ more assigned
+// than ordered). Pure derivation — drives the validation badge on the sheet,
+// never stored.
 export type RouteReconciliation = {
   assigned: number;
   target: number;
@@ -153,13 +155,13 @@ export type RouteReconciliation = {
 
 export function reconcileRoutes(
   routes: RouteAssignment[],
-  targetPcs: number,
+  target: number,
 ): RouteReconciliation {
   const assigned = routes.reduce((sum, r) => sum + Math.max(0, r.qty), 0);
-  const remaining = targetPcs - assigned;
+  const remaining = target - assigned;
   const status =
     remaining === 0 ? "balanced" : remaining > 0 ? "under" : "over";
-  return { assigned, target: targetPcs, remaining, status };
+  return { assigned, target, remaining, status };
 }
 
 export type InstructionsSummary = {
