@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Plus, X } from "lucide-react";
 
 // Generic single-select dropdown — replaces the native <select> so each option
@@ -66,6 +67,36 @@ export function CustomSelect<T extends string>({
   const [adding, setAdding] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLUListElement>(null);
+  // The open panel is portalled to <body> so it escapes the table's
+  // overflow-x-auto wrapper (which clips it vertically). We position it in fixed
+  // coordinates measured from the trigger, and re-measure on scroll/resize.
+  const [panelPos, setPanelPos] = useState<{
+    left: number;
+    width: number;
+    top?: number;
+    bottom?: number;
+    maxHeight: number;
+  } | null>(null);
+
+  const measure = useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const gap = 6;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    // Open upward only when below is too cramped and above has more room.
+    const openUp = spaceBelow < 240 && spaceAbove > spaceBelow;
+    setPanelPos({
+      left: rect.left,
+      width: rect.width,
+      ...(openUp
+        ? { bottom: window.innerHeight - rect.top + gap }
+        : { top: rect.bottom + gap }),
+      maxHeight: Math.max(120, (openUp ? spaceAbove : spaceBelow) - gap - 8),
+    });
+  }, []);
 
   // Close the dropdown and reset the add affordance in one step, so the panel
   // never reopens mid-add. Memoized so the listener effect can depend on it.
@@ -76,22 +107,32 @@ export function CustomSelect<T extends string>({
     onClose?.();
   }, [onClose]);
 
-  // Close on outside click or Escape.
+  // Measure once on open, then keep the portalled panel pinned to the trigger as
+  // the page/table scrolls or the window resizes. Close on outside click/Escape.
   useEffect(() => {
     if (!open) return;
+    measure();
     const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) close();
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target) || panelRef.current?.contains(target))
+        return;
+      close();
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
+    // Capture-phase scroll catches the inner table scroller too, not just window.
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
     };
-  }, [open, close]);
+  }, [open, close, measure]);
 
   const selected = options.find((o) => o.value === value);
 
@@ -142,11 +183,27 @@ export function CustomSelect<T extends string>({
         )}
       </button>
 
-      {open && (
-        <ul
-          role="listbox"
-          className="absolute z-20 mt-1.5 max-h-72 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
-        >
+      {open &&
+        panelPos &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <ul
+            ref={panelRef}
+            role="listbox"
+            // Portalled to <body>, so an ancestor's outside-click handler can't
+            // see this via DOM containment. This marker lets such handlers treat
+            // clicks inside the panel as "inside" (see time-input.tsx).
+            data-editor-popover=""
+            style={{
+              position: "fixed",
+              left: panelPos.left,
+              width: panelPos.width,
+              top: panelPos.top,
+              bottom: panelPos.bottom,
+              maxHeight: panelPos.maxHeight,
+            }}
+            className="z-50 overflow-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
+          >
           {options.map((option) => {
             const active = option.value === value;
             return (
@@ -238,8 +295,9 @@ export function CustomSelect<T extends string>({
               )}
             </li>
           )}
-        </ul>
-      )}
+        </ul>,
+          document.body,
+        )}
     </div>
   );
 }

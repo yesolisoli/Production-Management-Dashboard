@@ -231,6 +231,11 @@ export type ProductionMeta = {
   bufferSec: number;
   routes: RouteAssignment[]; // DELIVERY ROUTE — truck route split for the line
   routeUnit: Unit; // whether the route split counts cases or pieces
+  // CARRY FORWARD — pieces held back to tomorrow because they don't fit before
+  // the room's deadline. `null` = auto (derive the overflow from the deadline);
+  // a number = the supervisor's manual override. Only the override is persisted;
+  // the auto split and the today/exceeds outcome derive in the schedule.
+  carryForwardPcs: number | null;
 };
 
 export function defaultProductionMeta(): ProductionMeta {
@@ -243,6 +248,7 @@ export function defaultProductionMeta(): ProductionMeta {
     bufferSec: START_CHAIN_BUFFER_SEC,
     routes: [],
     routeUnit: DEFAULT_UNIT,
+    carryForwardPcs: null,
   };
 }
 
@@ -262,6 +268,12 @@ export type AllocationInstruction = {
 export type AllocationDraft = {
   date: string; // "YYYY-MM-DD"
   hog_break: HogBreakCalc; // morning hog-break calculator inputs
+  // AVAILABLE TIME — the "cut until" deadline per production room, as free time
+  // text ("HH:MM" 24-hour). A line whose derived FINISH runs past its room's
+  // deadline is flagged (⚠ exceeds) and its overflow pieces auto-move to Carry
+  // Forward. Absent / blank ⇒ that room has no deadline (no check). The start of
+  // each room's window is already derived from the hog-break chain.
+  room_deadlines: Partial<Record<ProductionRoom, string>>;
   production_meta: Record<string /* sku */, ProductionMeta>;
   // Operator's manual ordering of the production-sheet rows, as an explicit
   // sequence of row SKUs (catalog SKU or "instruction:<id>"). The rows are still
@@ -288,6 +300,7 @@ export function emptyAllocationDraft(date: string): AllocationDraft {
   return {
     date,
     hog_break: defaultHogBreakCalc(),
+    room_deadlines: {},
     production_meta: {},
     production_order: [],
     instructions: [],
@@ -371,6 +384,7 @@ export function seededAllocationDraft(date: string): AllocationDraft {
 export function isEmptyAllocationDraft(draft: AllocationDraft): boolean {
   return (
     isDefaultHogBreakCalc(draft.hog_break) &&
+    Object.keys(draft.room_deadlines).length === 0 &&
     Object.keys(draft.production_meta).length === 0 &&
     draft.production_order.length === 0 &&
     draft.instructions.length === 0 &&

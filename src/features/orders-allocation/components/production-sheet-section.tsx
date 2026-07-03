@@ -12,9 +12,11 @@ import {
   Box,
   Check,
   ChevronDown,
+  Clock,
   GripVertical,
   Info,
   Plus,
+  RotateCcw,
   X,
 } from "lucide-react";
 import { clampNonNegativeInt } from "@/features/hog-intake/calculations";
@@ -61,6 +63,7 @@ type CellField =
   | "secPerPc"
   | "cutters"
   | "buffer"
+  | "carry"
   | "routes";
 
 // "Today's Production Sheet" — the SKU-level cut plan. The rows are DERIVED from
@@ -75,8 +78,12 @@ type ProductionSheetSectionProps = {
   // The operator's manual row order (sequence of row SKUs). Applied over the
   // derived rows; onReorder persists the next full sequence after a drag.
   order: string[];
+  // Per-room "cut until" deadline (available-time window end). Drives the Carry
+  // Forward split and the ⚠ exceeds flag on each line.
+  roomDeadlines: Partial<Record<ProductionRoom, string>>;
   onSetMeta: (sku: string, patch: Partial<ProductionMeta>) => void;
   onReorder: (order: string[]) => void;
+  onSetRoomDeadline: (room: ProductionRoom, time: string) => void;
 };
 
 // Solid per-room dot colour for the room picker / read cell.
@@ -85,6 +92,11 @@ const ROOM_DOT_CLASSES: Record<ProductionRoom, string> = {
   second: "bg-sky-500",
   overflow: "bg-amber-400",
 };
+
+// Rooms the available-time bar always offers a "cut until" window for, so the
+// supervisor can pre-set each room's deadline before any line is assigned to it.
+// Other rooms (e.g. Overflow) only appear once a line actually uses them.
+const ALWAYS_SHOWN_DEADLINE_ROOMS: readonly ProductionRoom[] = ["main", "second"];
 
 // Room options for the inline picker — dots from the single map above.
 const ROOM_OPTIONS: readonly SelectOption<ProductionRoom>[] =
@@ -263,14 +275,64 @@ function RouteUnitHeader({
   );
 }
 
+// Available-time editor: one "cut until" deadline per room used in the phase.
+// The window's START is already derived from the hog-break chain; this sets its
+// END. A blank field clears the room's deadline (no exceeds check / no auto
+// carry-forward). Sits above the table so the supervisor sets the day's windows
+// once, then every line reconciles against its room's deadline.
+function RoomDeadlineBar({
+  rooms,
+  deadlines,
+  onSetRoomDeadline,
+}: {
+  rooms: readonly (typeof PRODUCTION_ROOMS)[number][];
+  deadlines: Partial<Record<ProductionRoom, string>>;
+  onSetRoomDeadline: (room: ProductionRoom, time: string) => void;
+}) {
+  if (rooms.length === 0) return null;
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2">
+      <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <Clock size={13} className="shrink-0" />
+        Available until
+      </span>
+      {rooms.map((room) => (
+        <label
+          key={room.value}
+          className="flex items-center gap-1.5 text-sm text-slate-600"
+        >
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${ROOM_DOT_CLASSES[room.value]}`}
+          />
+          <span className="text-xs font-medium text-slate-500">
+            {room.label}
+          </span>
+          <TimeInput
+            value={deadlines[room.value] ?? ""}
+            onChange={(v) => onSetRoomDeadline(room.value, v)}
+            ariaLabel={`${room.label} deadline`}
+            className="h-9 w-28"
+          />
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function ProductionSheetSection({
   rows,
   meta,
   order,
+  roomDeadlines,
   onSetMeta,
   onReorder,
+  onSetRoomDeadline,
 }: ProductionSheetSectionProps) {
   const [filter, setFilter] = useState<AllocationProduct | "all">("all");
+  // Which room the sheet is filtered to ("all" = every room, grouped by room).
+  // Pure UI state — a line's room lives in its ProductionMeta; this only narrows
+  // and orders the derived rows.
+  const [roomFilter, setRoomFilter] = useState<ProductionRoom | "all">("all");
   // Which hog-break phase's sheet is being viewed. Pure UI state — a SKU's phase
   // lives in its ProductionMeta; this just filters the derived rows by it.
   const [activePhase, setActivePhase] = useState<CutPhase>(DEFAULT_CUT_PHASE);
@@ -319,26 +381,66 @@ export function ProductionSheetSection({
   // (+buffer); the START/FINISH cells read from this. Derived over the FULL
   // phase (all products) so the chain stays continuous under the product filter,
   // and recomputed here so any reorder / room change re-chains automatically.
-  const schedule = deriveProductionSchedule(phaseRows, metaFor);
+  const schedule = deriveProductionSchedule(phaseRows, metaFor, roomDeadlines);
 
-  // Products present in this phase, in canonical order — drives the filter tabs.
+  // Rooms shown in the available-time (deadline) editor, in canonical order:
+  // Main and the Second Cutting Room are always offered so the supervisor can
+  // pre-set each window, plus any other room actually used in this phase.
+  const deadlineRooms = PRODUCTION_ROOMS.filter(
+    (room) =>
+      ALWAYS_SHOWN_DEADLINE_ROOMS.includes(room.value) ||
+      phaseRows.some((row) => metaFor(row).room === room.value),
+  );
+
+  // Lines whose today work still runs past their room deadline — the ⚠ banner
+  // counts them so the supervisor sees the overflow at a glance.
+  const exceedingCount = phaseRows.filter(
+    (row) => schedule.get(row.sku)?.exceedsDeadline,
+  ).length;
+
+  // PRIMARY filter — rooms present in this phase (all products), in canonical
+  // order. Fall back to "all" when the selected room isn't present (so switching
+  // phase can't strand the filter).
+  const roomOrder = PRODUCTION_ROOMS.map((r) => r.value).filter((rv) =>
+    phaseRows.some((row) => metaFor(row).room === rv),
+  );
+  const roomTabs = roomOrder.map((rv) => ({
+    room: rv,
+    count: phaseRows.filter((row) => metaFor(row).room === rv).length,
+  }));
+  const activeRoom =
+    roomFilter !== "all" && roomOrder.includes(roomFilter) ? roomFilter : "all";
+  // Rows in the active room ("all" keeps every room, grouped by room below).
+  const roomRows =
+    activeRoom === "all"
+      ? phaseRows
+      : phaseRows.filter((row) => metaFor(row).room === activeRoom);
+
+  // SECONDARY filter — products present WITHIN the active room, in canonical
+  // order. Nested under the room filter so each room lists its own products.
   const productOrder = sortProductKeys([
-    ...new Set(phaseRows.map((row) => row.group)),
+    ...new Set(roomRows.map((row) => row.group)),
   ]);
   const productTabs = productOrder.map((key) => ({
     key: key as AllocationProduct,
-    count: phaseRows.filter((row) => row.group === key).length,
+    count: roomRows.filter((row) => row.group === key).length,
   }));
-
   // The sheet is viewed one product at a time (no "all" view); fall back to the
-  // first product when the filter isn't a product present in this phase.
+  // first product present in the active room.
   const activeProduct =
     filter !== "all" && productOrder.includes(filter)
       ? filter
       : productOrder[0];
-  const committedVisibleRows = phaseRows.filter(
-    (row) => row.group === activeProduct,
-  );
+
+  // Final visible rows: active room + active product, grouped by room (canonical
+  // order; a stable sort keeps each room's manual order, so rooms read as blocks
+  // and their per-room START/FINISH chain runs straight down).
+  const roomRank = (row: ProductionRow) =>
+    PRODUCTION_ROOMS.findIndex((r) => r.value === metaFor(row).room);
+  const committedVisibleRows = roomRows
+    .filter((row) => row.group === activeProduct)
+    .slice()
+    .sort((a, b) => roomRank(a) - roomRank(b));
   // While dragging, the on-screen order follows the live `dragOrder`; otherwise
   // it is the committed order. Rows are reordered by SKU so identity is stable.
   const visibleRows =
@@ -422,6 +524,7 @@ export function ProductionSheetSection({
     if (next === activePhase) return;
     setActivePhase(next);
     setFilter("all");
+    setRoomFilter("all");
     closeCell();
   };
 
@@ -434,13 +537,42 @@ export function ProductionSheetSection({
       meta[row.sku] ? patch : { phase: metaFor(row).phase, ...patch },
     );
 
+  // Commit a START edit and re-flow the room: the edited line becomes the anchor,
+  // and every LATER line in the SAME room has its own entered START cleared so it
+  // auto-chains from this edit (the whole tail moves to match). Lines BEFORE it,
+  // and lines in other rooms, keep their times. Walks the phase's chain order
+  // (phaseRows) so the cleared lines are exactly the ones that chain off this one.
+  const commitStart = (row: ProductionRow, start: string) => {
+    commitCell(row, { start });
+    const room = metaFor(row).room;
+    const idx = phaseRows.findIndex((r) => r.sku === row.sku);
+    if (idx === -1) return;
+    for (let i = idx + 1; i < phaseRows.length; i++) {
+      const next = phaseRows[i];
+      if (metaFor(next).room !== room) continue;
+      if (!meta[next.sku]?.start) continue; // already auto-chaining
+      onSetMeta(next.sku, { start: "" });
+    }
+  };
+
   // Close the open cell on a click anywhere outside it, or on Escape. The inline
   // Room / Unit dropdowns render inside the cell, so picking from them counts as
   // inside and doesn't close the editor prematurely.
   useEffect(() => {
     if (!editingCell) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (!activeCellRef.current?.contains(e.target as Node)) closeCell();
+      const target = e.target as Node;
+      if (activeCellRef.current?.contains(target)) return;
+      // The Room / Start editors render their dropdowns in a portal on <body>,
+      // outside this cell — so a pick would otherwise read as an outside click
+      // and close the editor after a single interaction (can't set hour THEN
+      // AM/PM). Treat any click inside a portalled editor popover as inside.
+      if (
+        target instanceof Element &&
+        target.closest("[data-editor-popover]")
+      )
+        return;
+      closeCell();
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeCell();
@@ -538,13 +670,75 @@ export function ProductionSheetSection({
             </h3>
           </div>
 
-          {/* Filter by product — view the sheet one product at a time. */}
+          {/* Available-time deadlines per room — sets the END of each room's
+              cutting window; every line reconciles against its room's value. */}
+          <RoomDeadlineBar
+            rooms={deadlineRooms}
+            deadlines={roomDeadlines}
+            onSetRoomDeadline={onSetRoomDeadline}
+          />
+
+          {/* Overflow warning — some lines' today work runs past the deadline.
+              Their excess should move to Carry Forward (per-line ⚠ + column). */}
+          {exceedingCount > 0 && (
+            <div className="mb-3 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              <AlertTriangle size={14} className="shrink-0" />
+              {exceedingCount} line{exceedingCount > 1 ? "s" : ""} exceed
+              {exceedingCount > 1 ? "" : "s"} available time — move the excess to
+              Carry Forward.
+            </div>
+          )}
+
+          {/* PRIMARY filter — by room. "All rooms" groups the rows by room; a
+              room tab narrows to just that room. Shown when the phase spans
+              more than one room. */}
+          {roomTabs.length > 1 && (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setRoomFilter("all")}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                  activeRoom === "all"
+                    ? "border-transparent bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                All rooms ({phaseRows.length})
+              </button>
+              {roomTabs.map((tab) => {
+                const active = activeRoom === tab.room;
+                return (
+                  <button
+                    key={tab.room}
+                    type="button"
+                    onClick={() => setRoomFilter(tab.room)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                      active
+                        ? "border-slate-300 bg-slate-100 text-slate-900"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${ROOM_DOT_CLASSES[tab.room]}`}
+                    />
+                    {productionRoomLabel(tab.room)}
+                    <span className="text-[11px] font-bold tabular-nums opacity-60">
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* SECONDARY filter — by product, nested under the active room. One
+              product at a time; lists only the products in the selected room. */}
           {productTabs.length > 1 && (
-            <div className="mb-3">
+            <div className="mb-3 pl-0.5">
               <ProductFilterTabs
                 value={activeProduct ?? filter}
                 onChange={setFilter}
-                total={phaseRows.length}
+                total={roomRows.length}
                 tabs={productTabs}
                 showAll={false}
               />
@@ -554,7 +748,7 @@ export function ProductionSheetSection({
           <div className="overflow-x-auto">
             {/* Fixed column widths so the row keeps the exact same layout in read
                 and edit mode — editing a line never shifts a column's position. */}
-            <table className="w-full min-w-445 table-fixed text-sm">
+            <table className="w-full min-w-485 table-fixed text-sm">
               <colgroup>
                 <col className="w-12" />
                 <col className="w-20" />
@@ -567,6 +761,7 @@ export function ProductionSheetSection({
                 <col className="w-36" />
                 <col className="w-36" />
                 <col className="w-28" />
+                <col className="w-40" />
                 <col className="w-64" />
               </colgroup>
               <thead>
@@ -582,6 +777,7 @@ export function ProductionSheetSection({
                   <th className="px-3 text-center">Cutters</th>
                   <th className="px-3">Finish</th>
                   <th className="px-3 text-center">Buffer</th>
+                  <th className="px-3 text-center">Carry Fwd</th>
                   <th className="rounded-r-lg px-3">Delivery Route</th>
                 </tr>
               </thead>
@@ -731,7 +927,7 @@ export function ProductionSheetSection({
                             // rather than a blank; a manual line uses its own.
                             value={rowMeta.start || sched?.startInput || ""}
                             autoFocus
-                            onChange={(v) => commit({ start: v })}
+                            onChange={(v) => commitStart(row, v)}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
@@ -824,9 +1020,34 @@ export function ProductionSheetSection({
                         )}
                       </td>
 
-                      {/* FINISH — derived from the schedule, never editable. */}
-                      <td className="px-3 py-3 tabular-nums text-slate-600">
-                        {sched?.finish || emptyCell}
+                      {/* FINISH — derived from the schedule, never editable. It
+                          always shows the real end time; when it runs past the
+                          room deadline it just turns red (the work is not cut
+                          short — the supervisor moves the excess via Carry Fwd). */}
+                      <td
+                        className={`px-3 py-3 tabular-nums ${
+                          sched?.exceedsDeadline
+                            ? "font-semibold text-red-600"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        {sched?.finish ? (
+                          sched.exceedsDeadline ? (
+                            <span
+                              title={`Exceeds available time${
+                                sched.deadline ? ` (until ${sched.deadline})` : ""
+                              }`}
+                              className="inline-flex items-center gap-1"
+                            >
+                              <AlertTriangle size={12} className="shrink-0" />
+                              {sched.finish}
+                            </span>
+                          ) : (
+                            sched.finish
+                          )
+                        ) : (
+                          emptyCell
+                        )}
                       </td>
 
                       {/* BUFFER — seconds held after this line's FINISH before
@@ -860,6 +1081,87 @@ export function ProductionSheetSection({
                           />
                         ) : (
                           `${rowMeta.bufferSec}s`
+                        )}
+                      </td>
+
+                      {/* CARRY FORWARD — pieces the supervisor moves to tomorrow.
+                          Blank ⇒ nothing carried (the whole order runs today and
+                          the FINISH shows red if it's over). When a line exceeds
+                          the deadline the cell suggests how many to move (dashed);
+                          type a number to actually hold them back. */}
+                      <td
+                        ref={editing("carry") ? activeCellRef : undefined}
+                        onClick={() => !editing("carry") && open("carry")}
+                        className={`${cellClass("carry")} text-center tabular-nums text-slate-600`}
+                      >
+                        {editing("carry") ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={0}
+                              autoFocus
+                              value={
+                                rowMeta.carryForwardPcs == null
+                                  ? ""
+                                  : rowMeta.carryForwardPcs
+                              }
+                              onChange={(e) =>
+                                commit({
+                                  carryForwardPcs:
+                                    e.target.value === ""
+                                      ? null
+                                      : clampNonNegativeInt(e.target.value),
+                                })
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  closeCell();
+                                }
+                              }}
+                              placeholder={String(
+                                sched?.suggestedCarryPcs ||
+                                  sched?.carryForwardPcs ||
+                                  0,
+                              )}
+                              aria-label="Carry forward pieces"
+                              className={`${cellInputClass} text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                            />
+                            {rowMeta.carryForwardPcs != null && (
+                              <button
+                                type="button"
+                                onClick={() => commit({ carryForwardPcs: null })}
+                                title="Reset to auto"
+                                aria-label="Reset carry forward to auto"
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"
+                              >
+                                <RotateCcw size={13} />
+                              </button>
+                            )}
+                          </div>
+                        ) : sched && sched.carryForwardPcs > 0 ? (
+                          // A manual carry is APPLIED — solid amber, and the
+                          // FINISH already reflects the reduced (today) work.
+                          <span
+                            title={`${sched.todayPcs} today · ${sched.carryForwardPcs} to tomorrow (manual)`}
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
+                          >
+                            {sched.carryForwardPcs}
+                            <span className="text-[10px] leading-none">→</span>
+                          </span>
+                        ) : sched && sched.suggestedCarryPcs > 0 ? (
+                          // Over the deadline with nothing held back yet — suggest
+                          // how many to move (dashed = not applied). Click to keep.
+                          <span
+                            title={`Suggest moving ${sched.suggestedCarryPcs} pcs to tomorrow to finish by the deadline`}
+                            className="inline-flex items-center gap-1 rounded-md border border-dashed border-red-300 px-1.5 py-0.5 text-xs font-medium text-red-500"
+                          >
+                            {sched.suggestedCarryPcs}
+                            <span className="text-[10px] leading-none">→</span>
+                          </span>
+                        ) : (
+                          emptyCell
                         )}
                       </td>
 

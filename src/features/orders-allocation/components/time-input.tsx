@@ -208,6 +208,12 @@ export function TimeInput({
         createPortal(
           <div
             ref={popoverRef}
+            // Portalled to <body>, so an ancestor's outside-click handler (e.g.
+            // the Production Sheet's cell editor) can't see this via DOM
+            // containment. This marker lets such handlers treat clicks inside the
+            // dropdown as "inside", so picking hour/minute/AM·PM doesn't close the
+            // cell after a single pick.
+            data-editor-popover=""
             className="fixed z-200 flex w-44 gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
             style={{
               ...(pos.top !== undefined ? { top: pos.top } : {}),

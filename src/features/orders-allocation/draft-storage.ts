@@ -130,6 +130,23 @@ function coerceHogBreakCalc(raw: unknown): HogBreakCalc {
   return out;
 }
 
+// Per-room "cut until" deadlines: room value → time text ("HH:MM"). Older drafts
+// predate this field, so a missing / corrupt value reads back as empty. Only
+// known rooms with a non-empty time are kept (mirrors coerceRoutePrints).
+function coerceRoomDeadlines(
+  raw: unknown,
+): Partial<Record<ProductionRoom, string>> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Partial<Record<ProductionRoom, string>> = {};
+  for (const [room, value] of Object.entries(raw as Record<string, unknown>)) {
+    const time = asString(value);
+    if (time.trim() && PRODUCTION_ROOMS.some((r) => r.value === room)) {
+      out[room as ProductionRoom] = time;
+    }
+  }
+  return out;
+}
+
 function coerceProductionMeta(raw: unknown): ProductionMeta {
   if (!raw || typeof raw !== "object") return defaultProductionMeta();
   const o = raw as Record<string, unknown>;
@@ -147,6 +164,12 @@ function coerceProductionMeta(raw: unknown): ProductionMeta {
         : START_CHAIN_BUFFER_SEC,
     routes: coerceRoutes(o.routes),
     routeUnit: coerceUnit(o.routeUnit),
+    // Older drafts predate Carry Forward — `null` means "auto (derive from the
+    // room deadline)". Only a real non-negative number is a manual override.
+    carryForwardPcs:
+      typeof o.carryForwardPcs === "number"
+        ? asNonNegativeInt(o.carryForwardPcs)
+        : null,
   };
 }
 
@@ -237,6 +260,7 @@ export function readDraft(date: string): AllocationDraft | null {
     return {
       date,
       hog_break: coerceHogBreakCalc(parsed.hog_break),
+      room_deadlines: coerceRoomDeadlines(parsed.room_deadlines),
       production_meta: coerceProductionMetaMap(parsed.production_meta),
       production_order: coerceProductionOrder(parsed.production_order),
       instructions: coerceInstructions(parsed.instructions),

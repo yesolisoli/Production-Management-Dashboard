@@ -23,6 +23,7 @@ import {
   type HogBreakCalc,
   type HogType,
   type ProductionMeta,
+  type ProductionRoom,
 } from "../types";
 
 // Single source of truth for the Orders & Allocation screen.
@@ -118,6 +119,16 @@ export function useOrdersAllocationState() {
                 })),
               }
             : {}),
+          // Carry Forward override: null clears it back to the auto (deadline-
+          // derived) split; a number is the supervisor's manual carry count.
+          ...(patch.carryForwardPcs !== undefined
+            ? {
+                carryForwardPcs:
+                  patch.carryForwardPcs === null
+                    ? null
+                    : clampNonNegativeInt(patch.carryForwardPcs),
+              }
+            : {}),
         };
         return {
           ...prev,
@@ -134,6 +145,21 @@ export function useOrdersAllocationState() {
   const setProductionOrder = useCallback((order: string[]) => {
     setDraft((prev) => ({ ...prev, production_order: order }));
   }, []);
+
+  // Per-room "cut until" deadline (available-time window end). Stored as raw time
+  // text keyed by room; a blank value drops the room's deadline (no check). The
+  // exceeds flag and Carry Forward split derive from it in deriveProductionSchedule.
+  const setRoomDeadline = useCallback(
+    (room: ProductionRoom, time: string) => {
+      setDraft((prev) => {
+        const next = { ...prev.room_deadlines };
+        if (time.trim()) next[room] = time.trim();
+        else delete next[room];
+        return { ...prev, room_deadlines: next };
+      });
+    },
+    [],
+  );
 
   // ------------------------- Route printing ---------------------------
   // Operator-entered printed time per route (Route Printing Schedule). Stored as
@@ -262,6 +288,7 @@ export function useOrdersAllocationState() {
     setDate,
     setProductionMeta,
     setProductionOrder,
+    setRoomDeadline,
     setRoutePrint,
     setRouteNote,
     setHogBreakCalc,

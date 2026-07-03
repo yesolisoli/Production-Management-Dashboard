@@ -26,6 +26,7 @@ export function ProductionPlannerClient() {
     setDate,
     setProductionMeta,
     setProductionOrder,
+    setRoomDeadline,
     setRoutePrint,
     setRouteNote,
     setHogBreakCalc,
@@ -75,8 +76,10 @@ export function ProductionPlannerClient() {
             rows={productionSheetRows}
             meta={draft.production_meta}
             order={draft.production_order}
+            roomDeadlines={draft.room_deadlines}
             onSetMeta={setProductionMeta}
             onReorder={setProductionOrder}
+            onSetRoomDeadline={setRoomDeadline}
           />
 
           <RoutePrintingSection

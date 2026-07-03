@@ -90,6 +90,19 @@ function formatClockInput(totalSec: number): string {
   return `${pad(Math.floor(t / 3600))}:${pad(Math.floor((t % 3600) / 60))}`;
 }
 
+// The plant's production day starts in the early morning (hog break ~05:00) and
+// never runs through the small hours. For available-time comparisons a clock
+// time before this boundary is treated as the TAIL of the shift (past midnight),
+// so it sorts AFTER the morning/afternoon rather than before it. This also fixes
+// the common entry slip where a midday "12:xx" deadline lands on 12 AM (00:xx):
+// left as-is it would read as earlier than an 11 AM finish and wrongly flag the
+// line; shifted forward it correctly reads as later in the day.
+const SHIFT_DAY_START_SEC = 4 * 3600; // 04:00
+
+function toShiftOrder(secOfDay: number): number {
+  return secOfDay < SHIFT_DAY_START_SEC ? secOfDay + 24 * 3600 : secOfDay;
+}
+
 // Net cutting seconds for a line: `secPerPc * pieces` spread across the cutters
 // working in parallel (`/ cutters`, rounded up). `cutters` defaults to 1, so a
 // missing / zero value means one cutter (no speed-up). 0 ⇒ no work time.
@@ -127,7 +140,42 @@ export type RowSchedule = {
   startInput: string; // 24-hour "HH:MM" to seed the START editor
   finish: string; // 12-hour "hh:mm:ss AM/PM"
   autoStart: boolean; // START auto-chained from the previous line in the room
+  // Carry Forward / available-time outcome. The FINISH is NEVER shortened to fit
+  // the deadline — it always shows the real end time (the cell just turns red
+  // when it runs past). `todayPcs` are cut today (drives the FINISH work time);
+  // `carryForwardPcs` is what a MANUAL override moves to tomorrow (0 when none —
+  // the auto split no longer silently reduces the schedule). `carryAuto` is true
+  // when no manual override is set. `exceedsDeadline` is true when today's work
+  // ends past the room's deadline. `suggestedCarryPcs` is how many of today's
+  // pieces can't finish before the deadline — a hint for the supervisor, applied
+  // only if they enter it. `deadline` is the room's deadline for display.
+  todayPcs: number;
+  carryForwardPcs: number;
+  suggestedCarryPcs: number;
+  carryAuto: boolean;
+  exceedsDeadline: boolean;
+  deadline: string; // 12-hour "hh:mm:ss AM/PM", or ""
 };
+
+// How many of a line's pieces still fit before the room deadline, given the
+// line's START, its net cutting rate and the cutters working it. Mirrors
+// workSeconds: available seconds * cutters / secPerPc, floored (a piece only
+// counts if it fully completes before the deadline). Returns the ordered count
+// when there is no deadline or no rate (nothing to overflow against).
+function piecesFittingBeforeDeadline(
+  startSec: number,
+  deadlineSec: number | null,
+  secPerPc: number,
+  cutters: number,
+  orderedPcs: number,
+): number {
+  if (deadlineSec === null || secPerPc <= 0) return orderedPcs;
+  const availableSec = deadlineSec - startSec;
+  if (availableSec <= 0) return 0;
+  const cutterCount = Math.max(1, Math.floor(cutters));
+  const fit = Math.floor((availableSec * cutterCount) / secPerPc);
+  return Math.max(0, Math.min(orderedPcs, fit));
+}
 
 // Sequential, PER-ROOM schedule over a phase's rows in display order. A line's
 // START is its own entered time when set; otherwise it auto-chains from the
@@ -137,9 +185,18 @@ export type RowSchedule = {
 // next line's baseline. Because it walks the rows in the operator's display
 // order, any reorder — or moving a line to another room, or changing a buffer —
 // recomputes the whole chain on the next render; nothing here is stored.
+//
+// `roomDeadlines` is the per-room "cut until" time. It does NOT reshape the
+// schedule: the FINISH is always the real end time for the work planned today,
+// so changing a START just shifts the FINISH — it never makes it disappear. When
+// a line's FINISH runs past its room deadline it is flagged `exceedsDeadline`
+// (the cell renders red) and `suggestedCarryPcs` reports how many pieces to move
+// to tomorrow. Only a MANUAL override (meta.carryForwardPcs) actually holds
+// pieces back and reduces the work.
 export function deriveProductionSchedule(
   rows: ProductionRow[],
   metaFor: (row: ProductionRow) => ProductionMeta,
+  roomDeadlines: Partial<Record<ProductionRoom, string>> = {},
 ): Map<string, RowSchedule> {
   // Per room: the last line's FINISH plus the buffer to hold before the next
   // line may start.
@@ -166,17 +223,69 @@ export function deriveProductionSchedule(
         autoStart = true;
       }
     }
+
+    const deadlineSec = parseClockToSeconds(roomDeadlines[meta.room] ?? "");
+    const orderedPcs = Math.max(0, row.qtyPcs);
+
+    // Carry Forward no longer auto-shrinks the schedule: the FINISH always shows
+    // the real end time for the work planned today — even past the deadline (the
+    // cell just turns red). Only a MANUAL override actually moves pieces to
+    // tomorrow and reduces the work; without one the whole order runs today, so
+    // changing the START simply shifts the FINISH by the same amount instead of
+    // making it vanish.
+    const carryAuto = meta.carryForwardPcs == null;
+    const carryForwardPcs = carryAuto
+      ? 0
+      : Math.max(0, Math.min(orderedPcs, Math.floor(meta.carryForwardPcs ?? 0)));
+    const todayPcs = Math.max(0, orderedPcs - carryForwardPcs);
+
+    // FINISH runs on today's pieces. The deadline compare walks the shift
+    // timeline (toShiftOrder), so a line that ends past its room's deadline reads
+    // as a genuine overflow while a small-hours "12 AM"-style deadline still
+    // sorts as late in the day rather than before the morning.
     let finishSec: number | null = null;
+    let exceedsDeadline = false;
     if (startSec !== null) {
-      const work = workSeconds(meta.secPerPc, row.qtyPcs, meta.cutters);
-      if (work > 0) finishSec = (startSec + work) % (24 * 3600);
+      const work = workSeconds(meta.secPerPc, todayPcs, meta.cutters);
+      if (work > 0) {
+        finishSec = (startSec + work) % (24 * 3600);
+        if (
+          deadlineSec !== null &&
+          toShiftOrder(startSec) + work > toShiftOrder(deadlineSec)
+        ) {
+          exceedsDeadline = true;
+        }
+      }
     }
     if (finishSec !== null) lastByRoom.set(meta.room, { finishSec, bufferSec });
+
+    // Suggested overflow: how many of today's pieces can't finish before the
+    // deadline. A hint shown in the Carry Fwd column (and the override's
+    // placeholder) — never applied automatically, so the FINISH stays intact.
+    let suggestedCarryPcs = 0;
+    if (startSec !== null && deadlineSec !== null && exceedsDeadline) {
+      suggestedCarryPcs =
+        todayPcs -
+        piecesFittingBeforeDeadline(
+          toShiftOrder(startSec),
+          toShiftOrder(deadlineSec),
+          meta.secPerPc,
+          meta.cutters,
+          todayPcs,
+        );
+    }
+
     schedule.set(row.sku, {
       start: startSec !== null ? formatClockSeconds(startSec) : "",
       startInput: startSec !== null ? formatClockInput(startSec) : "",
       finish: finishSec !== null ? formatClockSeconds(finishSec) : "",
       autoStart,
+      todayPcs,
+      carryForwardPcs,
+      suggestedCarryPcs,
+      carryAuto,
+      exceedsDeadline,
+      deadline: deadlineSec !== null ? formatClockSeconds(deadlineSec) : "",
     });
   }
   return schedule;
