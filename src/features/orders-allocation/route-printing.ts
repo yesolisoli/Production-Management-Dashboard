@@ -158,8 +158,10 @@ export function weekdayForDate(date: string): Weekday | null {
 }
 
 // Parse "h:mm AM/PM" (or 24-hour "H:MM") to minutes since midnight; null if
-// unparseable. Tolerates the data's mixed spacing (e.g. "7:00AM").
-function toMinutes(time: string): number | null {
+// unparseable. Tolerates the data's mixed spacing (e.g. "7:00AM"). Exported so
+// the route-status derivation can compare a production FINISH against a route's
+// print deadline on the same minute-of-day scale.
+export function toMinutes(time: string): number | null {
   const match = time
     .trim()
     .match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
@@ -247,6 +249,7 @@ export function buildRoutePrinting(
   date: string,
   prints: Record<string, string>,
   notes: Record<string, string> = {},
+  deadlineOverrides: Record<string, string> = {},
 ): {
   rows: RoutePrintingRow[];
   summary: RoutePrintingSummary;
@@ -257,8 +260,13 @@ export function buildRoutePrinting(
   const deadlines = DEADLINES[weekday];
 
   const rows: RoutePrintingRow[] = Object.entries(deadlines).map(
-    ([routeKey, deadline]) => {
+    ([routeKey, tableDeadline]) => {
       const route = Number(routeKey);
+      // An operator override for this route wins over the standing weekday
+      // deadline; a blank / unparseable override falls back to the table value.
+      const override = deadlineOverrides[routeKey]?.trim();
+      const deadline =
+        override && toMinutes(override) !== null ? override : tableDeadline;
       const raw = prints[routeKey]?.trim();
       const printedMin = raw ? toMinutes(raw) : null;
       // Only a parseable time counts as printed.

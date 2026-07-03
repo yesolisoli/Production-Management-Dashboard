@@ -14,11 +14,21 @@ import {
 } from "@/features/primal-calculation/types";
 import type { PrimalDemandSnapshot } from "./primal-demand-source";
 import {
+  buildRoutePrinting,
+  toMinutes,
+  type RoutePrintStatus,
+} from "./route-printing";
+import {
+  CUT_PHASES,
+  defaultProductionMeta,
+  DEFAULT_CUT_PHASE,
   HOG_TYPES,
+  routeAssignmentUnit,
   SECONDLINE_CUTTING_OFFSET_MIN,
   START_CHAIN_BUFFER_SEC,
   unitShort,
   type AllocationInstruction,
+  type AllocationProduct,
   type HogBreakCalc,
   type HogType,
   type ProductionMeta,
@@ -29,21 +39,21 @@ import {
 } from "./types";
 
 // Render a line's delivery-route split for the read row, e.g.
-// "#9 (5 C/S) + #2 (2 C/S)". Numeric route labels get a "#" prefix (so "9" ->
-// "#9"); named routes are kept verbatim ("PUW"). The quantity carries the line's
-// route unit tag (PC / C/S) so the split reads unambiguously. Entries with a
-// blank route label are skipped; returns "" for no routes (the sheet shows an
-// em-dash).
+// "#9 (5 C/S) + #2 (2 PC)". Numeric route labels get a "#" prefix (so "9" ->
+// "#9"); named routes are kept verbatim ("PUW"). Each quantity carries ITS OWN
+// unit tag (PC / C/S) so a mixed split reads unambiguously; routes with no
+// explicit unit fall back to the line's `fallbackUnit`. Entries with a blank
+// route label are skipped; returns "" for no routes (the sheet shows an em-dash).
 export function formatRouteSummary(
   routes: RouteAssignment[],
-  unit: Unit,
+  fallbackUnit: Unit,
 ): string {
-  const tag = unitShort(unit);
   return routes
-    .map((r) => ({ route: r.route.trim(), qty: r.qty }))
-    .filter((r) => r.route !== "")
+    .filter((r) => r.route.trim() !== "")
     .map((r) => {
-      const label = /^\d+$/.test(r.route) ? `#${r.route}` : r.route;
+      const route = r.route.trim();
+      const label = /^\d+$/.test(route) ? `#${route}` : route;
+      const tag = unitShort(routeAssignmentUnit(r, fallbackUnit));
       return `${label} (${r.qty} ${tag})`;
     })
     .join(" + ");
@@ -139,6 +149,8 @@ export type RowSchedule = {
   start: string; // 12-hour "hh:mm:ss AM/PM"
   startInput: string; // 24-hour "HH:MM" to seed the START editor
   finish: string; // 12-hour "hh:mm:ss AM/PM"
+  finishSec: number | null; // FINISH as seconds-of-day (null until derivable) —
+  // exposed so route readiness can compare it against a print deadline
   autoStart: boolean; // START auto-chained from the previous line in the room
   // Carry Forward / available-time outcome. The FINISH is NEVER shortened to fit
   // the deadline — it always shows the real end time (the cell just turns red
@@ -279,6 +291,7 @@ export function deriveProductionSchedule(
       start: startSec !== null ? formatClockSeconds(startSec) : "",
       startInput: startSec !== null ? formatClockInput(startSec) : "",
       finish: finishSec !== null ? formatClockSeconds(finishSec) : "",
+      finishSec,
       autoStart,
       todayPcs,
       carryForwardPcs,
@@ -386,27 +399,37 @@ export function deriveHogBreak(
   };
 }
 
-// Reconcile a line's delivery-route split against its ordered quantity in the
-// line's chosen unit (cases or pieces). `assigned` is the sum of route
-// quantities; `remaining` is the target minus that (negative ⇒ more assigned
-// than ordered). Pure derivation — drives the validation badge on the sheet,
-// never stored.
+// Reconcile a line's delivery-route split against its ordered quantity, all in
+// PIECES. A single line can mix units per route, so each route's qty is
+// normalised to pieces (cases × piecesPerCase) before summing — that's the only
+// common scale a mixed split reconciles on. `assigned`/`target`/`remaining` are
+// therefore piece counts. Pure derivation — drives the validation badge on the
+// sheet, never stored.
 export type RouteReconciliation = {
-  assigned: number;
-  target: number;
+  assigned: number; // total assigned, in pieces
+  target: number; // ordered qty, in pieces
   remaining: number; // target - assigned (negative = over-assigned)
   status: "balanced" | "under" | "over";
 };
 
 export function reconcileRoutes(
   routes: RouteAssignment[],
-  target: number,
+  targetPcs: number,
+  piecesPerCase: number,
+  fallbackUnit: Unit,
 ): RouteReconciliation {
-  const assigned = routes.reduce((sum, r) => sum + Math.max(0, r.qty), 0);
-  const remaining = target - assigned;
+  const assigned = routes.reduce((sum, r) => {
+    const qty = Math.max(0, r.qty);
+    const pcs =
+      routeAssignmentUnit(r, fallbackUnit) === "case"
+        ? qty * piecesPerCase
+        : qty;
+    return sum + pcs;
+  }, 0);
+  const remaining = targetPcs - assigned;
   const status =
     remaining === 0 ? "balanced" : remaining > 0 ? "under" : "over";
-  return { assigned, target, remaining, status };
+  return { assigned, target: targetPcs, remaining, status };
 }
 
 export type InstructionsSummary = {
@@ -511,4 +534,237 @@ export function orderedByGroup(
     group: row.group,
     ordered: row.salesOrders,
   }));
+}
+
+// -------------------------------------------------------------------
+// Route readiness — the bridge between the production sheet and the route
+// printing schedule.
+//
+// A delivery route can't print its labels until every product shipping on it is
+// cut. This derivation joins each route's PRINT DEADLINE (route-printing.ts) with
+// the latest PRODUCTION FINISH among the sheet lines assigned to that route, so
+// the floor sees — before printing time — whether a route is on track, at risk,
+// or already late because its cutting runs past the deadline. Pure derivation
+// over the raw draft + Primal rows; nothing here is stored.
+// -------------------------------------------------------------------
+
+// A route's production readiness against its print deadline.
+//   late          — the latest product finish runs past the print deadline
+//   at_risk       — finishes on or before the deadline, but within 30 minutes
+//   on_track      — finishes with more than 30 minutes to spare (or no deadline)
+//   carry_forward — the route has products, but none has a derivable finish today
+//                   (all held to tomorrow, or timing not entered yet)
+//   no_items      — no sheet line ships on this route
+export type RouteProductionStatus =
+  | "late"
+  | "at_risk"
+  | "on_track"
+  | "carry_forward"
+  | "no_items";
+
+// Minutes of grace before the deadline under which a route reads as "at risk".
+const ROUTE_AT_RISK_WINDOW_MIN = 30;
+
+// Readiness of a SINGLE finish time vs a print deadline — shared by the route
+// row (its latest product finish) and each Related Item (its own finish), so both
+// read the same scale. No derivable finish ⇒ carry_forward; no deadline ⇒
+// on_track; otherwise late / at_risk / on_track by the shift-timeline gap. The
+// `no_items` case is a route-only concern and is handled by the caller.
+function deriveFinishStatus(
+  finishSec: number | null,
+  deadlineMin: number | null,
+): RouteProductionStatus {
+  if (finishSec === null) return "carry_forward";
+  if (deadlineMin === null) return "on_track";
+  const minutesVs = Math.round(
+    (toShiftOrder(finishSec) - toShiftOrder(deadlineMin * 60)) / 60,
+  );
+  if (minutesVs > 0) return "late";
+  if (minutesVs >= -ROUTE_AT_RISK_WINDOW_MIN) return "at_risk";
+  return "on_track";
+}
+
+// One product shipping on a route — the expandable "Related Items" detail.
+export type RouteRelatedItem = {
+  sku: string;
+  name: string;
+  group: AllocationProduct;
+  room: ProductionRoom;
+  qtyPcs: number; // pieces routed onto this route (route split, converted to pcs)
+  finish: string; // the line's FINISH, 12-hour "hh:mm:ss AM/PM" ("" if none)
+  finishSec: number | null;
+  carryForwardPcs: number; // pieces this line holds to tomorrow
+  // This item's OWN readiness vs the route's print deadline (its finish, not the
+  // route's latest). Pinpoints which product gates a late/at-risk route. Derived
+  // the same way as the route status (deriveFinishStatus); never "no_items".
+  status: RouteProductionStatus;
+};
+
+// One route's merged readiness row: its print deadline, the products on it, the
+// derived production readiness, and the printing actuals (reused from
+// buildRoutePrinting) so the board shows both statuses side by side.
+export type RouteStatusRow = {
+  route: number;
+  deadline: string; // print deadline, "h:mm AM/PM"
+  items: RouteRelatedItem[];
+  productionFinish: string; // latest finish among items, 12-hour ("" if none)
+  productionFinishSec: number | null;
+  minutesVsDeadline: number | null; // finish − deadline in minutes (null if N/A)
+  productionStatus: RouteProductionStatus;
+  printedTime: string | null; // actual printed time, "h:mm AM/PM" or null
+  printStatus: RoutePrintStatus;
+  note: string | null;
+};
+
+// Merge the per-phase production schedules into one sku → RowSchedule map. The
+// sheet chains START/FINISH per phase (hog break, then after), so we derive each
+// phase separately and merge — matching exactly the finishes the sheet renders.
+function scheduleBySku(
+  orderedRows: ProductionRow[],
+  metaFor: (row: ProductionRow) => ProductionMeta,
+  roomDeadlines: Partial<Record<ProductionRoom, string>>,
+): Map<string, RowSchedule> {
+  const merged = new Map<string, RowSchedule>();
+  for (const phase of CUT_PHASES) {
+    const phaseRows = orderedRows.filter(
+      (row) => metaFor(row).phase === phase.value,
+    );
+    const sched = deriveProductionSchedule(phaseRows, metaFor, roomDeadlines);
+    sched.forEach((value, sku) => merged.set(sku, value));
+  }
+  return merged;
+}
+
+// Build the route-readiness board for a planner date. Every route that has a
+// print deadline that weekday becomes a row; each collects the sheet lines whose
+// delivery-route split targets it (matched by route number), the latest of their
+// finishes, and the resulting readiness. Named routes with no numeric deadline
+// (e.g. "PUW") simply don't appear — the board is keyed by the deadline table,
+// mirroring the printing schedule. Pure — recomputed from the draft each render.
+export function deriveRouteStatuses({
+  date,
+  rows,
+  meta,
+  order,
+  roomDeadlines,
+  prints,
+  notes,
+  deadlines,
+}: {
+  date: string;
+  rows: ProductionRow[];
+  meta: Record<string, ProductionMeta>;
+  order: string[];
+  roomDeadlines: Partial<Record<ProductionRoom, string>>;
+  prints: Record<string, string>;
+  notes: Record<string, string>;
+  deadlines: Record<string, string>;
+}): RouteStatusRow[] {
+  // Same meta fallback the sheet uses: an unedited row opens in its default phase
+  // so its finish lands in the same phase chain the sheet renders.
+  const metaFor = (row: ProductionRow): ProductionMeta =>
+    meta[row.sku] ?? {
+      ...defaultProductionMeta(),
+      phase: row.defaultPhase ?? DEFAULT_CUT_PHASE,
+    };
+
+  const orderedRows = orderProductionRows(rows, order);
+  const schedule = scheduleBySku(orderedRows, metaFor, roomDeadlines);
+  const { rows: printRows } = buildRoutePrinting(date, prints, notes, deadlines);
+
+  return printRows.map((printRow) => {
+    const routeKey = String(printRow.route);
+    const deadlineMin = toMinutes(printRow.deadline);
+
+    // Every sheet line that puts a positive quantity on this route. Each item
+    // carries its own readiness vs the route deadline so the detail pinpoints
+    // which product gates the route.
+    const items: RouteRelatedItem[] = [];
+    for (const row of orderedRows) {
+      const rowMeta = metaFor(row);
+      const assignment = rowMeta.routes.find(
+        (r) => r.route.trim() === routeKey && r.qty > 0,
+      );
+      if (!assignment) continue;
+      const qtyPcs =
+        routeAssignmentUnit(assignment, rowMeta.routeUnit) === "case"
+          ? assignment.qty * row.piecesPerCase
+          : assignment.qty;
+      const sched = schedule.get(row.sku);
+      const finishSec = sched?.finishSec ?? null;
+      items.push({
+        sku: row.sku,
+        name: row.name,
+        group: row.group,
+        room: rowMeta.room,
+        qtyPcs,
+        finish: sched?.finish ?? "",
+        finishSec,
+        carryForwardPcs: sched?.carryForwardPcs ?? 0,
+        status: deriveFinishStatus(finishSec, deadlineMin),
+      });
+    }
+
+    // The route can't print until its LATEST product is cut.
+    const finishSecs = items
+      .map((it) => it.finishSec)
+      .filter((s): s is number => s !== null);
+    const productionFinishSec =
+      finishSecs.length > 0 ? Math.max(...finishSecs) : null;
+
+    // Compare on the shift timeline so an afternoon finish reads as later than a
+    // morning deadline (and a small-hours "12 AM" slip sorts as late in the day).
+    let minutesVsDeadline: number | null = null;
+    if (productionFinishSec !== null && deadlineMin !== null) {
+      const finishShift = toShiftOrder(productionFinishSec);
+      const deadlineShift = toShiftOrder(deadlineMin * 60);
+      minutesVsDeadline = Math.round((finishShift - deadlineShift) / 60);
+    }
+
+    // Route readiness: `no_items` when nothing ships on it, otherwise the same
+    // finish-vs-deadline scale as each item, applied to the latest finish.
+    const productionStatus: RouteProductionStatus =
+      items.length === 0
+        ? "no_items"
+        : deriveFinishStatus(productionFinishSec, deadlineMin);
+
+    return {
+      route: printRow.route,
+      deadline: printRow.deadline,
+      items,
+      productionFinish:
+        productionFinishSec !== null
+          ? formatClockSeconds(productionFinishSec)
+          : "",
+      productionFinishSec,
+      minutesVsDeadline,
+      productionStatus,
+      printedTime: printRow.printedTime,
+      printStatus: printRow.status,
+      note: printRow.note,
+    };
+  });
+}
+
+// Tally of the readiness statuses that drive the sheet's summary strip. Routes
+// with no items (or none flagged) are ignored — the strip reports only routes
+// that carry work.
+export type RouteStatusSummary = {
+  late: number;
+  atRisk: number;
+  onTrack: number;
+};
+
+export function summarizeRouteStatuses(
+  rows: RouteStatusRow[],
+): RouteStatusSummary {
+  return rows.reduce<RouteStatusSummary>(
+    (acc, row) => {
+      if (row.productionStatus === "late") acc.late += 1;
+      else if (row.productionStatus === "at_risk") acc.atRisk += 1;
+      else if (row.productionStatus === "on_track") acc.onTrack += 1;
+      return acc;
+    },
+    { late: 0, atRisk: 0, onTrack: 0 },
+  );
 }

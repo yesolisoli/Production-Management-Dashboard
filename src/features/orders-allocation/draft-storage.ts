@@ -81,14 +81,20 @@ function coercePhase(raw: unknown): CutPhase {
 
 // A line's delivery-route split. Non-array / corrupt values read back as empty
 // (older drafts predate routes); each entry's route label is trimmed and qty
-// clamped to a non-negative int.
+// clamped to a non-negative int. A valid per-route `unit` is preserved; older
+// entries (no unit) are left undefined so they fall back to the line's routeUnit.
 function coerceRoutes(raw: unknown): RouteAssignment[] {
   if (!Array.isArray(raw)) return [];
   const out: RouteAssignment[] = [];
   for (const entry of raw) {
     if (!entry || typeof entry !== "object") continue;
     const o = entry as Record<string, unknown>;
-    out.push({ route: asString(o.route).trim(), qty: asNonNegativeInt(o.qty) });
+    const route: RouteAssignment = {
+      route: asString(o.route).trim(),
+      qty: asNonNegativeInt(o.qty),
+    };
+    if (UNITS.some((u) => u.value === o.unit)) route.unit = o.unit as Unit;
+    out.push(route);
   }
   return out;
 }
@@ -228,6 +234,19 @@ function coerceRouteNotes(raw: unknown): Record<string, string> {
   return out;
 }
 
+// Route Printing deadline overrides: route number (string) → deadline time
+// (string). Older drafts predate this field, so a missing / corrupt value reads
+// back as empty. Only non-empty string values are kept (mirrors coerceRoutePrints).
+function coerceRouteDeadlines(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [route, value] of Object.entries(raw as Record<string, unknown>)) {
+    const time = asString(value);
+    if (route && time.trim()) out[route] = time;
+  }
+  return out;
+}
+
 // The operator's manual row ordering: a sequence of row SKUs. Older drafts
 // predate it, so a missing / corrupt value reads back as empty (the rows then
 // keep their canonical derived order). Non-string / blank / duplicate entries
@@ -266,6 +285,7 @@ export function readDraft(date: string): AllocationDraft | null {
       instructions: coerceInstructions(parsed.instructions),
       route_prints: coerceRoutePrints(parsed.route_prints),
       route_notes: coerceRouteNotes(parsed.route_notes),
+      route_deadlines: coerceRouteDeadlines(parsed.route_deadlines),
     };
   } catch {
     return null;

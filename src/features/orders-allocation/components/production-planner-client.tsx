@@ -2,7 +2,12 @@
 
 import { useMemo } from "react";
 import { AppHeader } from "@/components/layout/app-header";
-import { instructionProductionRows, orderedByGroup } from "../calculations";
+import {
+  deriveRouteStatuses,
+  instructionProductionRows,
+  orderedByGroup,
+  summarizeRouteStatuses,
+} from "../calculations";
 import { useOrdersAllocationState } from "../hooks/use-orders-allocation-state";
 import { usePrimalDemand } from "../hooks/use-primal-demand";
 import { HogBreakCalculator } from "./hog-break-calculator";
@@ -29,6 +34,7 @@ export function ProductionPlannerClient() {
     setRoomDeadline,
     setRoutePrint,
     setRouteNote,
+    setRouteDeadline,
     setHogBreakCalc,
     clearAll,
   } = useOrdersAllocationState();
@@ -48,6 +54,49 @@ export function ProductionPlannerClient() {
   const productionSheetRows = useMemo(
     () => [...productionRows, ...instructionProductionRows(draft.instructions)],
     [productionRows, draft.instructions],
+  );
+
+  // Route readiness — joins each product's derived FINISH with the print
+  // deadline of the route it ships on, so both sections read from one derived
+  // source (no parallel state). The sheet gets a per-route status lookup + the
+  // summary strip; the board renders the full rows.
+  const routeStatuses = useMemo(
+    () =>
+      deriveRouteStatuses({
+        date,
+        rows: productionSheetRows,
+        meta: draft.production_meta,
+        order: draft.production_order,
+        roomDeadlines: draft.room_deadlines,
+        prints: draft.route_prints,
+        notes: draft.route_notes,
+        deadlines: draft.route_deadlines,
+      }),
+    [
+      date,
+      productionSheetRows,
+      draft.production_meta,
+      draft.production_order,
+      draft.room_deadlines,
+      draft.route_prints,
+      draft.route_notes,
+      draft.route_deadlines,
+    ],
+  );
+
+  const routeStatusSummary = useMemo(
+    () => summarizeRouteStatuses(routeStatuses),
+    [routeStatuses],
+  );
+
+  // Per-route-number → production readiness, for the sheet's Delivery Route
+  // badges (keyed by the route label the operator types into a split).
+  const routeStatusByNumber = useMemo(
+    () =>
+      new Map(
+        routeStatuses.map((row) => [String(row.route), row.productionStatus]),
+      ),
+    [routeStatuses],
   );
 
   return (
@@ -77,17 +126,20 @@ export function ProductionPlannerClient() {
             meta={draft.production_meta}
             order={draft.production_order}
             roomDeadlines={draft.room_deadlines}
+            routeStatusByNumber={routeStatusByNumber}
+            routeStatusSummary={routeStatusSummary}
             onSetMeta={setProductionMeta}
             onReorder={setProductionOrder}
             onSetRoomDeadline={setRoomDeadline}
           />
 
           <RoutePrintingSection
-            date={date}
+            routeStatuses={routeStatuses}
             prints={draft.route_prints}
             notes={draft.route_notes}
             onSetRoutePrint={setRoutePrint}
             onSetRouteNote={setRouteNote}
+            onSetRouteDeadline={setRouteDeadline}
           />
 
           <SaveBar isEmpty={isEmpty} onClear={clearAll} />

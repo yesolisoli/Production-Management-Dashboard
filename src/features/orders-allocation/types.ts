@@ -20,6 +20,7 @@ import { defaultRouteNotes, defaultRoutePrints } from "./route-printing";
 export const PRODUCTION_ROOMS = [
   { value: "main", label: "Main Room" },
   { value: "second", label: "Second Cutting Room" },
+  { value: "vacuum_pack", label: "Vacuum Pack" },
   { value: "overflow", label: "Overflow Room" },
 ] as const;
 export type ProductionRoom = (typeof PRODUCTION_ROOMS)[number]["value"];
@@ -215,7 +216,21 @@ export type ProductionRow = {
 export type RouteAssignment = {
   route: string; // truck route label, e.g. "9" or "PUW"
   qty: number; // how many go on this route
+  // Whether THIS route's qty counts cases or pieces — a single line can mix
+  // units (one route in cases, another in pieces). Omitted on older drafts
+  // (predating per-route units); those fall back to the line's `routeUnit`.
+  unit?: Unit;
 };
+
+// The unit a route assignment counts in: its own `unit` when set, else the
+// line-level default (`routeUnit`) that legacy splits and freshly added rows
+// inherit. Everything reconciling or displaying a route split reads through this.
+export function routeAssignmentUnit(
+  assignment: RouteAssignment,
+  fallback: Unit,
+): Unit {
+  return assignment.unit ?? fallback;
+}
 
 // FINISH is intentionally NOT here: it is DERIVED from start + secPerPc * pieces
 // (see computeFinish in calculations.ts), never entered or persisted.
@@ -230,7 +245,10 @@ export type ProductionMeta = {
   // line; defaults to START_CHAIN_BUFFER_SEC.
   bufferSec: number;
   routes: RouteAssignment[]; // DELIVERY ROUTE — truck route split for the line
-  routeUnit: Unit; // whether the route split counts cases or pieces
+  // Default unit for this line's route split: the unit a freshly added route
+  // row starts in, and the fallback for legacy routes with no explicit `unit`.
+  // Per-route units (RouteAssignment.unit) override it once set.
+  routeUnit: Unit;
   // CARRY FORWARD — pieces held back to tomorrow because they don't fit before
   // the room's deadline. `null` = auto (derive the overflow from the deadline);
   // a number = the supervisor's manual override. Only the override is persisted;
@@ -290,6 +308,11 @@ export type AllocationDraft = {
   // that route (off-cuts, special pulls). Operator-owned, independent of the
   // printed time.
   route_notes: Record<string, string>;
+  // Route Printing Schedule deadline overrides: route number (as string) → the
+  // print deadline ("h:mm AM/PM") for that route on this date. Absent ⇒ the route
+  // uses the standing weekday deadline (DEADLINES in route-printing.ts). Only an
+  // operator edit is stored; the default table stays the fallback.
+  route_deadlines: Record<string, string>;
 };
 
 // -------------------------------------------------------------------
@@ -306,6 +329,7 @@ export function emptyAllocationDraft(date: string): AllocationDraft {
     instructions: [],
     route_prints: {},
     route_notes: {},
+    route_deadlines: {},
   };
 }
 
@@ -389,7 +413,8 @@ export function isEmptyAllocationDraft(draft: AllocationDraft): boolean {
     draft.production_order.length === 0 &&
     draft.instructions.length === 0 &&
     Object.keys(draft.route_prints).length === 0 &&
-    Object.keys(draft.route_notes).length === 0
+    Object.keys(draft.route_notes).length === 0 &&
+    Object.keys(draft.route_deadlines).length === 0
   );
 }
 

@@ -9,9 +9,9 @@ import {
 } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   Box,
   Check,
-  ChevronDown,
   Clock,
   GripVertical,
   Info,
@@ -26,8 +26,11 @@ import {
   INSTRUCTION_ROW_SKU_PREFIX,
   orderProductionRows,
   reconcileRoutes,
+  type RouteProductionStatus,
   type RouteReconciliation,
+  type RouteStatusSummary,
 } from "../calculations";
+import { ROUTE_PRODUCTION_STATUS_BADGE } from "../route-status-badge";
 import { CustomSelect, type SelectOption } from "./custom-select";
 import { ProductFilterTabs } from "./product-filter-tabs";
 import { TimeInput } from "./time-input";
@@ -39,6 +42,7 @@ import {
   PRODUCTION_ROOMS,
   productionRoomLabel,
   productDotClass,
+  routeAssignmentUnit,
   sortProductKeys,
   UNITS,
   unitShort,
@@ -47,12 +51,15 @@ import {
   type ProductionMeta,
   type ProductionRoom,
   type ProductionRow,
+  type RouteAssignment,
   type Unit,
 } from "../types";
 
-// Ordered quantity a route split reconciles against, in the line's chosen unit.
-function routeTarget(row: ProductionRow, unit: Unit): number {
-  return unit === "case" ? row.qtyCases : row.qtyPcs;
+// Ordered quantity a route split reconciles against, in PIECES. Route qtys can
+// mix units per route, so the split always reconciles on the piece scale; qtyPcs
+// is the whole order's piece count (qtyCases is the same order in cases).
+function routeTargetPcs(row: ProductionRow): number {
+  return row.qtyPcs;
 }
 
 // The production cells the operator can edit in place (FINISH is derived, the
@@ -81,6 +88,11 @@ type ProductionSheetSectionProps = {
   // Per-room "cut until" deadline (available-time window end). Drives the Carry
   // Forward split and the ⚠ exceeds flag on each line.
   roomDeadlines: Partial<Record<ProductionRoom, string>>;
+  // Route readiness derived by the parent (production FINISH vs print deadline).
+  // Route number (as a string, matching the split label) → its status, used to
+  // badge each line's Delivery Route split. The summary drives the header strip.
+  routeStatusByNumber: Map<string, RouteProductionStatus>;
+  routeStatusSummary: RouteStatusSummary;
   onSetMeta: (sku: string, patch: Partial<ProductionMeta>) => void;
   onReorder: (order: string[]) => void;
   onSetRoomDeadline: (room: ProductionRoom, time: string) => void;
@@ -90,13 +102,18 @@ type ProductionSheetSectionProps = {
 const ROOM_DOT_CLASSES: Record<ProductionRoom, string> = {
   main: "bg-emerald-500",
   second: "bg-sky-500",
+  vacuum_pack: "bg-violet-500",
   overflow: "bg-amber-400",
 };
 
 // Rooms the available-time bar always offers a "cut until" window for, so the
 // supervisor can pre-set each room's deadline before any line is assigned to it.
 // Other rooms (e.g. Overflow) only appear once a line actually uses them.
-const ALWAYS_SHOWN_DEADLINE_ROOMS: readonly ProductionRoom[] = ["main", "second"];
+const ALWAYS_SHOWN_DEADLINE_ROOMS: readonly ProductionRoom[] = [
+  "main",
+  "second",
+  "vacuum_pack",
+];
 
 // Room options for the inline picker — dots from the single map above.
 const ROOM_OPTIONS: readonly SelectOption<ProductionRoom>[] =
@@ -114,9 +131,76 @@ const cellInputClass =
 // Muted placeholder for an empty operational value in a read row.
 const emptyCell = <span className="text-slate-300">—</span>;
 
-// Validation chip for a line's route split vs its ordered qty in the line's
-// chosen unit: green when fully assigned, amber when some are still unrouted,
-// red when over-assigned. The unit tag (PC / C/S) follows the line's routeUnit.
+// Express a piece count as its whole-case + loose-piece breakdown, e.g. 25 pcs
+// at 12/case -> "2 C/S + 1". Carry Forward is stored/scheduled in pieces (cut
+// work is per-piece), so this is a DISPLAY hint only — it lets the cell read in
+// both units like the rest of the sheet. Returns null when there's nothing a
+// case view adds: no real case size (piecesPerCase <= 1) or less than one full
+// case (the piece figure already tells the whole story).
+function caseEquivalent(pcs: number, piecesPerCase: number): string | null {
+  if (piecesPerCase <= 1 || pcs <= 0) return null;
+  const cases = Math.floor(pcs / piecesPerCase);
+  if (cases === 0) return null;
+  const loose = pcs % piecesPerCase;
+  const caseTag = unitShort("case");
+  const pieceTag = unitShort("piece");
+  return loose === 0
+    ? `${cases} ${caseTag}`
+    : `${cases} ${caseTag} + ${loose} ${pieceTag}`;
+}
+
+// Carry-forward badge: the pieces held to tomorrow (the stored, scheduled unit)
+// with a case-equivalent hint beneath so the cell reads in both units. `applied`
+// = a manual carry that's actually held back (solid amber); otherwise it's a
+// deadline suggestion not yet applied (dashed red).
+function CarryForwardChip({
+  pcs,
+  piecesPerCase,
+  applied,
+  title,
+}: {
+  pcs: number;
+  piecesPerCase: number;
+  applied: boolean;
+  title: string;
+}) {
+  const caseHint = caseEquivalent(pcs, piecesPerCase);
+  const fullTitle = caseHint ? `${title} · ${caseHint}` : title;
+  return (
+    <span
+      title={fullTitle}
+      className="inline-flex flex-col items-center gap-0.5"
+    >
+      <span
+        className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium ${
+          applied
+            ? "bg-amber-100 text-amber-800"
+            : "border border-dashed border-red-300 text-red-500"
+        }`}
+      >
+        {pcs}
+        <span className="text-[9px] font-semibold leading-none opacity-70">
+          {unitShort("piece")}
+        </span>
+        <span className="text-[10px] leading-none">→</span>
+      </span>
+      {caseHint && (
+        <span
+          className={`text-[9px] font-medium leading-none ${
+            applied ? "text-amber-600/80" : "text-red-400/80"
+          }`}
+        >
+          {caseHint}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// Validation chip for a line's route split vs its ordered qty: green when fully
+// assigned, amber when some are still unrouted, red when over-assigned. The
+// reconciliation runs in pieces (routes can mix units), so `unit` is "piece";
+// the detail also shows the case-equivalent so the chip reads in both units.
 function RouteBalance({
   recon,
   unit,
@@ -201,77 +285,27 @@ function RouteBalance({
   );
 }
 
-// The route-split unit picker, rendered inline as the split editor's quantity
-// column header ("C/S" / "PC"). Clicking it opens a compact menu to switch the
-// line's routeUnit — no separate "Split by" control above the routes.
-function RouteUnitHeader({
+// Per-route unit toggle, rendered inline beside each route's qty input. With
+// only two units (PC / C/S) a click flips straight between them — no menu — so a
+// single line can mix cases and pieces across its routes with one tap each.
+function RouteUnitPicker({
   value,
   onChange,
 }: {
   value: Unit;
   onChange: (value: Unit) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Close on a click anywhere outside this menu (the parent cell stays open).
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
-
+  const next = UNITS.find((u) => u.value !== value)?.value ?? value;
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        title="Change split unit"
-        className="flex items-center gap-0.5 rounded text-[10px] font-semibold uppercase tracking-wide text-slate-500 transition hover:text-slate-700"
-      >
-        {unitShort(value)}
-        <ChevronDown
-          size={11}
-          className={`shrink-0 transition ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {open && (
-        <ul
-          role="listbox"
-          className="absolute left-1/2 z-30 mt-1 w-24 -translate-x-1/2 overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
-        >
-          {UNITS.map((u) => {
-            const active = u.value === value;
-            return (
-              <li key={u.value}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => {
-                    onChange(u.value);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-semibold normal-case tracking-normal transition ${
-                    active
-                      ? "bg-slate-100 text-slate-900"
-                      : "text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {u.short}
-                  {active && <Check size={12} className="shrink-0" />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={() => onChange(next)}
+      title={`Unit: ${unitShort(value)} — tap for ${unitShort(next)}`}
+      aria-label={`Route unit ${unitShort(value)}, tap to switch to ${unitShort(next)}`}
+      className="flex h-9 min-w-11 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
+    >
+      {unitShort(value)}
+    </button>
   );
 }
 
@@ -319,11 +353,86 @@ function RoomDeadlineBar({
   );
 }
 
+// Header strip: a one-line tally of route readiness (production FINISH vs print
+// deadline) with a jump link to the full board below. Hidden when no route
+// carries a flagged status yet.
+function RouteSummaryStrip({ summary }: { summary: RouteStatusSummary }) {
+  const items = [
+    { n: summary.late, label: "late", badge: ROUTE_PRODUCTION_STATUS_BADGE.late, Icon: AlertTriangle },
+    { n: summary.atRisk, label: "at risk", badge: ROUTE_PRODUCTION_STATUS_BADGE.at_risk, Icon: AlertTriangle },
+    { n: summary.onTrack, label: "on track", badge: ROUTE_PRODUCTION_STATUS_BADGE.on_track, Icon: Check },
+  ].filter((it) => it.n > 0);
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3 sm:px-5">
+      {items.map(({ n, label, badge, Icon }) => (
+        <span
+          key={label}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ${badge.chip}`}
+        >
+          <Icon size={13} className="shrink-0" />
+          {n} {n === 1 ? "route" : "routes"} {label}
+        </span>
+      ))}
+      <a
+        href="#route-printing-schedule"
+        className="ml-auto inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+      >
+        View Route Schedule
+        <ArrowRight size={14} className="shrink-0" />
+      </a>
+    </div>
+  );
+}
+
+// Per-route readiness chips for a line's Delivery Route split (read mode). One
+// chip per distinct route the line ships on that has a derived status, so the
+// operator sees at a glance which of this line's routes are late / at risk.
+function RouteStatusBadges({
+  routes,
+  statusByNumber,
+}: {
+  routes: RouteAssignment[];
+  statusByNumber: Map<string, RouteProductionStatus>;
+}) {
+  const labels = Array.from(
+    new Set(routes.map((r) => r.route.trim()).filter(Boolean)),
+  );
+  const badges = labels
+    .map((label) => ({ label, status: statusByNumber.get(label) }))
+    .filter(
+      (b): b is { label: string; status: RouteProductionStatus } =>
+        b.status !== undefined,
+    );
+  if (badges.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {badges.map(({ label, status }) => {
+        const badge = ROUTE_PRODUCTION_STATUS_BADGE[status];
+        const routeLabel = /^\d+$/.test(label) ? `#${label}` : label;
+        return (
+          <span
+            key={label}
+            title={`Route ${label} — ${badge.label} (${badge.hint})`}
+            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${badge.chip}`}
+          >
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${badge.dot}`} />
+            {routeLabel}
+            <span className="font-medium opacity-80">{badge.short}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ProductionSheetSection({
   rows,
   meta,
   order,
   roomDeadlines,
+  routeStatusByNumber,
+  routeStatusSummary,
   onSetMeta,
   onReorder,
   onSetRoomDeadline,
@@ -432,15 +541,14 @@ export function ProductionSheetSection({
       ? filter
       : productOrder[0];
 
-  // Final visible rows: active room + active product, grouped by room (canonical
-  // order; a stable sort keeps each room's manual order, so rooms read as blocks
-  // and their per-room START/FINISH chain runs straight down).
-  const roomRank = (row: ProductionRow) =>
-    PRODUCTION_ROOMS.findIndex((r) => r.value === metaFor(row).room);
-  const committedVisibleRows = roomRows
-    .filter((row) => row.group === activeProduct)
-    .slice()
-    .sort((a, b) => roomRank(a) - roomRank(b));
+  // Final visible rows: active room + active product, kept in the operator's
+  // manual order (orderedRows) as-is. The "All rooms" view no longer regroups by
+  // room, so a drag can reorder any line relative to any other — the on-screen
+  // order matches the persisted order, and the per-room START/FINISH chain
+  // (derived from phaseRows in this same order) stays consistent with it.
+  const committedVisibleRows = roomRows.filter(
+    (row) => row.group === activeProduct,
+  );
   // While dragging, the on-screen order follows the live `dragOrder`; otherwise
   // it is the committed order. Rows are reordered by SKU so identity is stable.
   const visibleRows =
@@ -611,6 +719,10 @@ export function ProductionSheetSection({
         )}
       </header>
 
+      {/* Route readiness summary — production FINISH vs each route's print
+          deadline, tallied, with a jump to the board below. */}
+      <RouteSummaryStrip summary={routeStatusSummary} />
+
       {/* Phase tabs — each hog-break phase shows the SKUs assigned to it. */}
       <div className="flex gap-1 border-b border-slate-200 px-4 pt-3 sm:px-5">
         {CUT_PHASES.map((p) => {
@@ -745,44 +857,42 @@ export function ProductionSheetSection({
             </div>
           )}
 
-          <div className="overflow-x-auto">
+          <div>
             {/* Fixed column widths so the row keeps the exact same layout in read
                 and edit mode — editing a line never shifts a column's position. */}
-            <table className="w-full min-w-485 table-fixed text-sm">
+            <table className="w-full table-fixed text-sm">
               <colgroup>
-                <col className="w-12" />
                 <col className="w-20" />
                 <col />
-                <col className="w-28" />
-                <col className="w-28" />
-                <col className="w-48" />
-                <col className="w-36" />
-                <col className="w-36" />
-                <col className="w-36" />
-                <col className="w-36" />
-                <col className="w-28" />
+                <col className="w-20" />
+                <col className="w-20" />
                 <col className="w-40" />
+                <col className="w-32" />
+                <col className="w-20" />
+                <col className="w-24" />
+                <col className="w-32" />
+                <col className="w-20" />
+                <col className="w-28" />
                 <col className="w-64" />
               </colgroup>
               <thead>
                 <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 [&>th]:border-b [&>th]:border-slate-200 [&>th]:bg-slate-50 [&>th]:py-2.5">
-                  <th className="rounded-l-lg px-3 text-right">#</th>
-                  <th className="px-3">SKU</th>
-                  <th className="px-3">Product Name</th>
-                  <th className="px-3 text-right">Qty C/S</th>
-                  <th className="px-3 text-right">Qty Pcs</th>
-                  <th className="px-3">Room</th>
-                  <th className="px-3">Start</th>
-                  <th className="px-3 text-center">Sec / Pc</th>
-                  <th className="px-3 text-center">Cutters</th>
-                  <th className="px-3">Finish</th>
-                  <th className="px-3 text-center">Buffer</th>
-                  <th className="px-3 text-center">Carry Fwd</th>
-                  <th className="rounded-r-lg px-3">Delivery Route</th>
+                  <th className="rounded-l-lg px-2">SKU</th>
+                  <th className="px-2">Product Name</th>
+                  <th className="px-2 text-right">Qty C/S</th>
+                  <th className="px-2 text-right">Qty Pcs</th>
+                  <th className="px-2">Room</th>
+                  <th className="px-2">Start</th>
+                  <th className="px-2 text-center">Sec / Pc</th>
+                  <th className="px-2 text-center">Cutters</th>
+                  <th className="px-2">Finish</th>
+                  <th className="px-2 text-center">Buffer</th>
+                  <th className="px-2 text-center">Carry Fwd</th>
+                  <th className="rounded-r-lg px-2">Delivery Route</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleRows.map((row, index) => {
+                {visibleRows.map((row) => {
                   const rowMeta = metaFor(row);
                   const sched = schedule.get(row.sku);
 
@@ -790,9 +900,9 @@ export function ProductionSheetSection({
                   // — they come from Primal, not the operator.
                   const identityCells = (
                     <>
-                      <td className="relative px-3 py-3 text-right tabular-nums text-slate-400">
+                      <td className="relative px-2 py-3 pl-6 font-semibold tabular-nums text-slate-700">
                         {/* Drag handle — reveals on row hover, overlaid in the
-                            left padding so the row number keeps its position. */}
+                            left padding so the SKU keeps its position. */}
                         <button
                           type="button"
                           draggable
@@ -809,14 +919,11 @@ export function ProductionSheetSection({
                         >
                           <GripVertical size={14} />
                         </button>
-                        {index + 1}
-                      </td>
-                      <td className="px-3 py-3 font-semibold tabular-nums text-slate-700">
                         {row.sku.startsWith(INSTRUCTION_ROW_SKU_PREFIX)
                           ? emptyCell
                           : row.sku}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-3">
                         <span className="flex items-center gap-2 font-medium text-slate-800">
                           <span
                             className={`h-2 w-2 shrink-0 rounded-full ${productDotClass(
@@ -826,10 +933,10 @@ export function ProductionSheetSection({
                           {row.name}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums text-slate-900">
+                      <td className="px-2 py-3 text-right tabular-nums text-slate-900">
                         {row.qtyCases > 0 ? row.qtyCases : emptyCell}
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums text-slate-900">
+                      <td className="px-2 py-3 text-right tabular-nums text-slate-900">
                         {row.qtyPcs > 0 ? row.qtyPcs : emptyCell}
                       </td>
                     </>
@@ -847,7 +954,7 @@ export function ProductionSheetSection({
                   // Read cell shows a hover hint and click target; the active cell
                   // drops the hint and carries the outside-click ref instead.
                   const cellClass = (field: CellField) =>
-                    `px-3 align-middle ${
+                    `px-2 align-middle ${
                       editing(field)
                         ? "py-2"
                         : "py-3 cursor-pointer transition hover:bg-slate-50/60"
@@ -1025,7 +1132,7 @@ export function ProductionSheetSection({
                           room deadline it just turns red (the work is not cut
                           short — the supervisor moves the excess via Carry Fwd). */}
                       <td
-                        className={`px-3 py-3 tabular-nums ${
+                        className={`px-2 py-3 tabular-nums ${
                           sched?.exceedsDeadline
                             ? "font-semibold text-red-600"
                             : "text-slate-600"
@@ -1143,23 +1250,21 @@ export function ProductionSheetSection({
                         ) : sched && sched.carryForwardPcs > 0 ? (
                           // A manual carry is APPLIED — solid amber, and the
                           // FINISH already reflects the reduced (today) work.
-                          <span
+                          <CarryForwardChip
+                            pcs={sched.carryForwardPcs}
+                            piecesPerCase={row.piecesPerCase}
+                            applied
                             title={`${sched.todayPcs} today · ${sched.carryForwardPcs} to tomorrow (manual)`}
-                            className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
-                          >
-                            {sched.carryForwardPcs}
-                            <span className="text-[10px] leading-none">→</span>
-                          </span>
+                          />
                         ) : sched && sched.suggestedCarryPcs > 0 ? (
                           // Over the deadline with nothing held back yet — suggest
                           // how many to move (dashed = not applied). Click to keep.
-                          <span
+                          <CarryForwardChip
+                            pcs={sched.suggestedCarryPcs}
+                            piecesPerCase={row.piecesPerCase}
+                            applied={false}
                             title={`Suggest moving ${sched.suggestedCarryPcs} pcs to tomorrow to finish by the deadline`}
-                            className="inline-flex items-center gap-1 rounded-md border border-dashed border-red-300 px-1.5 py-0.5 text-xs font-medium text-red-500"
-                          >
-                            {sched.suggestedCarryPcs}
-                            <span className="text-[10px] leading-none">→</span>
-                          </span>
+                          />
                         ) : (
                           emptyCell
                         )}
@@ -1172,22 +1277,12 @@ export function ProductionSheetSection({
                         className={`${cellClass("routes")} text-slate-600`}
                       >
                         {editing("routes") ? (
-                          // One row per truck route (label + count). The split
-                          // counts in cases or pieces (routeUnit); the balance
-                          // reconciles against the matching ordered qty. Each edit
+                          // One row per truck route (label + count + its own
+                          // unit). A line can mix cases and pieces across routes;
+                          // the balance normalises every route to pieces and
+                          // reconciles against the ordered pieces. Each edit
                           // commits straight to the line's stored routes.
                           <div className="flex flex-col gap-1.5">
-                            {routes.length > 0 && (
-                              <div className="flex items-center gap-1.5 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                                <span className="w-16">Route #</span>
-                                <div className="flex w-16 justify-center">
-                                  <RouteUnitHeader
-                                    value={rowMeta.routeUnit}
-                                    onChange={(v) => commit({ routeUnit: v })}
-                                  />
-                                </div>
-                              </div>
-                            )}
                             {routes.map((r, i) => (
                               <div key={i} className="flex items-center gap-1.5">
                                 <input
@@ -1202,9 +1297,9 @@ export function ProductionSheetSection({
                                       ),
                                     })
                                   }
-                                  placeholder="9"
+                                  placeholder="Rte"
                                   aria-label={`Route ${i + 1} number`}
-                                  className="h-9 w-16 rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                                  className="h-9 w-12 rounded-lg border border-slate-200 bg-white px-1.5 text-center text-sm text-slate-900 outline-none transition placeholder:text-xs placeholder:text-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                                 />
                                 <input
                                   type="number"
@@ -1225,10 +1320,25 @@ export function ProductionSheetSection({
                                       ),
                                     })
                                   }
-                                  placeholder="0"
+                                  placeholder="Qty"
                                   aria-label={`Route ${i + 1} quantity`}
-                                  className="h-9 w-16 rounded-lg border border-slate-200 bg-white px-2.5 text-center text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                  className="h-9 w-12 rounded-lg border border-slate-200 bg-white px-1.5 text-center text-sm text-slate-900 outline-none transition placeholder:text-xs placeholder:text-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 />
+                                <div className="flex w-12 justify-center">
+                                  <RouteUnitPicker
+                                    value={routeAssignmentUnit(
+                                      r,
+                                      rowMeta.routeUnit,
+                                    )}
+                                    onChange={(v) =>
+                                      commit({
+                                        routes: routes.map((x, idx) =>
+                                          idx === i ? { ...x, unit: v } : x,
+                                        ),
+                                      })
+                                    }
+                                  />
+                                </div>
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -1248,7 +1358,23 @@ export function ProductionSheetSection({
                               type="button"
                               onClick={() =>
                                 commit({
-                                  routes: [...routes, { route: "", qty: 0 }],
+                                  // New route inherits the previous route's unit
+                                  // (else the line default), so adding several of
+                                  // the same unit stays one click each.
+                                  routes: [
+                                    ...routes,
+                                    {
+                                      route: "",
+                                      qty: 0,
+                                      unit: routeAssignmentUnit(
+                                        routes[routes.length - 1] ?? {
+                                          route: "",
+                                          qty: 0,
+                                        },
+                                        rowMeta.routeUnit,
+                                      ),
+                                    },
+                                  ],
                                 })
                               }
                               className="flex w-fit items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
@@ -1256,14 +1382,15 @@ export function ProductionSheetSection({
                               <Plus size={13} />
                               Add route
                             </button>
-                            {(routeTarget(row, rowMeta.routeUnit) > 0 ||
-                              routes.length > 0) && (
+                            {(routeTargetPcs(row) > 0 || routes.length > 0) && (
                               <RouteBalance
                                 recon={reconcileRoutes(
                                   routes,
-                                  routeTarget(row, rowMeta.routeUnit),
+                                  routeTargetPcs(row),
+                                  row.piecesPerCase,
+                                  rowMeta.routeUnit,
                                 )}
-                                unit={rowMeta.routeUnit}
+                                unit="piece"
                                 piecesPerCase={row.piecesPerCase}
                               />
                             )}
@@ -1271,18 +1398,29 @@ export function ProductionSheetSection({
                         ) : routes.length === 0 ? (
                           emptyCell
                         ) : (
-                          <div className="flex items-center gap-2">
-                            <RouteBalance
-                              recon={reconcileRoutes(
-                                routes,
-                                routeTarget(row, rowMeta.routeUnit),
-                              )}
-                              unit={rowMeta.routeUnit}
-                              piecesPerCase={row.piecesPerCase}
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <RouteBalance
+                                recon={reconcileRoutes(
+                                  routes,
+                                  routeTargetPcs(row),
+                                  row.piecesPerCase,
+                                  rowMeta.routeUnit,
+                                )}
+                                unit="piece"
+                                piecesPerCase={row.piecesPerCase}
+                              />
+                              <span className="min-w-0 wrap-break-word">
+                                {formatRouteSummary(routes, rowMeta.routeUnit)}
+                              </span>
+                            </div>
+                            {/* Per-route readiness (production FINISH vs the
+                                route's print deadline) — badged so the operator
+                                sees which routes this line puts at risk. */}
+                            <RouteStatusBadges
+                              routes={routes}
+                              statusByNumber={routeStatusByNumber}
                             />
-                            <span className="min-w-0 truncate">
-                              {formatRouteSummary(routes, rowMeta.routeUnit)}
-                            </span>
                           </div>
                         )}
                       </td>

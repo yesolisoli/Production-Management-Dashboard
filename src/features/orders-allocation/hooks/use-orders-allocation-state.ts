@@ -184,6 +184,18 @@ export function useOrdersAllocationState() {
       return { ...prev, route_notes: next };
     });  }, []);
 
+  // Operator override for a route's print deadline (Route Printing Schedule).
+  // Stored keyed by route number; a blank value drops the override so the route
+  // falls back to the standing weekday deadline. Mirrors setRoutePrint.
+  const setRouteDeadline = useCallback((route: string, time: string) => {
+    setDraft((prev) => {
+      const next = { ...prev.route_deadlines };
+      if (time.trim()) next[route] = time;
+      else delete next[route];
+      return { ...prev, route_deadlines: next };
+    });
+  }, []);
+
   // ---------------------------- Hog break -----------------------------
   // Merge a patch onto the morning hog-break calc inputs, clamping the per-type
   // count / rate records and the main-room buffer to non-negative ints. The
@@ -291,6 +303,7 @@ export function useOrdersAllocationState() {
     setRoomDeadline,
     setRoutePrint,
     setRouteNote,
+    setRouteDeadline,
     setHogBreakCalc,
     addInstruction,
     updateInstruction,
