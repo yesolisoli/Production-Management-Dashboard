@@ -15,6 +15,7 @@ import {
   HOG_TYPES,
   PRIORITIES,
   PRODUCTION_ROOMS,
+  START_CHAIN_BUFFER_SEC,
   UNITS,
   type AllocationDraft,
   type AllocationInstruction,
@@ -138,6 +139,12 @@ function coerceProductionMeta(raw: unknown): ProductionMeta {
     start: asString(o.start),
     secPerPc: asNonNegativeInt(o.secPerPc),
     cutters: asNonNegativeInt(o.cutters),
+    // Older drafts predate the per-line buffer — they fall back to the default
+    // chain buffer so an existing plan keeps its previous 30s spacing.
+    bufferSec:
+      typeof o.bufferSec === "number"
+        ? asNonNegativeInt(o.bufferSec)
+        : START_CHAIN_BUFFER_SEC,
     routes: coerceRoutes(o.routes),
     routeUnit: coerceUnit(o.routeUnit),
   };
@@ -198,6 +205,22 @@ function coerceRouteNotes(raw: unknown): Record<string, string> {
   return out;
 }
 
+// The operator's manual row ordering: a sequence of row SKUs. Older drafts
+// predate it, so a missing / corrupt value reads back as empty (the rows then
+// keep their canonical derived order). Non-string / blank / duplicate entries
+// are dropped so a corrupt list can't reorder rows unpredictably.
+function coerceProductionOrder(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string" || !entry || seen.has(entry)) continue;
+    seen.add(entry);
+    out.push(entry);
+  }
+  return out;
+}
+
 function coerceInstructions(raw: unknown): AllocationInstruction[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -215,6 +238,7 @@ export function readDraft(date: string): AllocationDraft | null {
       date,
       hog_break: coerceHogBreakCalc(parsed.hog_break),
       production_meta: coerceProductionMetaMap(parsed.production_meta),
+      production_order: coerceProductionOrder(parsed.production_order),
       instructions: coerceInstructions(parsed.instructions),
       route_prints: coerceRoutePrints(parsed.route_prints),
       route_notes: coerceRouteNotes(parsed.route_notes),

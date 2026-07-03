@@ -106,6 +106,9 @@ export function useOrdersAllocationState() {
           ...(patch.cutters !== undefined
             ? { cutters: clampNonNegativeInt(patch.cutters) }
             : {}),
+          ...(patch.bufferSec !== undefined
+            ? { bufferSec: clampNonNegativeInt(patch.bufferSec) }
+            : {}),
           ...(patch.start !== undefined ? { start: patch.start.trim() } : {}),
           ...(patch.routes !== undefined
             ? {
@@ -123,6 +126,14 @@ export function useOrdersAllocationState() {
       });    },
     [],
   );
+
+  // The operator's manual row ordering. The sheet computes the full next SKU
+  // sequence (from the derived rows) and hands it back here to persist; the rows
+  // themselves stay derived from Primal. Stored as-is — orderProductionRows
+  // ignores any SKUs that no longer resolve to a row.
+  const setProductionOrder = useCallback((order: string[]) => {
+    setDraft((prev) => ({ ...prev, production_order: order }));
+  }, []);
 
   // ------------------------- Route printing ---------------------------
   // Operator-entered printed time per route (Route Printing Schedule). Stored as
@@ -250,6 +261,7 @@ export function useOrdersAllocationState() {
     instructionsSummary,
     setDate,
     setProductionMeta,
+    setProductionOrder,
     setRoutePrint,
     setRouteNote,
     setHogBreakCalc,

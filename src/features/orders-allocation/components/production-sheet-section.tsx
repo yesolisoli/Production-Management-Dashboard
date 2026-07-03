@@ -1,24 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   AlertTriangle,
   Box,
   Check,
   ChevronDown,
+  GripVertical,
   Info,
   Plus,
   X,
 } from "lucide-react";
 import { clampNonNegativeInt } from "@/features/hog-intake/calculations";
 import {
-  computeFinish,
+  deriveProductionSchedule,
   formatRouteSummary,
   INSTRUCTION_ROW_SKU_PREFIX,
+  orderProductionRows,
   reconcileRoutes,
   type RouteReconciliation,
 } from "../calculations";
-import { fromTimeInputValue } from "../route-printing";
 import { CustomSelect, type SelectOption } from "./custom-select";
 import { ProductFilterTabs } from "./product-filter-tabs";
 import { TimeInput } from "./time-input";
@@ -48,7 +55,13 @@ function routeTarget(row: ProductionRow, unit: Unit): number {
 
 // The production cells the operator can edit in place (FINISH is derived, the
 // identity columns come from Primal).
-type CellField = "room" | "start" | "secPerPc" | "cutters" | "routes";
+type CellField =
+  | "room"
+  | "start"
+  | "secPerPc"
+  | "cutters"
+  | "buffer"
+  | "routes";
 
 // "Today's Production Sheet" — the SKU-level cut plan. The rows are DERIVED from
 // Primal demand (SKU / name / ordered qty); the operator overlays the
@@ -59,7 +72,11 @@ type CellField = "room" | "start" | "secPerPc" | "cutters" | "routes";
 type ProductionSheetSectionProps = {
   rows: ProductionRow[];
   meta: Record<string, ProductionMeta>;
+  // The operator's manual row order (sequence of row SKUs). Applied over the
+  // derived rows; onReorder persists the next full sequence after a drag.
+  order: string[];
   onSetMeta: (sku: string, patch: Partial<ProductionMeta>) => void;
+  onReorder: (order: string[]) => void;
 };
 
 // Solid per-room dot colour for the room picker / read cell.
@@ -249,7 +266,9 @@ function RouteUnitHeader({
 export function ProductionSheetSection({
   rows,
   meta,
+  order,
   onSetMeta,
+  onReorder,
 }: ProductionSheetSectionProps) {
   const [filter, setFilter] = useState<AllocationProduct | "all">("all");
   // Which hog-break phase's sheet is being viewed. Pure UI state — a SKU's phase
@@ -264,6 +283,21 @@ export function ProductionSheetSection({
   } | null>(null);
   // The open cell — used to detect clicks outside it (close on outside click).
   const activeCellRef = useRef<HTMLTableCellElement>(null);
+  // Drag-to-reorder. `draggingSku` is the row under the cursor's grip;
+  // `dragOrder` is the LIVE visible SKU sequence while a drag is in flight — the
+  // rows reflow to it in real time so the list rearranges as you move, and the
+  // final sequence commits to the persisted draft on drop. Both are pure UI
+  // state; nothing persists until onReorder.
+  const [draggingSku, setDraggingSku] = useState<string | null>(null);
+  const [dragOrder, setDragOrder] = useState<string[] | null>(null);
+  // Live row elements + their last measured positions, so a reorder can be FLIP
+  // animated (rows slide from their old spot to the new one) instead of snapping.
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
+  const prevRects = useRef(new Map<string, DOMRect>());
+
+  // Rows in the operator's manual order (falls back to the canonical Primal order
+  // for any SKU not yet placed). Everything downstream reads from this.
+  const orderedRows = orderProductionRows(rows, order);
 
   // A row's operational meta, falling back to defaults until the operator edits.
   // The fallback honours the row's defaultPhase (instruction-derived rows open in
@@ -276,7 +310,16 @@ export function ProductionSheetSection({
     };
 
   // Rows assigned to the active phase (default phase until a SKU is moved).
-  const phaseRows = rows.filter((row) => metaFor(row).phase === activePhase);
+  const phaseRows = orderedRows.filter(
+    (row) => metaFor(row).phase === activePhase,
+  );
+
+  // Per-room START/FINISH schedule for the phase, in display order. A line with
+  // no entered START auto-chains from the previous line's FINISH in its room
+  // (+buffer); the START/FINISH cells read from this. Derived over the FULL
+  // phase (all products) so the chain stays continuous under the product filter,
+  // and recomputed here so any reorder / room change re-chains automatically.
+  const schedule = deriveProductionSchedule(phaseRows, metaFor);
 
   // Products present in this phase, in canonical order — drives the filter tabs.
   const productOrder = sortProductKeys([
@@ -293,9 +336,87 @@ export function ProductionSheetSection({
     filter !== "all" && productOrder.includes(filter)
       ? filter
       : productOrder[0];
-  const visibleRows = phaseRows.filter((row) => row.group === activeProduct);
+  const committedVisibleRows = phaseRows.filter(
+    (row) => row.group === activeProduct,
+  );
+  // While dragging, the on-screen order follows the live `dragOrder`; otherwise
+  // it is the committed order. Rows are reordered by SKU so identity is stable.
+  const visibleRows =
+    dragOrder && draggingSku
+      ? (dragOrder
+          .map((sku) => committedVisibleRows.find((row) => row.sku === sku))
+          .filter(Boolean) as ProductionRow[])
+      : committedVisibleRows;
+
+  // FLIP: after every render, measure each visible row. While a drag is
+  // reordering them, invert the position change and release it on the next frame
+  // so the rows slide into place instead of jumping. Runs before paint so the
+  // invert is never visible.
+  useLayoutEffect(() => {
+    const next = new Map<string, DOMRect>();
+    rowRefs.current.forEach((el, sku) => next.set(sku, el.getBoundingClientRect()));
+    if (draggingSku) {
+      next.forEach((rect, sku) => {
+        const before = prevRects.current.get(sku);
+        if (!before) return;
+        const dy = before.top - rect.top;
+        if (!dy) return;
+        const el = rowRefs.current.get(sku);
+        if (!el) return;
+        el.style.transition = "none";
+        el.style.transform = `translateY(${dy}px)`;
+        requestAnimationFrame(() => {
+          el.style.transition = "transform 200ms cubic-bezier(0.2, 0, 0, 1)";
+          el.style.transform = "";
+        });
+      });
+    }
+    prevRects.current = next;
+  });
 
   const closeCell = useCallback(() => setEditingCell(null), []);
+
+  // Begin a drag: seed the live order with the current visible sequence so
+  // subsequent moves reorder within it.
+  const startDrag = (sku: string) => {
+    setDraggingSku(sku);
+    setDragOrder(committedVisibleRows.map((row) => row.sku));
+  };
+
+  // Hover over a row mid-drag: slot the dragged row just before or after that
+  // row (by which half of it the cursor is over) in the live order, so the list
+  // reflows — and FLIP-animates — in real time. Deciding by cursor half (not by
+  // the current order) keeps it stable: holding over one row settles instead of
+  // oscillating. Returns the previous array unchanged when nothing moved so a
+  // steady hover doesn't churn state.
+  const dragOverRow = (targetSku: string, after: boolean) => {
+    if (!draggingSku || draggingSku === targetSku) return;
+    setDragOrder((prev) => {
+      if (!prev) return prev;
+      const without = prev.filter((sku) => sku !== draggingSku);
+      const ti = without.indexOf(targetSku);
+      if (ti === -1) return prev;
+      without.splice(after ? ti + 1 : ti, 0, draggingSku);
+      return without.every((sku, i) => sku === prev[i]) ? prev : without;
+    });
+  };
+
+  // Commit the drag: fold the live visible order back into the FULL sequence
+  // (visible slots follow dragOrder, rows off-screen keep their positions), then
+  // persist. Reordering only ever happens within one phase + product on screen,
+  // so this never mixes groups. Clears the drag state either way.
+  const endDrag = () => {
+    if (dragOrder) {
+      const visibleSet = new Set(committedVisibleRows.map((row) => row.sku));
+      let i = 0;
+      const nextOrder = orderedRows.map((row) =>
+        visibleSet.has(row.sku) ? dragOrder[i++] : row.sku,
+      );
+      onReorder(nextOrder);
+    }
+    setDraggingSku(null);
+    setDragOrder(null);
+  };
 
   const switchPhase = (next: CutPhase) => {
     if (next === activePhase) return;
@@ -362,7 +483,7 @@ export function ProductionSheetSection({
       <div className="flex gap-1 border-b border-slate-200 px-4 pt-3 sm:px-5">
         {CUT_PHASES.map((p) => {
           const active = activePhase === p.value;
-          const count = rows.filter(
+          const count = orderedRows.filter(
             (row) => metaFor(row).phase === p.value,
           ).length;
           return (
@@ -433,7 +554,7 @@ export function ProductionSheetSection({
           <div className="overflow-x-auto">
             {/* Fixed column widths so the row keeps the exact same layout in read
                 and edit mode — editing a line never shifts a column's position. */}
-            <table className="w-full min-w-417 table-fixed text-sm">
+            <table className="w-full min-w-445 table-fixed text-sm">
               <colgroup>
                 <col className="w-12" />
                 <col className="w-20" />
@@ -445,6 +566,7 @@ export function ProductionSheetSection({
                 <col className="w-36" />
                 <col className="w-36" />
                 <col className="w-36" />
+                <col className="w-28" />
                 <col className="w-64" />
               </colgroup>
               <thead>
@@ -456,21 +578,41 @@ export function ProductionSheetSection({
                   <th className="px-3 text-right">Qty Pcs</th>
                   <th className="px-3">Room</th>
                   <th className="px-3">Start</th>
-                  <th className="px-3">Finish</th>
                   <th className="px-3 text-center">Sec / Pc</th>
                   <th className="px-3 text-center">Cutters</th>
+                  <th className="px-3">Finish</th>
+                  <th className="px-3 text-center">Buffer</th>
                   <th className="rounded-r-lg px-3">Delivery Route</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleRows.map((row, index) => {
                   const rowMeta = metaFor(row);
+                  const sched = schedule.get(row.sku);
 
                   // Identity cells (SKU / name / qty) are read-only in both modes
                   // — they come from Primal, not the operator.
                   const identityCells = (
                     <>
-                      <td className="px-3 py-3 text-right tabular-nums text-slate-400">
+                      <td className="relative px-3 py-3 text-right tabular-nums text-slate-400">
+                        {/* Drag handle — reveals on row hover, overlaid in the
+                            left padding so the row number keeps its position. */}
+                        <button
+                          type="button"
+                          draggable
+                          onDragStart={(e) => {
+                            startDrag(row.sku);
+                            e.dataTransfer.effectAllowed = "move";
+                            // Firefox won't start a drag without transfer data.
+                            e.dataTransfer.setData("text/plain", row.sku);
+                          }}
+                          onDragEnd={endDrag}
+                          aria-label={`Drag to reorder ${row.name}`}
+                          title="Drag to reorder"
+                          className="absolute left-0.5 top-1/2 flex h-6 w-4 -translate-y-1/2 cursor-grab items-center justify-center text-slate-300 opacity-0 transition hover:text-slate-500 group-hover:opacity-100 active:cursor-grabbing"
+                        >
+                          <GripVertical size={14} />
+                        </button>
                         {index + 1}
                       </td>
                       <td className="px-3 py-3 font-semibold tabular-nums text-slate-700">
@@ -515,10 +657,38 @@ export function ProductionSheetSection({
                         : "py-3 cursor-pointer transition hover:bg-slate-50/60"
                     }`;
 
+                  const isDragging = draggingSku === row.sku;
+
                   return (
                     <tr
                       key={row.sku}
-                      className="[&>td]:border-b [&>td]:border-slate-100"
+                      ref={(el) => {
+                        if (el) rowRefs.current.set(row.sku, el);
+                        else rowRefs.current.delete(row.sku);
+                      }}
+                      onDragOver={(e) => {
+                        if (!draggingSku) return;
+                        // Allow the drop and reflow the list to this row's slot,
+                        // before or after it by which half the cursor is over.
+                        e.preventDefault();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        dragOverRow(
+                          row.sku,
+                          e.clientY > rect.top + rect.height / 2,
+                        );
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        endDrag();
+                      }}
+                      className={`group [&>td]:border-b [&>td]:border-slate-100 ${
+                        // The dragged row lifts: shadowed, raised, and slightly
+                        // faded so it reads as the moving piece while the rest
+                        // reflow underneath it.
+                        isDragging
+                          ? "relative z-10 bg-white opacity-90 shadow-lg [&>td]:border-transparent"
+                          : ""
+                      }`}
                     >
                       {identityCells}
 
@@ -556,7 +726,10 @@ export function ProductionSheetSection({
                       >
                         {editing("start") ? (
                           <TimeInput
-                            value={rowMeta.start}
+                            // Seed an unentered (auto-chained) line from its
+                            // derived start so the operator tweaks that time
+                            // rather than a blank; a manual line uses its own.
+                            value={rowMeta.start || sched?.startInput || ""}
                             autoFocus
                             onChange={(v) => commit({ start: v })}
                             onKeyDown={(e) => {
@@ -568,19 +741,17 @@ export function ProductionSheetSection({
                             ariaLabel="Start time"
                             className="h-10 w-full"
                           />
+                        ) : sched?.start ? (
+                          // Auto-chained starts are muted to set them apart from
+                          // the operator's entered (or first-in-room) times.
+                          <span
+                            className={sched.autoStart ? "text-slate-400" : undefined}
+                          >
+                            {sched.start}
+                          </span>
                         ) : (
-                          fromTimeInputValue(rowMeta.start) || emptyCell
+                          emptyCell
                         )}
-                      </td>
-
-                      {/* FINISH — derived, never editable. */}
-                      <td className="px-3 py-3 tabular-nums text-slate-600">
-                        {computeFinish(
-                          rowMeta.start,
-                          rowMeta.secPerPc,
-                          row.qtyPcs,
-                          rowMeta.cutters,
-                        ) || emptyCell}
                       </td>
 
                       {/* SEC / PC */}
@@ -650,6 +821,45 @@ export function ProductionSheetSection({
                           rowMeta.cutters
                         ) : (
                           emptyCell
+                        )}
+                      </td>
+
+                      {/* FINISH — derived from the schedule, never editable. */}
+                      <td className="px-3 py-3 tabular-nums text-slate-600">
+                        {sched?.finish || emptyCell}
+                      </td>
+
+                      {/* BUFFER — seconds held after this line's FINISH before
+                          the next line in the same room auto-starts. */}
+                      <td
+                        ref={editing("buffer") ? activeCellRef : undefined}
+                        onClick={() => !editing("buffer") && open("buffer")}
+                        className={`${cellClass("buffer")} text-center tabular-nums text-slate-600`}
+                      >
+                        {editing("buffer") ? (
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            autoFocus
+                            value={rowMeta.bufferSec === 0 ? "" : rowMeta.bufferSec}
+                            onChange={(e) =>
+                              commit({
+                                bufferSec: clampNonNegativeInt(e.target.value),
+                              })
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                closeCell();
+                              }
+                            }}
+                            placeholder="0"
+                            aria-label="Buffer seconds"
+                            className={`${cellInputClass} text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                          />
+                        ) : (
+                          `${rowMeta.bufferSec}s`
                         )}
                       </td>
 

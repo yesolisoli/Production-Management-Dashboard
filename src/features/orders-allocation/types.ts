@@ -85,6 +85,11 @@ export const DEFAULT_BUFFER_MIN = 0;
 export const DEFAULT_HOG_BREAK_START = "05:00";
 // Default minutes after the hog break starts that secondline cutting begins.
 export const SECONDLINE_CUTTING_OFFSET_MIN = 30;
+// Default buffer (seconds) auto-inserted between a production line's FINISH and
+// the next line's START in the SAME room when that next line has no entered
+// start — the production schedule chains them (deriveProductionSchedule). Kept
+// sub-minute, so the schedule's 12-hour display carries seconds.
+export const START_CHAIN_BUFFER_SEC = 30;
 
 // Raw, persisted inputs for the hog-break calculator.
 export type HogBreakCalc = {
@@ -220,6 +225,10 @@ export type ProductionMeta = {
   start: string; // START — free time text, e.g. "6:00"
   secPerPc: number; // SEC/PC — net cutting seconds per piece
   cutters: number; // CUTTERS
+  // BUFFER — seconds held after this line's FINISH before the NEXT line in the
+  // same room auto-starts (the chain in deriveProductionSchedule). Editable per
+  // line; defaults to START_CHAIN_BUFFER_SEC.
+  bufferSec: number;
   routes: RouteAssignment[]; // DELIVERY ROUTE — truck route split for the line
   routeUnit: Unit; // whether the route split counts cases or pieces
 };
@@ -230,7 +239,8 @@ export function defaultProductionMeta(): ProductionMeta {
     room: PRODUCTION_ROOMS[0].value,
     start: "",
     secPerPc: 0,
-    cutters: 0,
+    cutters: 1,
+    bufferSec: START_CHAIN_BUFFER_SEC,
     routes: [],
     routeUnit: DEFAULT_UNIT,
   };
@@ -253,6 +263,12 @@ export type AllocationDraft = {
   date: string; // "YYYY-MM-DD"
   hog_break: HogBreakCalc; // morning hog-break calculator inputs
   production_meta: Record<string /* sku */, ProductionMeta>;
+  // Operator's manual ordering of the production-sheet rows, as an explicit
+  // sequence of row SKUs (catalog SKU or "instruction:<id>"). The rows are still
+  // DERIVED from Primal; this only overrides their display order. SKUs absent
+  // from this list fall back to the canonical (group → SKU) order, so a partial
+  // or stale list degrades gracefully.
+  production_order: string[];
   instructions: AllocationInstruction[];
   // Route Printing Schedule actuals: route number (as string) → the clock time
   // ("h:mm AM/PM") that route's labels were printed. Entered by the operator;
@@ -273,6 +289,7 @@ export function emptyAllocationDraft(date: string): AllocationDraft {
     date,
     hog_break: defaultHogBreakCalc(),
     production_meta: {},
+    production_order: [],
     instructions: [],
     route_prints: {},
     route_notes: {},
@@ -355,6 +372,7 @@ export function isEmptyAllocationDraft(draft: AllocationDraft): boolean {
   return (
     isDefaultHogBreakCalc(draft.hog_break) &&
     Object.keys(draft.production_meta).length === 0 &&
+    draft.production_order.length === 0 &&
     draft.instructions.length === 0 &&
     Object.keys(draft.route_prints).length === 0 &&
     Object.keys(draft.route_notes).length === 0
