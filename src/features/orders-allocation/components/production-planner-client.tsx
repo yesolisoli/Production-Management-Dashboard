@@ -22,7 +22,6 @@ export function ProductionPlannerClient() {
   const {
     date,
     draft,
-    status,
     isEmpty,
     setDate,
     setProductionMeta,
@@ -30,7 +29,6 @@ export function ProductionPlannerClient() {
     setRouteNote,
     setHogBreakCalc,
     clearAll,
-    save,
   } = useOrdersAllocationState();
 
   const { snapshot, productionRows } = usePrimalDemand(date);
@@ -86,12 +84,7 @@ export function ProductionPlannerClient() {
             onSetRouteNote={setRouteNote}
           />
 
-          <SaveBar
-            status={status}
-            isEmpty={isEmpty}
-            onSave={save}
-            onClear={clearAll}
-          />
+          <SaveBar isEmpty={isEmpty} onClear={clearAll} />
         </div>
       </div>
     </>

@@ -25,8 +25,6 @@ import {
   type ProductionMeta,
 } from "../types";
 
-export type SaveStatus = { kind: "idle" } | { kind: "saved"; at: number };
-
 // Single source of truth for the Orders & Allocation screen.
 //
 // The draft (per-SKU production overlay + morning-brief instructions) is the
@@ -38,7 +36,6 @@ export function useOrdersAllocationState() {
   const [draft, setDraft] = useState<AllocationDraft>(() =>
     emptyAllocationDraft(todayString()),
   );
-  const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
 
   // Gate persistence until after the first localStorage load so the empty
   // initial state can't overwrite a saved draft on first render (also avoids a
@@ -66,9 +63,7 @@ export function useOrdersAllocationState() {
           ? emptyAllocationDraft(nextDate)
           : seededAllocationDraft(nextDate)),
     );
-    hasHydrated.current = true;
-    setStatus({ kind: "idle" });
-  }, []);
+    hasHydrated.current = true;  }, []);
 
   // Load on mount and whenever the date changes. The setState here is the
   // intended date→draft sync (reading the external localStorage store), not an
@@ -125,9 +120,7 @@ export function useOrdersAllocationState() {
           ...prev,
           production_meta: { ...prev.production_meta, [sku]: next },
         };
-      });
-      setStatus({ kind: "idle" });
-    },
+      });    },
     [],
   );
 
@@ -141,9 +134,7 @@ export function useOrdersAllocationState() {
       if (time.trim()) next[route] = time;
       else delete next[route];
       return { ...prev, route_prints: next };
-    });
-    setStatus({ kind: "idle" });
-  }, []);
+    });  }, []);
 
   // Operator-entered free-text note per route (Route Printing Schedule). Stored
   // keyed by route number; a blank value drops the route's note. Mirrors
@@ -154,9 +145,7 @@ export function useOrdersAllocationState() {
       if (note.trim()) next[route] = note;
       else delete next[route];
       return { ...prev, route_notes: next };
-    });
-    setStatus({ kind: "idle" });
-  }, []);
+    });  }, []);
 
   // ---------------------------- Hog break -----------------------------
   // Merge a patch onto the morning hog-break calc inputs, clamping the per-type
@@ -183,9 +172,7 @@ export function useOrdersAllocationState() {
           secondlineOffsetMin: clampNonNegativeInt(next.secondlineOffsetMin),
         },
       };
-    });
-    setStatus({ kind: "idle" });
-  }, []);
+    });  }, []);
 
   // ---------------------------- Instructions ---------------------------
   const addInstruction = useCallback(
@@ -205,9 +192,7 @@ export function useOrdersAllocationState() {
             },
           ],
         };
-      });
-      setStatus({ kind: "idle" });
-    },
+      });    },
     [],
   );
 
@@ -226,9 +211,7 @@ export function useOrdersAllocationState() {
               }
             : row,
         ),
-      }));
-      setStatus({ kind: "idle" });
-    },
+      }));    },
     [],
   );
 
@@ -252,17 +235,7 @@ export function useOrdersAllocationState() {
   const clearAll = useCallback(() => {
     markDateCleared(date);
     setDraft(emptyAllocationDraft(date));
-    clearDraft(date);
-    setStatus({ kind: "idle" });
-  }, [date]);
-
-  // Persistence already happens on every edit; Save is an explicit commit that
-  // flushes the current draft and flashes a confirmation.
-  const save = useCallback(() => {
-    if (isEmptyAllocationDraft(draft)) clearDraft(draft.date);
-    else writeDraft(draft.date, draft);
-    setStatus({ kind: "saved", at: Date.now() });
-  }, [draft]);
+    clearDraft(date);  }, [date]);
 
   const instructionsSummary = useMemo(
     () => deriveInstructionsSummary(draft.instructions),
@@ -273,7 +246,6 @@ export function useOrdersAllocationState() {
   return {
     date,
     draft,
-    status,
     isEmpty,
     instructionsSummary,
     setDate,
@@ -286,7 +258,6 @@ export function useOrdersAllocationState() {
     removeInstruction,
     clearInstructions,
     clearAll,
-    save,
   };
 }
 

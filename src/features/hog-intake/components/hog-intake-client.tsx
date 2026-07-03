@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
-import { Calendar, Loader2, Save } from "lucide-react";
+import { useEffect, useMemo } from "react";
+import { Calendar } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
+import { registerNavigationFlush } from "@/lib/navigation-guard";
 import { deriveTotals } from "../calculations";
 import { useHogIntakeState } from "../hooks/use-hog-intake-state";
 import { useWeeklyHogSchedule } from "../hooks/use-weekly-hog-schedule";
@@ -38,8 +39,15 @@ export function HogIntakeClient() {
     updateFarmRecord,
     removeFarmRecord,
     reset,
-    save,
+    flush,
   } = useHogIntakeState({ sowPlanTotal });
+
+  // Hold sidebar navigation until a pending save finishes, so leaving for Primal
+  // Calc (which reads the DB) never races ahead of the write.
+  useEffect(() => {
+    registerNavigationFlush(flush);
+    return () => registerNavigationFlush(null);
+  }, [flush]);
 
   // hog_counts are derived from Farm Delivery Records, so totals flow from the
   // derived counts rather than the record's stored (input-only) field.
@@ -55,22 +63,6 @@ export function HogIntakeClient() {
         title="Hog Intake"
         actions={
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={save}
-              disabled={status.kind === "saving" || status.kind === "loading"}
-              title="Save Record"
-              className="flex h-10 w-10 items-center justify-center gap-2 rounded-xl border border-white/30 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60 sm:w-auto sm:px-4"
-            >
-              {status.kind === "saving" ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <Save size={16} />
-              )}
-              <span className="hidden sm:inline">
-                {status.kind === "saving" ? "Saving…" : "Save Record"}
-              </span>
-            </button>
             <label className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/30 bg-transparent sm:h-auto sm:w-auto sm:justify-start sm:gap-2 sm:px-3 sm:py-2">
               <Calendar size={16} className="shrink-0 text-white/70" />
               <input
@@ -123,7 +115,7 @@ export function HogIntakeClient() {
             onRemove={removeFarmRecord}
           />
 
-          <SaveBar status={status} dirty={dirty} onSave={save} onReset={reset} />
+          <SaveBar status={status} dirty={dirty} onReset={reset} />
         </div>
       </div>
     </>

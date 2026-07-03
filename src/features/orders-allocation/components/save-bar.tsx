@@ -1,34 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, RotateCcw, Save } from "lucide-react";
+import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Modal } from "@/components/shared/modal";
-import type { SaveStatus } from "../hooks/use-orders-allocation-state";
 
-// Footer Save / Clear bar. Sits at the bottom of the page content (not pinned
-// to the viewport). The draft auto-persists to localStorage on every edit;
-// "Save All" is an explicit commit that flashes a confirmation, and "Clear"
-// discards the day's draft (with confirmation).
+// Footer Clear bar. Sits at the bottom of the page content (not pinned to the
+// viewport). The draft auto-persists to localStorage on every edit, so there is
+// no manual save — "Clear" discards the day's draft (with confirmation).
 type SaveBarProps = {
-  status: SaveStatus;
   isEmpty: boolean;
-  onSave: () => void;
   onClear: () => void;
 };
 
-export function SaveBar({ status, isEmpty, onSave, onClear }: SaveBarProps) {
+export function SaveBar({ isEmpty, onClear }: SaveBarProps) {
   const [confirmClear, setConfirmClear] = useState(false);
 
   return (
     <div className="border-t border-slate-200 bg-slate-50 px-3 py-3 sm:px-5">
       <div className="flex items-center gap-3">
-        {status.kind === "saved" && (
-          <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
-            <CheckCircle2 size={14} />
-            Saved
-          </p>
-        )}
-
         <button
           type="button"
           onClick={() => setConfirmClear(true)}
@@ -37,16 +26,6 @@ export function SaveBar({ status, isEmpty, onSave, onClear }: SaveBarProps) {
         >
           <RotateCcw size={15} />
           Clear
-        </button>
-
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={isEmpty}
-          className="flex h-11 items-center gap-2 rounded-xl bg-slate-900 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
-        >
-          <Save size={16} />
-          Save All
         </button>
       </div>
 

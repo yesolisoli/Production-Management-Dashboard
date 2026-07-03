@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Loader2,
   RotateCcw,
-  Save,
 } from "lucide-react";
 import { Modal } from "@/components/shared/modal";
 import type { SaveStatus } from "../hooks/use-hog-intake-state";
@@ -15,11 +14,10 @@ import type { SaveStatus } from "../hooks/use-hog-intake-state";
 type SaveBarProps = {
   status: SaveStatus;
   dirty: boolean;
-  onSave: () => void;
   onReset: () => void;
 };
 
-export function SaveBar({ status, dirty, onSave, onReset }: SaveBarProps) {
+export function SaveBar({ status, dirty, onReset }: SaveBarProps) {
   const saving = status.kind === "saving";
   const loading = status.kind === "loading";
   const busy = saving || loading;
@@ -75,23 +73,6 @@ export function SaveBar({ status, dirty, onSave, onReset }: SaveBarProps) {
           </div>
         </Modal>
       )}
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={busy}
-        title="Save Record"
-        aria-label="Save Record"
-        className="flex h-10 w-10 items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60 sm:w-auto sm:px-5"
-      >
-        {saving ? (
-          <Loader2 size={16} className="animate-spin" />
-        ) : (
-          <Save size={16} />
-        )}
-        <span className="hidden sm:inline">
-          {saving ? "Saving…" : "Save Record"}
-        </span>
-      </button>
     </div>
   );
 }
@@ -115,7 +96,7 @@ function StatusLine({
     return (
       <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
         <CheckCircle2 size={13} />
-        Saved · draft cleared
+        Saved automatically
       </p>
     );
   }
@@ -130,8 +111,8 @@ function StatusLine({
   if (dirty) {
     return (
       <p className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
-        <AlertCircle size={13} />
-        Unsaved changes — click Save to commit to DB
+        <Loader2 size={13} className="animate-spin" />
+        Saving…
       </p>
     );
   }

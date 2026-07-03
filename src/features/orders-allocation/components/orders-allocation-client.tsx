@@ -17,7 +17,6 @@ export function OrdersAllocationClient() {
   const {
     date,
     draft,
-    status,
     isEmpty,
     setDate,
     addInstruction,
@@ -25,7 +24,6 @@ export function OrdersAllocationClient() {
     removeInstruction,
     clearInstructions,
     clearAll,
-    save,
   } = useOrdersAllocationState();
 
   const { snapshot } = usePrimalDemand(date);
@@ -61,12 +59,7 @@ export function OrdersAllocationClient() {
             onClear={clearInstructions}
           />
 
-          <SaveBar
-            status={status}
-            isEmpty={isEmpty}
-            onSave={save}
-            onClear={clearAll}
-          />
+          <SaveBar isEmpty={isEmpty} onClear={clearAll} />
         </div>
       </div>
     </>

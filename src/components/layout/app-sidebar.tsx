@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   ClipboardList,
+  Loader2,
   Menu,
   X,
   type LucideIcon,
@@ -21,6 +22,7 @@ import { useDashboardUser } from "./dashboard-user-context";
 import { canAccessRoute, type Role, type RouteKey } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/client";
 import { AUTH_ENABLED } from "@/lib/config";
+import { runNavigationFlush } from "@/lib/navigation-guard";
 import { Modal } from "@/components/shared/modal";
 
 function formatRole(role: Role): string {
@@ -53,6 +55,9 @@ export function AppSidebar() {
   const { email, role } = useDashboardUser();
   const [signingOut, setSigningOut] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // The href we're holding on while the leaving screen finishes its save — used
+  // to show a spinner on that nav item during the wait.
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
   // Mobile-only slide-in drawer. The desktop rail uses hover-to-expand and
   // never reads this state.
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -63,15 +68,44 @@ export function AppSidebar() {
   const isActive = (href: string) =>
     pathname === href || (href !== "/" && pathname.startsWith(href));
 
+  // Intercept in-app navigation so a screen with unsaved work (registered via
+  // the navigation guard) can finish its save before we leave. Plain left-clicks
+  // only — modified clicks / new-tab / same-route fall through to the browser.
+  const handleNavigate = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    href: string,
+  ) => {
+    if (
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey ||
+      e.button !== 0 ||
+      href === pathname ||
+      pendingHref
+    ) {
+      return;
+    }
+    e.preventDefault();
+    setPendingHref(href);
+    void runNavigationFlush()
+      .then(() => router.push(href))
+      .finally(() => setPendingHref(null));
+  };
+
   const handleLogout = async () => {
     if (signingOut) return;
     setSigningOut(true);
+    // Let the current screen finish saving before tearing down the session.
+    await runNavigationFlush();
     if (AUTH_ENABLED) {
       const supabase = createClient();
       await supabase.auth.signOut();
     }
-    router.replace("/login");
-    router.refresh();
+    // Hard navigation: guarantees we land on /login and fully resets client
+    // state. (router.replace + router.refresh raced and bounced back to the
+    // dashboard.) replace() keeps the signed-out dashboard out of history.
+    window.location.replace("/login");
   };
 
   return (
@@ -121,6 +155,7 @@ export function AppSidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={(e) => handleNavigate(e, item.href)}
                   className={clsx(
                     "grid h-14 grid-cols-[56px_1fr] items-center rounded-2xl text-sm font-medium transition-colors",
                     active
@@ -129,7 +164,11 @@ export function AppSidebar() {
                   )}
                 >
                   <div className="flex h-14 w-14 items-center justify-center">
-                    <Icon size={20} />
+                    {pendingHref === item.href ? (
+                      <Loader2 size={20} className="animate-spin" />
+                    ) : (
+                      <Icon size={20} />
+                    )}
                   </div>
 
                   <span className="whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100">
@@ -210,7 +249,10 @@ export function AppSidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={() => setDrawerOpen(false)}
+                    onClick={(e) => {
+                      setDrawerOpen(false);
+                      handleNavigate(e, item.href);
+                    }}
                     className={clsx(
                       "flex h-12 items-center gap-3 rounded-2xl px-3 text-sm font-medium transition-colors",
                       active
@@ -218,7 +260,11 @@ export function AppSidebar() {
                         : "text-slate-700 hover:bg-slate-100"
                     )}
                   >
-                    <Icon size={20} className="shrink-0" />
+                    {pendingHref === item.href ? (
+                      <Loader2 size={20} className="shrink-0 animate-spin" />
+                    ) : (
+                      <Icon size={20} className="shrink-0" />
+                    )}
                     <span className="truncate">{item.label}</span>
                   </Link>
                 );

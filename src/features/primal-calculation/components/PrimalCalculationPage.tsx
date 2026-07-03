@@ -323,14 +323,16 @@ function IntakeHeaderStats({
 }
 
 // At-a-glance pill explaining why the intake stats aren't showing numbers.
-// Only rendered for non-ready states (loading / missing / error). "missing"
-// is the common case — the operator entered Hog Intake but hasn't Saved it to
-// the DB yet, and Primal reads DB-only — so the copy points them to the fix.
+// Only rendered for the loading and error states. "missing" (no DB record for
+// the date) no longer shows a badge: Hog Intake auto-saves, so a missing record
+// just means nothing was entered for that date — the em-dash stats + hover
+// tooltip already convey that without nagging copy.
 function IntakeStatusBadge({
   status,
 }: {
   status: "loading" | "missing" | "error";
 }) {
+  if (status === "missing") return null;
   if (status === "loading") {
     return (
       <span className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-xs font-medium text-white/70">
@@ -366,7 +368,7 @@ function intakeStatusTooltip(
     case "loading":
       return "Loading Hog Intake…";
     case "missing":
-      return "No saved Hog Intake for this date — Save it on the Hog Intake screen to sync these figures";
+      return "No Hog Intake entered for this date";
     case "error":
       return "Failed to load Hog Intake";
     default:
