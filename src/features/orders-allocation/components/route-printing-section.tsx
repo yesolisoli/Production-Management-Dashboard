@@ -10,6 +10,7 @@ import {
 } from "../route-status-badge";
 import { productDotClass, productionRoomLabel, type ProductionRoom } from "../types";
 import { TimeInput } from "./time-input";
+import { EmptyState } from "@/components/shared/empty-state";
 
 // Route Printing Schedule — the day's route status board. Each route joins its
 // PRINT DEADLINE with the PRODUCTION FINISH of the sheet lines shipping on it
@@ -152,18 +153,11 @@ export function RoutePrintingSection({
       </header>
 
       {routeStatuses.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 px-6 py-10 text-center sm:py-12">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-            <Printer size={20} />
-          </span>
-          <p className="text-sm font-semibold text-slate-600">
-            No printing schedule for this day
-          </p>
-          <p className="max-w-md text-xs text-slate-400">
-            Route deadlines are set Monday through Friday. Pick a weekday to see
-            its schedule.
-          </p>
-        </div>
+        <EmptyState
+          icon={Printer}
+          title="No printing schedule for this day"
+          description="Route deadlines are set Monday through Friday. Pick a weekday to see its schedule."
+        />
       ) : (
         <div className="overflow-x-auto p-4 sm:p-5">
           <table className="w-full min-w-248 table-fixed text-sm">
