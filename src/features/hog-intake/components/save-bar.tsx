@@ -9,6 +9,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Modal } from "@/components/shared/modal";
+import { ModalFooter } from "@/components/shared/modal-footer";
 import type { SaveStatus } from "../hooks/use-hog-intake-state";
 
 type SaveBarProps = {
@@ -43,25 +44,15 @@ export function SaveBar({ status, dirty, onReset }: SaveBarProps) {
           onClose={() => setConfirmReset(false)}
           width="w-[90vw] max-w-sm"
           footer={
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmReset(false)}
-                className="rounded-lg px-4 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onReset();
-                  setConfirmReset(false);
-                }}
-                className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-500"
-              >
-                Reset All
-              </button>
-            </div>
+            <ModalFooter
+              onCancel={() => setConfirmReset(false)}
+              onConfirm={() => {
+                onReset();
+                setConfirmReset(false);
+              }}
+              confirmTone="danger"
+              confirmLabel="Reset All"
+            />
           }
         >
           <div className="flex items-start gap-3">

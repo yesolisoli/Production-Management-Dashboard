@@ -116,6 +116,7 @@ export function TimePickerInput({ value, onChange, placeholder = "--:--", trigge
       {open && mounted && coords && createPortal(
         <div
           ref={popoverRef}
+          data-floating-panel=""
           style={{ position: "fixed", top: coords.top, left: coords.left, width: coords.width }}
           className="z-50 flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
         >

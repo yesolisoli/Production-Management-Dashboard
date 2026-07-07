@@ -70,6 +70,7 @@ export function BaseDropdown({
   return createPortal(
     <div
       ref={popoverRef}
+      data-floating-panel=""
       className="fixed z-[200] overflow-hidden rounded-lg border bg-white shadow-lg"
       style={{
         ...(pos.top !== undefined ? { top: pos.top } : {}),

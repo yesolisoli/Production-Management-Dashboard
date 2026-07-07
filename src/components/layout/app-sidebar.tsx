@@ -24,6 +24,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AUTH_ENABLED } from "@/lib/config";
 import { runNavigationFlush } from "@/lib/navigation-guard";
 import { Modal } from "@/components/shared/modal";
+import { ModalFooter } from "@/components/shared/modal-footer";
 
 function formatRole(role: Role): string {
   return role
@@ -306,22 +307,15 @@ export function AppSidebar() {
           title="Sign out"
           onClose={() => !signingOut && setConfirmOpen(false)}
           footer={
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmOpen(false)}
-                disabled={signingOut}
-                className="rounded-lg px-4 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-40"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleLogout}
-                disabled={signingOut}
-                className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-60"
-              >
-                {signingOut ? "Signing out..." : "Sign out"}
-              </button>
-            </div>
+            <ModalFooter
+              onCancel={() => setConfirmOpen(false)}
+              cancelDisabled={signingOut}
+              onConfirm={handleLogout}
+              confirmTone="dark"
+              confirmLoading={signingOut}
+              loadingLabel="Signing out..."
+              confirmLabel="Sign out"
+            />
           }
         >
           <p className="text-sm text-slate-600">
