@@ -745,26 +745,3 @@ export function deriveRouteStatuses({
     };
   });
 }
-
-// Tally of the readiness statuses that drive the sheet's summary strip. Routes
-// with no items (or none flagged) are ignored — the strip reports only routes
-// that carry work.
-export type RouteStatusSummary = {
-  late: number;
-  atRisk: number;
-  onTrack: number;
-};
-
-export function summarizeRouteStatuses(
-  rows: RouteStatusRow[],
-): RouteStatusSummary {
-  return rows.reduce<RouteStatusSummary>(
-    (acc, row) => {
-      if (row.productionStatus === "late") acc.late += 1;
-      else if (row.productionStatus === "at_risk") acc.atRisk += 1;
-      else if (row.productionStatus === "on_track") acc.onTrack += 1;
-      return acc;
-    },
-    { late: 0, atRisk: 0, onTrack: 0 },
-  );
-}

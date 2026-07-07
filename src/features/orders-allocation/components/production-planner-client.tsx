@@ -6,7 +6,6 @@ import {
   deriveRouteStatuses,
   instructionProductionRows,
   orderedByGroup,
-  summarizeRouteStatuses,
 } from "../calculations";
 import { useOrdersAllocationState } from "../hooks/use-orders-allocation-state";
 import { usePrimalDemand } from "../hooks/use-primal-demand";
@@ -84,11 +83,6 @@ export function ProductionPlannerClient() {
     ],
   );
 
-  const routeStatusSummary = useMemo(
-    () => summarizeRouteStatuses(routeStatuses),
-    [routeStatuses],
-  );
-
   // Per-route-number → production readiness, for the sheet's Delivery Route
   // badges (keyed by the route label the operator types into a split).
   const routeStatusByNumber = useMemo(
@@ -127,7 +121,6 @@ export function ProductionPlannerClient() {
             order={draft.production_order}
             roomDeadlines={draft.room_deadlines}
             routeStatusByNumber={routeStatusByNumber}
-            routeStatusSummary={routeStatusSummary}
             onSetMeta={setProductionMeta}
             onReorder={setProductionOrder}
             onSetRoomDeadline={setRoomDeadline}

@@ -169,13 +169,13 @@ export function RoutePrintingSection({
           <table className="w-full min-w-248 table-fixed text-sm">
             <colgroup>
               <col className="w-9" />
-              <col className="w-16" />
-              <col className="w-28" />
-              <col className="w-85" />
-              <col className="w-40" />
+              <col className="w-20" />
               <col className="w-32" />
-              <col className="w-36" />
-              <col className="w-36" />
+              <col className="w-96" />
+              <col className="w-44" />
+              <col className="w-40" />
+              <col className="w-44" />
+              <col className="w-44" />
               <col />
             </colgroup>
             <thead>

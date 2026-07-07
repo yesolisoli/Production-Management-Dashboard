@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   AlertTriangle,
-  ArrowRight,
   Box,
   Check,
   Clock,
@@ -28,7 +27,6 @@ import {
   reconcileRoutes,
   type RouteProductionStatus,
   type RouteReconciliation,
-  type RouteStatusSummary,
 } from "../calculations";
 import { ROUTE_PRODUCTION_STATUS_BADGE } from "../route-status-badge";
 import { CustomSelect, type SelectOption } from "./custom-select";
@@ -90,9 +88,8 @@ type ProductionSheetSectionProps = {
   roomDeadlines: Partial<Record<ProductionRoom, string>>;
   // Route readiness derived by the parent (production FINISH vs print deadline).
   // Route number (as a string, matching the split label) → its status, used to
-  // badge each line's Delivery Route split. The summary drives the header strip.
+  // badge each line's Delivery Route split.
   routeStatusByNumber: Map<string, RouteProductionStatus>;
-  routeStatusSummary: RouteStatusSummary;
   onSetMeta: (sku: string, patch: Partial<ProductionMeta>) => void;
   onReorder: (order: string[]) => void;
   onSetRoomDeadline: (room: ProductionRoom, time: string) => void;
@@ -325,7 +322,7 @@ function RoomDeadlineBar({
 }) {
   if (rooms.length === 0) return null;
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2">
       <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
         <Clock size={13} className="shrink-0" />
         Available until
@@ -349,38 +346,6 @@ function RoomDeadlineBar({
           />
         </label>
       ))}
-    </div>
-  );
-}
-
-// Header strip: a one-line tally of route readiness (production FINISH vs print
-// deadline) with a jump link to the full board below. Hidden when no route
-// carries a flagged status yet.
-function RouteSummaryStrip({ summary }: { summary: RouteStatusSummary }) {
-  const items = [
-    { n: summary.late, label: "late", badge: ROUTE_PRODUCTION_STATUS_BADGE.late, Icon: AlertTriangle },
-    { n: summary.atRisk, label: "at risk", badge: ROUTE_PRODUCTION_STATUS_BADGE.at_risk, Icon: AlertTriangle },
-    { n: summary.onTrack, label: "on track", badge: ROUTE_PRODUCTION_STATUS_BADGE.on_track, Icon: Check },
-  ].filter((it) => it.n > 0);
-  if (items.length === 0) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3 sm:px-5">
-      {items.map(({ n, label, badge, Icon }) => (
-        <span
-          key={label}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ${badge.chip}`}
-        >
-          <Icon size={13} className="shrink-0" />
-          {n} {n === 1 ? "route" : "routes"} {label}
-        </span>
-      ))}
-      <a
-        href="#route-printing-schedule"
-        className="ml-auto inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-      >
-        View Route Schedule
-        <ArrowRight size={14} className="shrink-0" />
-      </a>
     </div>
   );
 }
@@ -432,7 +397,6 @@ export function ProductionSheetSection({
   order,
   roomDeadlines,
   routeStatusByNumber,
-  routeStatusSummary,
   onSetMeta,
   onReorder,
   onSetRoomDeadline,
@@ -710,18 +674,24 @@ export function ProductionSheetSection({
             </p>
           </div>
         </div>
-        {rows.length === 0 && (
+        {rows.length === 0 ? (
           <p className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
             <Info size={14} className="shrink-0" />
             Rows come from the day&apos;s Primal orders. Enter orders in Primal
             Calculation to populate this sheet.
           </p>
+        ) : (
+          phaseRows.length > 0 && (
+            /* Available-time deadlines per room — sets the END of each room's
+               cutting window; every line reconciles against its room's value. */
+            <RoomDeadlineBar
+              rooms={deadlineRooms}
+              deadlines={roomDeadlines}
+              onSetRoomDeadline={onSetRoomDeadline}
+            />
+          )
         )}
       </header>
-
-      {/* Route readiness summary — production FINISH vs each route's print
-          deadline, tallied, with a jump to the board below. */}
-      <RouteSummaryStrip summary={routeStatusSummary} />
 
       {/* Phase tabs — each hog-break phase shows the SKUs assigned to it. */}
       <div className="flex gap-1 border-b border-slate-200 px-4 pt-3 sm:px-5">
@@ -776,20 +746,6 @@ export function ProductionSheetSection({
       {/* Production sheet table */}
       {phaseRows.length > 0 && (
         <div className="border-t border-slate-100 p-4 sm:p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-700">
-              Production sheet ({phaseRows.length})
-            </h3>
-          </div>
-
-          {/* Available-time deadlines per room — sets the END of each room's
-              cutting window; every line reconciles against its room's value. */}
-          <RoomDeadlineBar
-            rooms={deadlineRooms}
-            deadlines={roomDeadlines}
-            onSetRoomDeadline={onSetRoomDeadline}
-          />
-
           {/* Overflow warning — some lines' today work runs past the deadline.
               Their excess should move to Carry Forward (per-line ⚠ + column). */}
           {exceedingCount > 0 && (
