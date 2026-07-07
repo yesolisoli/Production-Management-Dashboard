@@ -29,12 +29,9 @@ import {
   type RouteAssignment,
   type Unit,
 } from "./types";
+import { createDateDraftStore } from "@/lib/local-storage";
 
 const DRAFT_KEY_PREFIX = "orders-allocation.draft.";
-
-function draftKey(date: string): string {
-  return `${DRAFT_KEY_PREFIX}${date}`;
-}
 
 function asNonNegativeInt(raw: unknown): number {
   if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) return 0;
@@ -270,45 +267,26 @@ function coerceInstructions(raw: unknown): AllocationInstruction[] {
     .filter((r): r is AllocationInstruction => r !== null);
 }
 
-export function readDraft(date: string): AllocationDraft | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(draftKey(date));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      date,
-      hog_break: coerceHogBreakCalc(parsed.hog_break),
-      room_deadlines: coerceRoomDeadlines(parsed.room_deadlines),
-      production_meta: coerceProductionMetaMap(parsed.production_meta),
-      production_order: coerceProductionOrder(parsed.production_order),
-      instructions: coerceInstructions(parsed.instructions),
-      route_prints: coerceRoutePrints(parsed.route_prints),
-      route_notes: coerceRouteNotes(parsed.route_notes),
-      route_deadlines: coerceRouteDeadlines(parsed.route_deadlines),
-    };
-  } catch {
-    return null;
-  }
+function coerceDraft(raw: unknown, date: string): AllocationDraft {
+  const parsed = raw as Record<string, unknown>;
+  return {
+    date,
+    hog_break: coerceHogBreakCalc(parsed.hog_break),
+    room_deadlines: coerceRoomDeadlines(parsed.room_deadlines),
+    production_meta: coerceProductionMetaMap(parsed.production_meta),
+    production_order: coerceProductionOrder(parsed.production_order),
+    instructions: coerceInstructions(parsed.instructions),
+    route_prints: coerceRoutePrints(parsed.route_prints),
+    route_notes: coerceRouteNotes(parsed.route_notes),
+    route_deadlines: coerceRouteDeadlines(parsed.route_deadlines),
+  };
 }
 
-export function writeDraft(date: string, draft: AllocationDraft): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(draftKey(date), JSON.stringify(draft));
-  } catch {
-    // ignore quota / access errors
-  }
-}
+const store = createDateDraftStore<AllocationDraft>(DRAFT_KEY_PREFIX, coerceDraft);
 
-export function clearDraft(date: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(draftKey(date));
-  } catch {
-    // ignore
-  }
-}
+export const readDraft = store.readDraft;
+export const writeDraft = store.writeDraft;
+export const clearDraft = store.clearDraft;
 
 // ------------------------------------------------------------------
 // Cleared-date registry

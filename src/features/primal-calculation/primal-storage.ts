@@ -21,6 +21,7 @@ import {
   type ProductOrdersForDate,
   type ProductSpec,
 } from "./types";
+import { createDateDraftStore } from "@/lib/local-storage";
 
 // -------------------------------------------------------------------
 // Local persistence layer for primal production orders.
@@ -41,10 +42,6 @@ const CUSTOMER_KEY = "primal-calc.customer-orders";
 const CUSTOM_CUSTOMERS_KEY = "primal-calc.custom-customers";
 const CUSTOM_GROUPS_KEY = "primal-calc.custom-groups";
 const CUSTOM_ROWS_KEY = "primal-calc.custom-rows";
-
-function draftKey(date: string): string {
-  return `${DRAFT_KEY_PREFIX}${date}`;
-}
 
 // Coerce an unknown value into a valid ProductOrder. Missing or invalid
 // fields fall back to 0 so a partially corrupt store still loads.
@@ -115,34 +112,14 @@ export function saveOrdersForDate(
 }
 
 // ------------------------------- Draft ------------------------------
-export function readDraft(date: string): ProductOrdersForDate | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(draftKey(date));
-    if (!raw) return null;
-    return coerceOrdersForDate(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
+const draftStore = createDateDraftStore<ProductOrdersForDate>(
+  DRAFT_KEY_PREFIX,
+  coerceOrdersForDate,
+);
 
-export function writeDraft(date: string, orders: ProductOrdersForDate): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(draftKey(date), JSON.stringify(orders));
-  } catch {
-    // ignore
-  }
-}
-
-export function clearDraft(date: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(draftKey(date));
-  } catch {
-    // ignore
-  }
-}
+export const readDraft = draftStore.readDraft;
+export const writeDraft = draftStore.writeDraft;
+export const clearDraft = draftStore.clearDraft;
 
 // ------------------------- Customer orders --------------------------
 // Per-date customer × category order matrix. Auto-persisted on every
