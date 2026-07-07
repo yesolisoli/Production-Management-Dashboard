@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { clampNonNegativeInt } from "@/features/hog-intake/calculations";
+import { EmptyState } from "@/components/shared/empty-state";
 import {
   emailAllocationInstructions,
   exportAllocationInstructions,
@@ -311,18 +312,11 @@ export function AllocationSheetSection({
 
       {/* Empty state — guide the user to add their first instruction. */}
       {rows.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-2 px-6 py-10 text-center sm:py-12">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-            <ClipboardList size={20} />
-          </span>
-          <p className="text-sm font-semibold text-slate-600">
-            No floor instructions yet
-          </p>
-          <p className="max-w-md text-xs text-slate-400">
-            Add rules such as DO NOT SAVE PANCREAS, SAVE LEG HOCKS, or BOX
-            TONGUES.
-          </p>
-        </div>
+        <EmptyState
+          icon={ClipboardList}
+          title="No floor instructions yet"
+          description="Add rules such as DO NOT SAVE PANCREAS, SAVE LEG HOCKS, or BOX TONGUES."
+        />
       )}
 
       {/* Daily allocation sheet — product-grouped, printable instruction lines. */}

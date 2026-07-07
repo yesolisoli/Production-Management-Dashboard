@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { clampNonNegativeInt } from "@/features/hog-intake/calculations";
+import { EmptyState } from "@/components/shared/empty-state";
 import {
   deriveProductionSchedule,
   formatRouteSummary,
@@ -728,19 +729,15 @@ export function ProductionSheetSection({
 
       {/* Empty state — no SKUs in this phase. */}
       {phaseRows.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-2 px-6 py-10 text-center sm:py-12">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-            <Box size={20} />
-          </span>
-          <p className="text-sm font-semibold text-slate-600">
-            No SKUs for {cutPhaseLabel(activePhase)} yet
-          </p>
-          <p className="max-w-md text-xs text-slate-400">
-            {rows.length === 0
+        <EmptyState
+          icon={Box}
+          title={`No SKUs for ${cutPhaseLabel(activePhase)} yet`}
+          description={
+            rows.length === 0
               ? "Once the day has Primal orders, each ordered SKU appears here as a line."
-              : `No lines are scheduled for ${cutPhaseLabel(activePhase)}.`}
-          </p>
-        </div>
+              : `No lines are scheduled for ${cutPhaseLabel(activePhase)}.`
+          }
+        />
       )}
 
       {/* Production sheet table */}
