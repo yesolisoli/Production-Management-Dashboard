@@ -82,11 +82,14 @@ export function usePrimalOrdersState({
       } else {
         const local = readCommittedForDate(nextDate);
         if (Object.keys(local).length > 0) {
-          // Lazy one-date backfill — best-effort; a failure must not block the
-          // load (the value is already resolved from `local`).
-          void getCurrentUserId().then((userId) =>
-            backfillOrdersForDate(nextDate, local, userId),
-          );
+          // Lazy one-date backfill — best-effort and fully detached from the
+          // load: the value is already resolved from `local`, so a failure must
+          // neither block the load nor surface to the user. The explicit
+          // .catch keeps a failed backfill from becoming an unhandled
+          // rejection; the date simply backfills again on a later load.
+          void getCurrentUserId()
+            .then((userId) => backfillOrdersForDate(nextDate, local, userId))
+            .catch(() => {});
         }
         resolved = local;
       }
