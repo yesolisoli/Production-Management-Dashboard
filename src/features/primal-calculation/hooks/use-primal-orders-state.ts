@@ -13,9 +13,14 @@ import {
   clearDraft,
   readCommittedForDate,
   readDraft,
-  saveOrdersForDate,
   writeDraft,
 } from "../primal-storage";
+import {
+  backfillOrdersForDate,
+  fetchOrdersForDate,
+  saveOrdersForDate,
+} from "../orders-source";
+import { getCurrentUserId } from "@/lib/supabase/current-user";
 import {
   CASE_TO_PCS,
   emptyProductOrder,
@@ -44,11 +49,54 @@ export function usePrimalOrdersState({
   // Set before any non-user-driven setOrders so the draft-write effect doesn't
   // persist a freshly loaded value back as a new draft.
   const suppressNextWrite = useRef(false);
+  // Guards the async committed read: a newer load (rapid date switch) bumps the
+  // token so a stale in-flight resolve can't clobber the current date's orders.
+  const activeLoadToken = useRef(0);
 
-  // Order resolution for a date: local draft (unsaved edits — newest, wins),
-  // then the committed store, then empty.
-  const loadForDate = useCallback((nextDate: string) => {
-    const resolved = readDraft(nextDate) ?? readCommittedForDate(nextDate);
+  // Order resolution for a date, in priority order:
+  //   1. local draft (unsaved edits) — always wins, no server read needed
+  //   2. Supabase committed orders (primal_orders) — the shared source of truth
+  //   3. legacy localStorage committed store — fallback only when Supabase has
+  //      no rows for the date; that legacy data is then lazily backfilled to
+  //      Supabase once (insert-only, never overwriting existing rows).
+  // Draft edits never leave localStorage; only committed orders live on the
+  // server. Suppress is armed up-front so the date-change effect tick can't
+  // persist the previous date's orders into the new date's draft while the
+  // async committed read is still in flight, then re-armed before the resolved
+  // value lands.
+  const loadForDate = useCallback(async (nextDate: string) => {
+    const token = ++activeLoadToken.current;
+    suppressNextWrite.current = true;
+
+    const draft = readDraft(nextDate);
+    if (draft) {
+      setOrders(draft);
+      return;
+    }
+
+    let resolved: ProductOrdersForDate;
+    try {
+      const server = await fetchOrdersForDate(nextDate);
+      if (Object.keys(server).length > 0) {
+        resolved = server;
+      } else {
+        const local = readCommittedForDate(nextDate);
+        if (Object.keys(local).length > 0) {
+          // Lazy one-date backfill — best-effort; a failure must not block the
+          // load (the value is already resolved from `local`).
+          void getCurrentUserId().then((userId) =>
+            backfillOrdersForDate(nextDate, local, userId),
+          );
+        }
+        resolved = local;
+      }
+    } catch {
+      // Supabase read failed — degrade to the legacy localStorage committed
+      // store so the screen still renders.
+      resolved = readCommittedForDate(nextDate);
+    }
+
+    if (token !== activeLoadToken.current) return; // superseded by a newer load
     suppressNextWrite.current = true;
     setOrders(resolved);
   }, []);
@@ -103,24 +151,27 @@ export function usePrimalOrdersState({
     setOrders((prev) => ({ ...prev, ...imported }));
   }, []);
 
-  // Commit a group's orders (every SKU across its categories) to the store.
+  // Commit a group's orders (every SKU across its categories) to Supabase.
+  // Upserts only this group's SKU subset, so other groups' rows are untouched.
   const persistGroupOrders = useCallback(
-    (nextDate: string, group: PrimalGroup) => {
+    async (nextDate: string, group: PrimalGroup) => {
       const subset: ProductOrdersForDate = {};
       for (const category of group.categories) {
         for (const spec of specsForCategory(category)) {
           subset[spec.sku] = orders[spec.sku] ?? emptyProductOrder();
         }
       }
-      saveOrdersForDate(nextDate, subset);
+      const userId = await getCurrentUserId();
+      await saveOrdersForDate(nextDate, subset, userId);
     },
     [orders],
   );
 
-  // Commit every order for the date.
+  // Commit every order for the date to Supabase.
   const persistAllOrders = useCallback(
-    (nextDate: string) => {
-      saveOrdersForDate(nextDate, orders);
+    async (nextDate: string) => {
+      const userId = await getCurrentUserId();
+      await saveOrdersForDate(nextDate, orders, userId);
     },
     [orders],
   );
