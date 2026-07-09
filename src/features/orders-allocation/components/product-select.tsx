@@ -27,14 +27,6 @@ const PRIORITY_OPTIONS: readonly SelectOption<Priority>[] = PRIORITIES.map(
   })
 );
 
-// Qty-unit options (Pieces / Cases). Units have no colour identity, so each
-// carries a neutral dot to satisfy the shared dropdown's option shape.
-const UNIT_OPTIONS: readonly SelectOption<Unit>[] = UNITS.map((u) => ({
-  value: u.value,
-  label: `${u.label} (${u.short})`,
-  dotClass: "bg-slate-300",
-}));
-
 // Product picker — custom dropdown with a per-product colour dot. Options are
 // the live area vocabulary (Primal groups + extra / custom areas); the "add"
 // row lets the operator define a new area, which is persisted and selected.
@@ -118,6 +110,8 @@ export function PrioritySelect({
 }
 
 // Qty-unit picker — Pieces or Cases (C/S), paired with the qty number input.
+// Only two mutually-exclusive values, so a segmented toggle reads cleaner than a
+// dropdown (no truncation, one-tap switch) — matches the "unit toggle" in the UI.
 export function UnitSelect({
   value,
   onChange,
@@ -128,11 +122,33 @@ export function UnitSelect({
   id?: string;
 }) {
   return (
-    <CustomSelect
+    <div
       id={id}
-      value={value}
-      options={UNIT_OPTIONS}
-      onChange={onChange}
-    />
+      role="radiogroup"
+      aria-label="Quantity unit"
+      className="flex h-9 w-full items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5"
+    >
+      {UNITS.map((u) => {
+        const active = u.value === value;
+        return (
+          <button
+            key={u.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={u.label}
+            title={u.label}
+            onClick={() => onChange(u.value)}
+            className={`flex h-full flex-1 items-center justify-center rounded-md text-[11px] font-bold uppercase tracking-wide transition ${
+              active
+                ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            {u.short}
+          </button>
+        );
+      })}
+    </div>
   );
 }

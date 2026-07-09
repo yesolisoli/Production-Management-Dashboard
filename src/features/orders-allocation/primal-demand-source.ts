@@ -6,6 +6,7 @@ import {
 } from "@/features/hog-intake/types";
 import { fetchPreviousEndingStock } from "@/features/primal-calculation/ending-stock-source";
 import { loadHogIntakeForDate } from "@/features/primal-calculation/intake-source";
+import { fetchOrdersForDate } from "@/features/primal-calculation/orders-source";
 import {
   readCommittedForDate,
   readCustomerOrdersForDate,
@@ -69,8 +70,22 @@ function emptySnapshot(
 export async function loadPrimalDemand(
   date: string,
 ): Promise<PrimalDemandSnapshot> {
-  // Local-first inputs (synchronous): the order / customer source data.
-  const skuOrders = readCommittedForDate(date);
+  // Committed catalog orders: Supabase (primal_orders — the shared source of
+  // truth) first, legacy localStorage committed store only as a fallback. This
+  // mirrors the Primal screen's own read priority minus the working draft: this
+  // boundary intentionally consumes COMMITTED demand, never the unsaved draft.
+  // Without this, a Save on the Primal screen (which now writes to Supabase, not
+  // localStorage) never reached this screen or the Production Planner.
+  let skuOrders: ProductOrdersForDate;
+  try {
+    const server = await fetchOrdersForDate(date);
+    skuOrders =
+      Object.keys(server).length > 0 ? server : readCommittedForDate(date);
+  } catch {
+    skuOrders = readCommittedForDate(date);
+  }
+
+  // Local-first inputs (synchronous): the customer / custom source data.
   const customerOrders = readCustomerOrdersForDate(date);
   const customGroups = readCustomGroupsForDate(date);
   const customRows = readCustomRowsForDate(date);

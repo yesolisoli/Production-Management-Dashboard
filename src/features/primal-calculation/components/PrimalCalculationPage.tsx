@@ -59,7 +59,10 @@ export function PrimalCalculationPage() {
   });
   const [activeSku, setActiveSku] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    kind: "success" | "error";
+  } | null>(null);
 
   // Auto-dismiss the toast.
   useEffect(() => {
@@ -67,6 +70,27 @@ export function PrimalCalculationPage() {
     const id = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(id);
   }, [toast]);
+
+  // Surface Save / Save All outcomes as a toast. The per-group footer shows its
+  // own inline "Saved" check, but Save All (and every save failure) had no
+  // user-facing feedback before — so a committed write or a DB error is now
+  // always announced here.
+  useEffect(() => {
+    if (saveState.kind === "saved") {
+      setToast({
+        message:
+          saveState.scope === "all"
+            ? "All groups saved to the database."
+            : `${saveState.scope} saved to the database.`,
+        kind: "success",
+      });
+    } else if (saveState.kind === "error") {
+      setToast({
+        message: `Save failed: ${saveState.message}`,
+        kind: "error",
+      });
+    }
+  }, [saveState]);
 
   // All derived data is assembled by the pure view model; this component only
   // memoizes the single call and renders the result. See ../view-model.ts.
@@ -242,9 +266,10 @@ export function PrimalCalculationPage() {
           onClose={() => setImporting(false)}
           onApply={(imported) => {
             applyImportedOrders(imported);
-            setToast(
-              `Imported ${Object.keys(imported).length} products — review and Save to commit.`,
-            );
+            setToast({
+              message: `Imported ${Object.keys(imported).length} products — review and Save to commit.`,
+              kind: "success",
+            });
           }}
         />
       )}
@@ -252,8 +277,12 @@ export function PrimalCalculationPage() {
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
           <div className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-2xl">
-            <CheckCircle2 size={16} className="text-emerald-400" />
-            {toast}
+            {toast.kind === "error" ? (
+              <AlertTriangle size={16} className="text-rose-400" />
+            ) : (
+              <CheckCircle2 size={16} className="text-emerald-400" />
+            )}
+            {toast.message}
           </div>
         </div>
       )}

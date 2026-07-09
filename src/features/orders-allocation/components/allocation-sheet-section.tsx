@@ -227,7 +227,7 @@ export function AllocationSheetSection({
           />
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-1">
           <label className={labelClass} htmlFor="ins-priority">
             Rule type
           </label>
@@ -252,7 +252,7 @@ export function AllocationSheetSection({
               placeholder="optional"
               className={`${inputClass} min-w-0 flex-1`}
             />
-            <div className="w-28 shrink-0">
+            <div className="flex w-24 shrink-0 items-center">
               <UnitSelect value={unit} onChange={setUnit} />
             </div>
           </div>
@@ -272,36 +272,30 @@ export function AllocationSheetSection({
           />
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-5">
           <label className={labelClass} htmlFor="ins-text">
             Floor instruction
           </label>
-          <input
-            id="ins-text"
-            type="text"
-            value={instruction}
-            onChange={(e) => setInstruction(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            placeholder="e.g. B'LESS SHORT — BOX THE REST"
-            className={inputClass}
-          />
-        </div>
-
-        <div className="flex flex-col lg:col-span-2">
-          <span className={`${labelClass} opacity-0`} aria-hidden="true">
-            Add
-          </span>
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center gap-3">
+            <input
+              id="ins-text"
+              type="text"
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              placeholder="e.g. B'LESS SHORT — BOX THE REST"
+              className={`${inputClass} min-w-0 flex-1`}
+            />
             <button
               type="button"
               onClick={submit}
               disabled={!instruction.trim()}
-              className="flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
+              className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
             >
               <Plus size={16} />
               Add
