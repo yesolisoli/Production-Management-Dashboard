@@ -150,7 +150,12 @@ export function PrimalGroupSection({
         <div className="border-t border-slate-100">
           {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-150 table-fixed border-collapse text-sm">
+            {/* min-width must exceed the sum of the fixed columns (~44rem) plus
+                a usable Item column, otherwise table-fixed shrinks every column
+                proportionally and the flexible Item text collapses to one word
+                per line on tablet/mobile. Keeping it generous makes the table
+                scroll horizontally on small screens instead. */}
+            <table className="w-full min-w-4xl table-fixed border-collapse text-sm">
               {/* Fixed column widths so the layout never shifts when a custom
                   row (whose cells hold wider <input> fields) is added. Item is
                   left flexible to absorb the remaining width; Case Pack / Cases
@@ -169,7 +174,7 @@ export function PrimalGroupSection({
                   <th className="px-4 py-2.5">SKU</th>
                   <th className="px-2 py-2.5">Item</th>
                   <th className="px-2 py-2.5 text-center">Case Pack</th>
-                  <ColGroupHead label="Today" tone="text-blue-600" />
+                  <ColGroupHead />
                   <th className="px-1.5 py-2.5" aria-hidden />
                 </tr>
               </thead>
@@ -314,11 +319,9 @@ function ProductRow({
         ariaLabel={`${spec.name} today cases`}
         accent="blue"
       />
-      <NumberCell
-        value={order.today_pcs}
-        onChange={(v) => onChangeField(spec.sku, "today_pcs", v)}
-        ariaLabel={`${spec.name} today pieces`}
-      />
+      {/* Pieces are display-only — the operator enters catalog orders in
+          cases; pieces are shown for reference, not edited. */}
+      <ReadOnlyNumberCell value={order.today_pcs} />
       {/* Trailing column reserved for the custom rows' remove button. */}
       <td aria-hidden />
     </tr>
@@ -348,6 +351,16 @@ function NumberCell({
         onChange={onChange}
         ariaLabel={ariaLabel}
       />
+    </td>
+  );
+}
+
+// Display-only pieces cell — mirrors the NumberCell footprint so the column
+// stays aligned, but renders the value as plain text instead of a stepper.
+function ReadOnlyNumberCell({ value }: { value: number }) {
+  return (
+    <td className="px-1.5 py-2 text-center text-sm tabular-nums text-slate-700">
+      {value > 0 ? value : <span className="text-slate-300">0</span>}
     </td>
   );
 }
@@ -457,17 +470,11 @@ function StepButton({
 }
 
 // --------------------------- Small parts ----------------------------
-function ColGroupHead({ label, tone }: { label: string; tone: string }) {
+function ColGroupHead() {
   return (
     <>
-      <th className={clsx("px-1.5 py-2.5 text-center", tone)}>
-        {label}
-        <span className="block text-[9px] font-normal text-slate-400">Cases</span>
-      </th>
-      <th className="px-1.5 py-2.5 text-center text-slate-400">
-        <span className="block">&nbsp;</span>
-        <span className="block text-[9px] font-normal text-slate-400">Pieces</span>
-      </th>
+      <th className="px-1.5 py-2.5 text-center">Cases</th>
+      <th className="px-1.5 py-2.5 text-center">Pieces</th>
     </>
   );
 }

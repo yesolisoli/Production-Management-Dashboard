@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/shared/modal";
+import { ModalFooter } from "@/components/shared/modal-footer";
 import { EmployeeSelect } from "./employee-select";
 import type { Employee, WorkArea } from "../../types";
 import { isEmployeeEligibleForWorkArea } from "../../utils";
@@ -26,16 +27,12 @@ export function StationModal({ employees, workAreaId, workAreas, defaultOnly, ex
   return (
     <Modal onClose={onClose} title={isEdit ? "Edit Station" : "New Station"}
       footer={
-        <div className="flex items-center justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 transition-colors">Cancel</button>
-          <button
-            onClick={() => canSave && onSave(name.trim(), group.trim(), genderRestriction, defaultEmployeeId)}
-            disabled={!canSave}
-            className="rounded-lg bg-slate-800 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-30 transition-colors"
-          >
-            {isEdit ? "Save" : "Add Station"}
-          </button>
-        </div>
+        <ModalFooter
+          onCancel={onClose}
+          onConfirm={() => canSave && onSave(name.trim(), group.trim(), genderRestriction, defaultEmployeeId)}
+          confirmDisabled={!canSave}
+          confirmLabel={isEdit ? "Save" : "Add Station"}
+        />
       }
     >
       <div className="space-y-5">

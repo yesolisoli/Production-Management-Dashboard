@@ -37,6 +37,9 @@ export type FarmRecord = {
   type: HogType | "";
   tattoo: string;
   count: number;
+  // Local time the farm's load arrived, as "HH:MM". Optional — older records
+  // predate this field and quick entries may leave it blank.
+  delivery_time?: string;
 };
 
 export type NextDay = {

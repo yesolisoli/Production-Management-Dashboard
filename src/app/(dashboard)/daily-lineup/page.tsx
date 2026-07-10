@@ -14,7 +14,7 @@ export default async function DailyLineupPage() {
         actions={<DailyLineupHeaderActions />}
       />
 
-      <div className="min-h-0 flex-1 overflow-auto p-6">
+      <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-6">
         <DailyLineupDashboard />
       </div>
     </div>

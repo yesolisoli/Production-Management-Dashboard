@@ -1,10 +1,7 @@
+import { createDateDraftStore } from "@/lib/local-storage";
 import { emptyHogCounts, HOG_TYPES, type HogIntakeRecord } from "./types";
 
 const DRAFT_KEY_PREFIX = "hog-intake.draft.";
-
-function draftKey(date: string): string {
-  return `${DRAFT_KEY_PREFIX}${date}`;
-}
 
 // Validate a parsed value enough to trust it as a HogIntakeRecord.
 // Anything missing falls back to the empty-shape default so a partially
@@ -56,6 +53,8 @@ function coerceDraft(raw: unknown, date: string): HogIntakeRecord | null {
               typeof f.count === "number" && f.count >= 0
                 ? f.count
                 : 0,
+            delivery_time:
+              typeof f.delivery_time === "string" ? f.delivery_time : "",
           };
         })
         .filter((row): row is HogIntakeRecord["farm_records"][number] => row !== null)
@@ -80,31 +79,8 @@ function coerceDraft(raw: unknown, date: string): HogIntakeRecord | null {
   };
 }
 
-export function readDraft(date: string): HogIntakeRecord | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(draftKey(date));
-    if (!raw) return null;
-    return coerceDraft(JSON.parse(raw), date);
-  } catch {
-    return null;
-  }
-}
+const store = createDateDraftStore<HogIntakeRecord>(DRAFT_KEY_PREFIX, coerceDraft);
 
-export function writeDraft(date: string, record: HogIntakeRecord): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(draftKey(date), JSON.stringify(record));
-  } catch {
-    // ignore quota / access errors
-  }
-}
-
-export function clearDraft(date: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(draftKey(date));
-  } catch {
-    // ignore
-  }
-}
+export const readDraft = store.readDraft;
+export const writeDraft = store.writeDraft;
+export const clearDraft = store.clearDraft;

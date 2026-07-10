@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-export function TimePickerInput({ value, onChange, placeholder = "--:--", triggerClassName, valueClassName, placeholderClassName, renderValue }: {
+export function TimePickerInput({ value, onChange, placeholder = "--:--", triggerClassName, valueClassName, placeholderClassName, renderValue, editable, formatDisplay, parseInput }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -12,15 +12,24 @@ export function TimePickerInput({ value, onChange, placeholder = "--:--", trigge
   valueClassName?: string;
   placeholderClassName?: string;
   renderValue?: (value: string) => ReactNode;
+  /** When true, the trigger is a text input so the time can also be typed directly. */
+  editable?: boolean;
+  /** Formats the stored value for display (e.g. 24h -> 12h). Defaults to identity. */
+  formatDisplay?: (value: string) => string;
+  /** Parses typed text into a stored value. Return null to reject, "" to clear. Required for editable. */
+  parseInput?: (raw: string) => string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
   const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const hourRef = useRef<HTMLDivElement>(null);
   const minRef = useRef<HTMLDivElement>(null);
+  const display = formatDisplay ?? ((v: string) => v);
 
   const [selH, selM] = value ? value.split(":") : ["", ""];
   const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
@@ -64,24 +73,50 @@ export function TimePickerInput({ value, onChange, placeholder = "--:--", trigge
   }, [open]);
 
   const select = (h: string, m: string) => {
+    setEditing(false);
     onChange(`${h}:${m}`);
+  };
+
+  const commitText = () => {
+    setEditing(false);
+    if (!parseInput) return;
+    const parsed = parseInput(text);
+    if (parsed !== null && parsed !== value) onChange(parsed);
   };
 
   return (
     <div ref={ref} className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={triggerClassName ?? "w-full rounded-xl border border-slate-800 bg-slate-50 px-4 py-3 text-left text-sm font-medium transition-colors focus:bg-white focus:outline-none"}
-      >
-        {value
-          ? (renderValue ? renderValue(value) : <span className={valueClassName ?? "text-slate-800"}>{value}</span>)
-          : <span className={placeholderClassName ?? "text-slate-400"}>{placeholder}</span>}
-      </button>
+      {editable ? (
+        <input
+          ref={(el) => { triggerRef.current = el; }}
+          type="text"
+          value={editing ? text : value ? display(value) : ""}
+          placeholder={placeholder}
+          onFocus={() => { setEditing(true); setText(value ? display(value) : ""); setOpen(true); }}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { commitText(); setOpen(false); e.currentTarget.blur(); }
+            else if (e.key === "Escape") { setEditing(false); setOpen(false); e.currentTarget.blur(); }
+          }}
+          onBlur={commitText}
+          className={triggerClassName ?? "w-full rounded-xl border border-slate-800 bg-slate-50 px-4 py-3 text-left text-sm font-medium transition-colors focus:bg-white focus:outline-none"}
+        />
+      ) : (
+        <button
+          ref={(el) => { triggerRef.current = el; }}
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={triggerClassName ?? "w-full rounded-xl border border-slate-800 bg-slate-50 px-4 py-3 text-left text-sm font-medium transition-colors focus:bg-white focus:outline-none"}
+        >
+          {value
+            ? (renderValue ? renderValue(value) : <span className={valueClassName ?? "text-slate-800"}>{value}</span>)
+            : <span className={placeholderClassName ?? "text-slate-400"}>{placeholder}</span>}
+        </button>
+      )}
       {open && mounted && coords && createPortal(
         <div
           ref={popoverRef}
+          data-floating-panel=""
           style={{ position: "fixed", top: coords.top, left: coords.left, width: coords.width }}
           className="z-50 flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
         >

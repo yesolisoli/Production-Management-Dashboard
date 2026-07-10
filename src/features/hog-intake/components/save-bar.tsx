@@ -1,51 +1,69 @@
 "use client";
 
+import { useState } from "react";
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Loader2,
   RotateCcw,
-  Save,
 } from "lucide-react";
+import { Modal } from "@/components/shared/modal";
+import { ModalFooter } from "@/components/shared/modal-footer";
 import type { SaveStatus } from "../hooks/use-hog-intake-state";
 
 type SaveBarProps = {
   status: SaveStatus;
   dirty: boolean;
-  onSave: () => void;
   onReset: () => void;
 };
 
-export function SaveBar({ status, dirty, onSave, onReset }: SaveBarProps) {
+export function SaveBar({ status, dirty, onReset }: SaveBarProps) {
   const saving = status.kind === "saving";
   const loading = status.kind === "loading";
   const busy = saving || loading;
+  const [confirmReset, setConfirmReset] = useState(false);
 
   return (
     <div className="flex items-center justify-end gap-3">
       <StatusLine status={status} dirty={dirty} />
       <button
         type="button"
-        onClick={onReset}
+        onClick={() => setConfirmReset(true)}
         disabled={busy}
-        className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
+        title="Reset All"
+        aria-label="Reset All"
+        className="flex h-10 w-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60 sm:w-auto sm:px-4"
       >
         <RotateCcw size={14} />
-        Reset All
+        <span className="hidden sm:inline">Reset All</span>
       </button>
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={busy}
-        className="flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60"
-      >
-        {saving ? (
-          <Loader2 size={16} className="animate-spin" />
-        ) : (
-          <Save size={16} />
-        )}
-        {saving ? "Saving…" : "Save Record"}
-      </button>
+      {confirmReset && (
+        <Modal
+          title="Reset all entries?"
+          onClose={() => setConfirmReset(false)}
+          width="w-[90vw] max-w-sm"
+          footer={
+            <ModalFooter
+              onCancel={() => setConfirmReset(false)}
+              onConfirm={() => {
+                onReset();
+                setConfirmReset(false);
+              }}
+              confirmTone="danger"
+              confirmLabel="Reset All"
+            />
+          }
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={20} className="mt-0.5 shrink-0 text-red-500" />
+            <p className="text-sm text-slate-600">
+              This clears every field for this date and discards unsaved
+              changes. This action cannot be undone.
+            </p>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -69,7 +87,7 @@ function StatusLine({
     return (
       <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
         <CheckCircle2 size={13} />
-        Saved · draft cleared
+        Saved automatically
       </p>
     );
   }
@@ -84,8 +102,8 @@ function StatusLine({
   if (dirty) {
     return (
       <p className="flex items-center gap-1.5 text-xs font-medium text-amber-600">
-        <AlertCircle size={13} />
-        Unsaved changes — click Save to commit to DB
+        <Loader2 size={13} className="animate-spin" />
+        Saving…
       </p>
     );
   }

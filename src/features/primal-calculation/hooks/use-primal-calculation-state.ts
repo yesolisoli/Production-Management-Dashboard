@@ -135,7 +135,7 @@ export function usePrimalCalculationState() {
     let cancelled = false;
     void (async () => {
       const initial = todayString();
-      loadOrders(initial);
+      void loadOrders(initial);
       loadCustomerOrders(initial);
       loadCustomEntities(initial);
       void loadOpeningStock(initial);
@@ -156,7 +156,7 @@ export function usePrimalCalculationState() {
       cancelPendingSave();
       setSaveState({ kind: "idle" });
       setDateState(nextDate);
-      loadOrders(nextDate);
+      void loadOrders(nextDate);
       loadCustomerOrders(nextDate);
       loadCustomEntities(nextDate);
       void loadOpeningStock(nextDate);
@@ -196,7 +196,7 @@ export function usePrimalCalculationState() {
       const groupKey = group.key as PrimalGroupKey;
       setSaveState({ kind: "saving", scope: groupKey });
       try {
-        persistGroupOrders(date, group);
+        await persistGroupOrders(date, group);
         await persistEndingStockGroup(date, groupKey);
         setSaveState({ kind: "saved", scope: group.key, at: Date.now() });
       } catch (err) {
@@ -215,7 +215,7 @@ export function usePrimalCalculationState() {
   const saveAll = useCallback(async () => {
     setSaveState({ kind: "saving", scope: "all" });
     try {
-      persistAllOrders(date);
+      await persistAllOrders(date);
       await persistEndingStockAll(date);
       clearDraftForDate(date);
       setSaveState({ kind: "saved", scope: "all", at: Date.now() });

@@ -1,0 +1,143 @@
+"use client";
+
+import { useMemo } from "react";
+import { AppHeader } from "@/components/layout/app-header";
+import {
+  deriveRouteStatuses,
+  instructionProductionRows,
+  orderedByGroup,
+} from "../calculations";
+import { useOrdersAllocationState } from "../hooks/use-orders-allocation-state";
+import { usePrimalDemand } from "../hooks/use-primal-demand";
+import { HogBreakCalculator } from "./hog-break-calculator";
+import { ProductionSheetSection } from "./production-sheet-section";
+import { RoutePrintingSection } from "./route-printing-section";
+import { DemandHeaderActions } from "./demand-header-actions";
+import { SaveBar } from "./save-bar";
+
+// Production Planner — owns the day's PRODUCTION SHEET.
+//
+// Flow: Primal demand (read-only source) derives one SKU row per ordered SKU →
+// the planner overlays operational fields (room / start / finish / net min /
+// cutters / phase) per SKU → Save. The derived rows are never stored; only the
+// per-SKU overlay (and the morning-brief instructions) persist, shared with
+// Orders & Allocation via the localStorage store keyed by date.
+export function ProductionPlannerClient() {
+  const {
+    date,
+    draft,
+    isEmpty,
+    setDate,
+    setProductionMeta,
+    setProductionOrder,
+    setRoomDeadline,
+    setRoutePrint,
+    setRouteNote,
+    setRouteDeadline,
+    setHogBreakCalc,
+    clearAll,
+  } = useOrdersAllocationState();
+
+  const { snapshot, productionRows } = usePrimalDemand(date);
+
+  // Per-group ordered counts from Primal demand — the header strip.
+  const ordered = useMemo(
+    () => orderedByGroup(snapshot?.availability ?? []),
+    [snapshot],
+  );
+
+  // The production sheet shows the Primal-derived SKU rows alongside the
+  // morning-brief instructions, converted to rows that open in the After Hog
+  // Break phase. Both are derived — the per-row operational overlay is the only
+  // persisted part.
+  const productionSheetRows = useMemo(
+    () => [...productionRows, ...instructionProductionRows(draft.instructions)],
+    [productionRows, draft.instructions],
+  );
+
+  // Route readiness — joins each product's derived FINISH with the print
+  // deadline of the route it ships on, so both sections read from one derived
+  // source (no parallel state). The sheet gets a per-route status lookup + the
+  // summary strip; the board renders the full rows.
+  const routeStatuses = useMemo(
+    () =>
+      deriveRouteStatuses({
+        date,
+        rows: productionSheetRows,
+        meta: draft.production_meta,
+        order: draft.production_order,
+        roomDeadlines: draft.room_deadlines,
+        prints: draft.route_prints,
+        notes: draft.route_notes,
+        deadlines: draft.route_deadlines,
+      }),
+    [
+      date,
+      productionSheetRows,
+      draft.production_meta,
+      draft.production_order,
+      draft.room_deadlines,
+      draft.route_prints,
+      draft.route_notes,
+      draft.route_deadlines,
+    ],
+  );
+
+  // Per-route-number → production readiness, for the sheet's Delivery Route
+  // badges (keyed by the route label the operator types into a split).
+  const routeStatusByNumber = useMemo(
+    () =>
+      new Map(
+        routeStatuses.map((row) => [String(row.route), row.productionStatus]),
+      ),
+    [routeStatuses],
+  );
+
+  return (
+    <>
+      <AppHeader
+        eyebrow="Operations Module"
+        title="Production Planner"
+        actions={
+          <DemandHeaderActions
+            ordered={ordered}
+            date={date}
+            onDateChange={setDate}
+          />
+        }
+      />
+
+      <div className="bg-slate-50">
+        <div className="flex flex-col gap-4 px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
+          <HogBreakCalculator
+            calc={draft.hog_break}
+            onChange={setHogBreakCalc}
+            intakeCounts={snapshot?.hogCounts ?? {}}
+          />
+
+          <ProductionSheetSection
+            rows={productionSheetRows}
+            meta={draft.production_meta}
+            order={draft.production_order}
+            roomDeadlines={draft.room_deadlines}
+            routeStatusByNumber={routeStatusByNumber}
+            onSetMeta={setProductionMeta}
+            onReorder={setProductionOrder}
+            onSetRoomDeadline={setRoomDeadline}
+          />
+
+          <RoutePrintingSection
+            routeStatuses={routeStatuses}
+            prints={draft.route_prints}
+            notes={draft.route_notes}
+            onSetRoutePrint={setRoutePrint}
+            onSetRouteNote={setRouteNote}
+            onSetRouteDeadline={setRouteDeadline}
+          />
+
+          <SaveBar isEmpty={isEmpty} onClear={clearAll} />
+        </div>
+      </div>
+    </>
+  );
+}

@@ -31,7 +31,7 @@ export default async function DashboardHomePage() {
         description="Select a module to get started."
       />
 
-      <section className="min-h-0 flex-1 bg-slate-50 px-[3.25rem] pt-8 pb-5 lg:px-[3.75rem] lg:pt-8 lg:pb-6 xl:px-[4.25rem]">
+      <section className="min-h-0 flex-1 bg-slate-50 px-4 pt-5 pb-5 sm:px-8 sm:pt-8 md:px-[3.25rem] lg:px-[3.75rem] lg:pt-8 lg:pb-6 xl:px-[4.25rem]">
         <div className="mx-auto flex h-full min-h-0 max-w-[1660px] overflow-visible bg-slate-50">
           <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 xl:grid-rows-2 xl:gap-5">
             {visibleModules.map((module) => {

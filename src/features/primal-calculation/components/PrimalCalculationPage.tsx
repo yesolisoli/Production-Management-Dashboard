@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckCircle2,
   Loader2,
+  Save,
   Upload,
 } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
@@ -58,7 +59,10 @@ export function PrimalCalculationPage() {
   });
   const [activeSku, setActiveSku] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    kind: "success" | "error";
+  } | null>(null);
 
   // Auto-dismiss the toast.
   useEffect(() => {
@@ -66,6 +70,27 @@ export function PrimalCalculationPage() {
     const id = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(id);
   }, [toast]);
+
+  // Surface Save / Save All outcomes as a toast. The per-group footer shows its
+  // own inline "Saved" check, but Save All (and every save failure) had no
+  // user-facing feedback before — so a committed write or a DB error is now
+  // always announced here.
+  useEffect(() => {
+    if (saveState.kind === "saved") {
+      setToast({
+        message:
+          saveState.scope === "all"
+            ? "All groups saved to the database."
+            : `${saveState.scope} saved to the database.`,
+        kind: "success",
+      });
+    } else if (saveState.kind === "error") {
+      setToast({
+        message: `Save failed: ${saveState.message}`,
+        kind: "error",
+      });
+    }
+  }, [saveState]);
 
   // All derived data is assembled by the pure view model; this component only
   // memoizes the single call and renders the result. See ../view-model.ts.
@@ -99,7 +124,7 @@ export function PrimalCalculationPage() {
         eyebrow="Operations Module"
         title="Primal Calculation"
         actions={
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <IntakeHeaderStats
               status={intakeStatus.kind}
               primalTotal={primalTotalHogCount(counts)}
@@ -116,17 +141,19 @@ export function PrimalCalculationPage() {
               type="button"
               onClick={() => void saveAll()}
               disabled={saveState.kind === "saving"}
-              className="flex h-10 items-center gap-2 rounded-xl border border-white/30 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+              title="Save All"
+              className="flex h-10 w-10 items-center justify-center gap-2 rounded-xl border border-white/30 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60 sm:w-auto sm:px-4"
             >
-              Save All
+              <Save size={16} />
+              <span className="hidden sm:inline">Save All</span>
             </button>
-            <label className="flex items-center gap-2 rounded-xl border border-white/30 px-3 py-2">
-              <Calendar size={16} className="text-white/70" />
+            <label className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/30 sm:h-auto sm:w-auto sm:justify-start sm:gap-2 sm:px-3 sm:py-2">
+              <Calendar size={16} className="shrink-0 text-white/70" />
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="h-7 border-0 bg-transparent text-sm font-semibold tabular-nums text-white outline-none scheme-dark"
+                className="absolute inset-0 cursor-pointer opacity-0 sm:static sm:h-7 sm:w-auto sm:min-w-0 sm:cursor-auto sm:border-0 sm:bg-transparent sm:text-sm sm:font-semibold sm:tabular-nums sm:text-white sm:opacity-100 sm:outline-none sm:scheme-dark"
               />
             </label>
           </div>
@@ -134,7 +161,7 @@ export function PrimalCalculationPage() {
       />
 
       <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
-        <div className="flex flex-col gap-4 px-5 py-5 lg:px-6">
+        <div className="flex flex-col gap-4 px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
           <PrimalAvailabilityChart
             rows={availabilityRows}
             customRows={customGroupRows}
@@ -239,9 +266,10 @@ export function PrimalCalculationPage() {
           onClose={() => setImporting(false)}
           onApply={(imported) => {
             applyImportedOrders(imported);
-            setToast(
-              `Imported ${Object.keys(imported).length} products — review and Save to commit.`,
-            );
+            setToast({
+              message: `Imported ${Object.keys(imported).length} products — review and Save to commit.`,
+              kind: "success",
+            });
           }}
         />
       )}
@@ -249,8 +277,12 @@ export function PrimalCalculationPage() {
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
           <div className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-2xl">
-            <CheckCircle2 size={16} className="text-emerald-400" />
-            {toast}
+            {toast.kind === "error" ? (
+              <AlertTriangle size={16} className="text-rose-400" />
+            ) : (
+              <CheckCircle2 size={16} className="text-emerald-400" />
+            )}
+            {toast.message}
           </div>
         </div>
       )}
@@ -320,14 +352,16 @@ function IntakeHeaderStats({
 }
 
 // At-a-glance pill explaining why the intake stats aren't showing numbers.
-// Only rendered for non-ready states (loading / missing / error). "missing"
-// is the common case — the operator entered Hog Intake but hasn't Saved it to
-// the DB yet, and Primal reads DB-only — so the copy points them to the fix.
+// Only rendered for the loading and error states. "missing" (no DB record for
+// the date) no longer shows a badge: Hog Intake auto-saves, so a missing record
+// just means nothing was entered for that date — the em-dash stats + hover
+// tooltip already convey that without nagging copy.
 function IntakeStatusBadge({
   status,
 }: {
   status: "loading" | "missing" | "error";
 }) {
+  if (status === "missing") return null;
   if (status === "loading") {
     return (
       <span className="flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-xs font-medium text-white/70">
@@ -363,7 +397,7 @@ function intakeStatusTooltip(
     case "loading":
       return "Loading Hog Intake…";
     case "missing":
-      return "No saved Hog Intake for this date — Save it on the Hog Intake screen to sync these figures";
+      return "No Hog Intake entered for this date";
     case "error":
       return "Failed to load Hog Intake";
     default:

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/shared/modal";
+import { ModalFooter } from "@/components/shared/modal-footer";
 import { TimePickerInput } from "./time-picker-input";
 import type { ShiftCode } from "../../types";
 
@@ -23,16 +24,12 @@ export function ShiftModal({ initial, defaultStart, defaultEnd, onClose, onSave 
       title={isEdit ? "Edit Shift" : "Add Shift"}
       onClose={onClose}
       footer={
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 transition-colors">Cancel</button>
-          <button
-            onClick={() => canSave && onSave(label.trim(), startTime, endTime)}
-            disabled={!canSave}
-            className="rounded-lg bg-slate-800 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-30 transition-colors"
-          >
-            {isEdit ? "Save" : "Add Shift"}
-          </button>
-        </div>
+        <ModalFooter
+          onCancel={onClose}
+          onConfirm={() => canSave && onSave(label.trim(), startTime, endTime)}
+          confirmDisabled={!canSave}
+          confirmLabel={isEdit ? "Save" : "Add Shift"}
+        />
       }
     >
       <div className="space-y-4">

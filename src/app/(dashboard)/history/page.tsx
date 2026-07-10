@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { LayoutGrid } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
+import { HeaderActionButton } from "@/components/layout/header-action-button";
 import { HistoryClient } from "@/features/assignment-board/components/history-client";
 import {
   canAccessRouteForCurrentUser,
@@ -20,17 +20,16 @@ export default async function HistoryPage() {
         title="Shift History"
         actions={
           canAccessAssignmentBoard ? (
-            <Link
+            <HeaderActionButton
               href="/assignment-board"
-              className="flex h-10 items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700"
-            >
-              <LayoutGrid size={16} />
-              Admin View
-            </Link>
+              title="Admin View"
+              icon={LayoutGrid}
+              label="Admin View"
+            />
           ) : null
         }
       />
-      <div className="min-h-0 flex-1 p-6">
+      <div className="min-h-0 flex-1 p-3 sm:p-6">
         <HistoryClient />
       </div>
     </div>

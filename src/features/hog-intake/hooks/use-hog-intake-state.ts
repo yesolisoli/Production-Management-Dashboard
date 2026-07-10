@@ -34,8 +34,10 @@ export type SaveStatus =
 //   2. DB record for that date
 //   3. Empty record
 //
-// Drafts are written on every edit and cleared only after a successful
-// DB save.
+// Drafts are written on every edit (the instant safety net) and auto-committed
+// to the DB ~1s after the last edit (debounced); a successful commit clears the
+// draft. No manual save — downstream screens (Primal Calc) read DB-only, so the
+// commit must happen on its own.
 type UseHogIntakeStateArgs = {
   // Weekly planned-sow total (JP + ADACA + Custom Sows, Mon–Fri) from the
   // Weekly Hog Plan. Combined with farm-delivered sows to derive Sow
@@ -50,9 +52,8 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
   );
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
   // True when an unsaved local draft exists for the current date — i.e. the
-  // on-screen record differs from what's committed to the DB. Downstream
-  // screens (Primal Calc) read DB-only, so this flags a divergence the
-  // operator must resolve by saving.
+  // on-screen record differs from what's committed to the DB. Drives the
+  // debounced auto-commit below (and the "Saving…/Up to date" indicator).
   const [dirty, setDirty] = useState(false);
 
   // Gate draft writes until after we've attempted to hydrate — otherwise
@@ -67,6 +68,18 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
   // post-save replace) so the write effect doesn't immediately persist
   // the loaded value back as a fresh draft. Cleared inside the effect.
   const suppressNextWrite = useRef(false);
+
+  // Latest values mirrored into refs so the debounced DB auto-save and the
+  // flush-on-leave handlers read current data without having to re-subscribe.
+  const recordRef = useRef(record);
+  const hogCountsRef = useRef<HogCounts>(record.hog_counts);
+  const dateRef = useRef(date);
+  const dirtyRef = useRef(dirty);
+  // Supersedes a slow in-flight DB commit when a newer one starts.
+  const saveToken = useRef(0);
+  // The in-flight commit promise, so flush() can await an existing save instead
+  // of stacking a duplicate one on top of it.
+  const inFlightRef = useRef<Promise<void> | null>(null);
 
   const loadForDate = useCallback(async (nextDate: string) => {
     const token = ++activeFetchToken.current;
@@ -171,13 +184,96 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
     [record.hog_counts, record.farm_records, sowPlanTotal],
   );
 
+  // Keep the refs pointed at the latest render values for the auto-save below
+  // (read only inside async callbacks / effects, never during render).
+  useEffect(() => {
+    recordRef.current = record;
+    hogCountsRef.current = hogCounts;
+    dateRef.current = date;
+    dirtyRef.current = dirty;
+  });
+
+  // Commit the current record to the DB. Drafts (localStorage) are the instant
+  // safety net; the DB is what downstream screens read (Primal Calc is
+  // DB-only), so this must run automatically — see the debounced effect below.
+  // The derived counts are persisted so the DB matches what's on screen.
+  // Tokened + date-guarded so a newer commit or a date switch supersedes a slow
+  // in-flight save instead of clobbering the current view.
+  const commitToDb = useCallback((): Promise<void> => {
+    const run = async () => {
+      const snapshot: HogIntakeRecord = {
+        ...recordRef.current,
+        hog_counts: hogCountsRef.current,
+      };
+      if (isEmptyHogIntakeRecord(snapshot)) return;
+      const token = ++saveToken.current;
+      setStatus({ kind: "saving" });
+      try {
+        const userId = await getCurrentUserId();
+        const saved = await upsertHogIntakeRecord(snapshot, userId);
+        clearDraft(saved.date);
+        if (token !== saveToken.current) return; // a newer commit started
+        if (dateRef.current !== saved.date) return; // operator left this date
+        suppressNextWrite.current = true;
+        setRecord(saved);
+        setDirty(false);
+        setStatus({ kind: "saved", at: Date.now() });
+      } catch (err) {
+        if (token !== saveToken.current || dateRef.current !== snapshot.date) {
+          return;
+        }
+        setStatus({
+          kind: "error",
+          message: err instanceof Error ? err.message : "Failed to save",
+        });
+      }
+    };
+    const promise = run().finally(() => {
+      if (inFlightRef.current === promise) inFlightRef.current = null;
+    });
+    inFlightRef.current = promise;
+    return promise;
+  }, []);
+
+  // Awaitable commit used by leave paths (date switch, navigation guard). Waits
+  // out any in-flight save first, then commits once more if edits remain, so the
+  // DB always holds the latest before the caller proceeds.
+  const flush = useCallback(async () => {
+    if (inFlightRef.current) await inFlightRef.current;
+    if (dirtyRef.current) await commitToDb();
+  }, [commitToDb]);
+
+  // Auto-commit to the DB ~1s after the last edit (debounced). `dirty` flips
+  // true only on a real edit or a restored unsaved draft, so an untouched or
+  // freshly DB-loaded record never triggers a write. Each edit reschedules the
+  // timer, and a restored draft auto-commits — recovering data that was stuck
+  // in localStorage but never reached the DB.
+  useEffect(() => {
+    if (!dirty) return;
+    const timer = setTimeout(() => {
+      void commitToDb();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [dirty, record, commitToDb]);
+
+  // Flush a pending debounced save when the screen unmounts (backstop for any
+  // unmount path not already routed through the navigation guard).
+  useEffect(() => {
+    return () => {
+      if (dirtyRef.current) void flush();
+    };
+  }, [flush]);
+
   const setDate = useCallback(
     (nextDate: string) => {
       if (!nextDate) return;
+      // Flush pending edits for the current date before leaving it, so a quick
+      // hop to another date (or Primal) doesn't lose the last keystrokes.
+      if (dirtyRef.current) void flush();
       setDateState(nextDate);
       void loadForDate(nextDate);
     },
-    [loadForDate],
+    [loadForDate, flush],
   );
 
   const setHogCount = useCallback((type: HogType, value: number) => {
@@ -239,6 +335,7 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
           type: "",
           tattoo: "",
           count: 0,
+          delivery_time: "",
         },
       ],
     }));
@@ -279,31 +376,6 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
     setStatus({ kind: "idle" });
   }, [date]);
 
-  const save = useCallback(async () => {
-    setStatus({ kind: "saving" });
-    try {
-      const userId = await getCurrentUserId();
-      // Persist the derived counts so downstream readers (Primal Calc reads
-      // hog_counts from the DB) see the same totals shown on screen.
-      const saved = await upsertHogIntakeRecord(
-        { ...record, hog_counts: hogCounts },
-        userId,
-      );
-      clearDraft(saved.date);
-      // The post-save setRecord must not re-create a draft for the row
-      // we just cleared.
-      suppressNextWrite.current = true;
-      setRecord(saved);
-      setDirty(false);
-      setStatus({ kind: "saved", at: Date.now() });
-    } catch (err) {
-      setStatus({
-        kind: "error",
-        message: err instanceof Error ? err.message : "Failed to save",
-      });
-    }
-  }, [record, hogCounts]);
-
   return {
     date,
     record,
@@ -321,7 +393,7 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
     updateFarmRecord,
     removeFarmRecord,
     reset,
-    save,
+    flush,
   };
 }
 

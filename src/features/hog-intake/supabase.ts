@@ -70,6 +70,8 @@ function coerceFarmRecords(raw: unknown): FarmRecord[] {
         tattoo: typeof r.tattoo === "string" ? r.tattoo : "",
         count:
           typeof r.count === "number" && r.count >= 0 ? r.count : 0,
+        delivery_time:
+          typeof r.delivery_time === "string" ? r.delivery_time : "",
       };
     })
     .filter((row): row is FarmRecord => row !== null);
