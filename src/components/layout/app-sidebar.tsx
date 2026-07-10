@@ -9,7 +9,6 @@ import {
   Calculator,
   Package,
   CalendarRange,
-  Settings,
   LogOut,
   ClipboardList,
   Loader2,
@@ -47,7 +46,6 @@ const items: NavItem[] = [
   { href: "/primal-calc", label: "Primal Calc", icon: Calculator, routeKey: "primal-calc" },
   { href: "/orders-allocation", label: "Orders & Allocation", icon: Package, routeKey: "orders-allocation" },
   { href: "/production-planner", label: "Production Planner", icon: CalendarRange, routeKey: "production-planner" },
-  { href: "/settings", label: "Settings", icon: Settings, routeKey: "settings" },
 ];
 
 export function AppSidebar() {
