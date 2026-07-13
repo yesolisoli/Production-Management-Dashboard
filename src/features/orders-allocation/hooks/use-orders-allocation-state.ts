@@ -116,6 +116,9 @@ export function useOrdersAllocationState() {
                 routes: patch.routes.map((r) => ({
                   route: r.route.trim(),
                   qty: clampNonNegativeInt(r.qty),
+                  // Preserve the per-route unit so toggling PC/CS actually
+                  // persists; dropping it here reset every route to routeUnit.
+                  ...(r.unit !== undefined ? { unit: r.unit } : {}),
                 })),
               }
             : {}),
