@@ -20,10 +20,11 @@ export type RouteKey =
   | "production-planner"
   | "settings"
   | "history"
+  | "audit-log"
   | "tv-display";
 
 // Access matrix.
-//   admin                  — everything
+//   admin                  — everything (only role with audit-log)
 //   supervisor             — home, assignment-board, settings, history, tv-display
 //   production_planner     — home + planning modules + settings + history + tv-display
 //                            (no assignment-board)
@@ -40,6 +41,7 @@ const ROLE_ROUTES: Record<Role, ReadonlyArray<RouteKey>> = {
     "production-planner",
     "settings",
     "history",
+    "audit-log",
     "tv-display",
   ],
   supervisor: [
@@ -93,6 +95,7 @@ const PATH_TO_ROUTE_KEY: ReadonlyArray<{ pattern: RegExp; key: RouteKey }> = [
   { pattern: /^\/production-planner(?:\/|$)/, key: "production-planner" },
   { pattern: /^\/settings(?:\/|$)/, key: "settings" },
   { pattern: /^\/history(?:\/|$)/, key: "history" },
+  { pattern: /^\/audit-log(?:\/|$)/, key: "audit-log" },
   { pattern: /^\/tv-display(?:\/|$)/, key: "tv-display" },
 ];
 
