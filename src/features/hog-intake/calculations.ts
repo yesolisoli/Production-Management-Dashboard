@@ -72,6 +72,32 @@ export function yieldTotal(counts: HogCounts): number {
   return YIELD_HOG_TYPES.reduce((sum, key) => sum + counts[key], 0);
 }
 
+// Held-over hogs shift yield between production days: hogs held to the next day
+// (toNextDay) aren't cut today, while hogs carried in from the previous day
+// (fromPrevDay) are cut today. Net effect on today's yield: fromPrevDay − toNextDay.
+export type HeldOverAdjustment = {
+  fromPrevDay: number;
+  toNextDay: number;
+};
+
+export const NO_HELD_OVER: HeldOverAdjustment = { fromPrevDay: 0, toNextDay: 0 };
+
+// Yield hogs actually cut today: the JP + RWA pool, minus hogs held over to the
+// next day, plus hogs carried in from the previous day. Drives both the "Primal
+// Total" shown on the cards and the expected primal production on the Primal
+// Calc chart. Clamped so it never goes negative.
+export function netYieldTotal(
+  counts: HogCounts,
+  heldOver: HeldOverAdjustment = NO_HELD_OVER,
+): number {
+  return Math.max(
+    0,
+    yieldTotal(counts) -
+      clampNonNegativeInt(heldOver.toNextDay) +
+      clampNonNegativeInt(heldOver.fromPrevDay),
+  );
+}
+
 export function projectedForCutting(nextDay: NextDay): number {
   return (
     nextDay.hog_count -
@@ -94,7 +120,12 @@ export type HogIntakeTotals = {
   overSold: boolean; // hogs consumed by side orders exceed total intake
 };
 
-export function deriveTotals(record: HogIntakeRecord): HogIntakeTotals {
+export function deriveTotals(
+  record: HogIntakeRecord,
+  // Hogs held over from the previous production day → cut today. Added into the
+  // yield pool. Defaults to 0 for callers that don't carry the prior day in.
+  heldOverFromPrevDay = 0,
+): HogIntakeTotals {
   const counts = record.hog_counts;
   const total = totalIntake(counts);
   const consumed = hogsConsumedBySideOrders(record.side_orders);
@@ -102,7 +133,10 @@ export function deriveTotals(record: HogIntakeRecord): HogIntakeTotals {
     totalIntake: total,
     totalHogs: total,
     forCutting: total - consumed,
-    yieldTotal: yieldTotal(counts),
+    yieldTotal: netYieldTotal(counts, {
+      fromPrevDay: heldOverFromPrevDay,
+      toNextDay: record.held_over,
+    }),
     projectedForCutting: projectedForCutting(record.next_day),
     overSold: consumed > total,
   };

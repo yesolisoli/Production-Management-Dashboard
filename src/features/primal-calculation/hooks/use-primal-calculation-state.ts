@@ -91,6 +91,7 @@ export function usePrimalCalculationState() {
 
   const {
     openingStock,
+    heldOverPrev,
     loadForDate: loadOpeningStock,
     cancelPendingSave,
     persistGroup: persistEndingStockGroup,
@@ -238,6 +239,7 @@ export function usePrimalCalculationState() {
     customGroups,
     customRows,
     openingStock,
+    heldOverPrev,
     saveState,
     setDate,
     setOrderField,

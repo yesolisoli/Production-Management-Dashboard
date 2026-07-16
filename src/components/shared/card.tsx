@@ -81,12 +81,17 @@ export function ReadOnlyRow({
   // When true, spacers reserve the +/- button widths so the value lines up with
   // StepperRows. Set false to right-align the value flush to the edge.
   alignWithSteppers = true,
+  // When true, positive values render with an explicit "+" prefix (negatives
+  // already show "−"). Used for adjustment rows that add to a running total.
+  signed = false,
 }: {
   label: string;
   value: number;
   emphasis?: boolean;
   alignWithSteppers?: boolean;
+  signed?: boolean;
 }) {
+  const display = signed && value > 0 ? `+${value}` : value;
   return (
     <div className="flex items-center justify-between gap-2">
       <span
@@ -112,7 +117,7 @@ export function ReadOnlyRow({
             alignWithSteppers ? "w-12" : "w-12 lg:w-auto",
           )}
         >
-          {value}
+          {display}
         </span>
         <span
           className={clsx("h-7 w-7", !alignWithSteppers && "lg:hidden")}

@@ -77,6 +77,9 @@ export type PrimalViewModelInput = {
   customGroups: CustomGroupsForDate;
   customRows: CustomRowsForDate;
   openingStock: EndingStockByGroup;
+  // Hogs held over from the previous production day → cut today. Added into the
+  // yield pool. Carried in by the ending-stock hook (same previous-date source).
+  heldOverPrev?: number;
   // Minimum cooler reserve passed to the custom-group availability builder.
   // Defaults to the same constant the catalog rows use.
   minReserve?: number;
@@ -106,10 +109,14 @@ export function derivePrimalViewModel(
     customGroups,
     customRows,
     openingStock,
+    heldOverPrev = 0,
     minReserve = DEFAULT_MIN_COOLER_RESERVE,
   } = input;
 
   const counts = intake.hog_counts;
+  // Net held-over shift on today's yield: yesterday's hogs cut today (added),
+  // today's hogs held to tomorrow (subtracted).
+  const heldOver = { fromPrevDay: heldOverPrev, toNextDay: intake.held_over };
 
   // Per-category order-entry rows (spec + its editable order).
   const rowsByCategory = {} as Record<PrimalCategory, CategorySkuRow[]>;
@@ -135,7 +142,7 @@ export function derivePrimalViewModel(
     (customRowsByGroup[key] ??= []).push(row);
   }
 
-  const intakeTotals = deriveTotals(intake);
+  const intakeTotals = deriveTotals(intake, heldOverPrev);
 
   // Availability — derived from intake counts + today's orders + customer
   // orders + the opening-stock carry-in.
@@ -145,6 +152,7 @@ export function derivePrimalViewModel(
     customerOrders,
     openingStock,
     customRows,
+    heldOver,
   );
 
   // Operator-added availability groups — derived the same way as catalog rows
@@ -158,6 +166,7 @@ export function derivePrimalViewModel(
     customerOrders,
     customRows,
     minReserve,
+    heldOver,
   );
 
   // Calculated Ending Stock per catalog group (pieces) — shown read-only in

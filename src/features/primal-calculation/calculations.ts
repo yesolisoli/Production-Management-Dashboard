@@ -1,7 +1,9 @@
 import {
   clampNonNegativeInt,
+  netYieldTotal,
+  NO_HELD_OVER,
   PIECES_PER_HOG,
-  yieldTotal,
+  type HeldOverAdjustment,
 } from "@/features/hog-intake/calculations";
 import type { HogCounts } from "@/features/hog-intake/types";
 import { specsForCategory } from "./product-specs";
@@ -41,8 +43,13 @@ export { clampNonNegativeInt };
 // BK / Sow / Round / Suckling / Customer are excluded from yield entirely,
 // matching the YIELD_HOG_TYPES contract in the hog-intake module.
 // -------------------------------------------------------------------
-export function primalTotalHogCount(counts: HogCounts): number {
-  return counts.JP + counts.RWA;
+export function primalTotalHogCount(
+  counts: HogCounts,
+  heldOver: HeldOverAdjustment = NO_HELD_OVER,
+): number {
+  // JP + RWA is exactly the yield pool, so the held-over adjustment lives in one
+  // place (netYieldTotal) rather than being re-derived here.
+  return netYieldTotal(counts, heldOver);
 }
 
 // Shared production primitive: expected pieces = base hog count ×
@@ -122,9 +129,13 @@ export const PRIMAL_PIECES_PER_HOG = PIECES_PER_HOG;
 export function groupExpectedProduction(
   group: PrimalGroup,
   counts: HogCounts,
+  heldOver: HeldOverAdjustment = NO_HELD_OVER,
 ): number {
   void group;
-  return calculateExpectedProduction(yieldTotal(counts), PRIMAL_PIECES_PER_HOG);
+  return calculateExpectedProduction(
+    netYieldTotal(counts, heldOver),
+    PRIMAL_PIECES_PER_HOG,
+  );
 }
 
 // Status from today's ending stock: negative means total demand couldn't
@@ -156,8 +167,9 @@ export function buildGroupAvailability(
   counts: HogCounts,
   openingStock: number,
   minReserve: number,
+  heldOver: HeldOverAdjustment = NO_HELD_OVER,
 ): GroupAvailability {
-  const expectedProduction = groupExpectedProduction(group, counts);
+  const expectedProduction = groupExpectedProduction(group, counts, heldOver);
   const availableStock =
     expectedProduction + openingStock - specialCustomerOrders;
   const endingStock = availableStock - salesOrders;
@@ -210,6 +222,9 @@ export function buildAvailabilityRows(
   // Manually added rows for the date — their pieces pool into Sales Orders
   // alongside the catalog rows.
   customRows: CustomRowsForDate = [],
+  // Held-over hogs (prev day carried in / today held to next day) — shift the
+  // yield pool that feeds every group's Expected Production.
+  heldOver: HeldOverAdjustment = NO_HELD_OVER,
   minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
 ): GroupAvailability[] {
   const specialByGroup = sumCustomerOrdersByGroup(customerOrders);
@@ -229,6 +244,7 @@ export function buildAvailabilityRows(
       counts,
       openingStock[group.key],
       minReserve,
+      heldOver,
     );
   });
 }
@@ -246,6 +262,7 @@ export function buildCustomGroupAvailability(
   customerOrders: CustomerOrdersForDate,
   customRows: CustomRowsForDate,
   minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
+  heldOver: HeldOverAdjustment = NO_HELD_OVER,
 ): GroupAvailability[] {
   const customByGroup = sumCustomRowsByGroup(customRows);
   return customGroups.map((g) =>
@@ -256,6 +273,7 @@ export function buildCustomGroupAvailability(
       counts,
       0,
       minReserve,
+      heldOver,
     ),
   );
 }

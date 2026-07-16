@@ -40,6 +40,7 @@ export function PrimalCalculationPage() {
     customGroups,
     customRows,
     openingStock,
+    heldOverPrev,
     setCustomerOrder,
     addCustomCustomer,
     renameCustomCustomer,
@@ -111,8 +112,17 @@ export function PrimalCalculationPage() {
         customGroups,
         customRows,
         openingStock,
+        heldOverPrev,
       }),
-    [intake, orders, customerOrders, customGroups, customRows, openingStock],
+    [
+      intake,
+      orders,
+      customerOrders,
+      customGroups,
+      customRows,
+      openingStock,
+      heldOverPrev,
+    ],
   );
 
   const handleToggle = (groupKey: string) =>
@@ -127,7 +137,10 @@ export function PrimalCalculationPage() {
           <div className="flex items-center gap-2 sm:gap-4">
             <IntakeHeaderStats
               status={intakeStatus.kind}
-              primalTotal={primalTotalHogCount(counts)}
+              primalTotal={primalTotalHogCount(counts, {
+                fromPrevDay: heldOverPrev,
+                toNextDay: intake.held_over,
+              })}
               sow={intake.todays_cutting}
               sideOrders={intake.side_orders}
               forCutting={intakeTotals.forCutting}

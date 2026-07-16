@@ -7,6 +7,7 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
+import { fetchPreviousHeldOver } from "@/features/hog-intake/supabase";
 import type { HogIntakeRecord } from "@/features/hog-intake/types";
 import { buildAvailabilityRows } from "../calculations";
 import { SAVE_DEBOUNCE_MS } from "../constants";
@@ -52,6 +53,10 @@ export function usePrimalEndingStockState({
   // stock, fetched from Supabase on every date change.
   const [openingStock, setOpeningStock] =
     useState<EndingStockByGroup>(emptyEndingStockByGroup);
+  // Held-over hogs carried in from the previous production day — added into the
+  // yield pool that feeds Expected Production. Fetched alongside Opening Stock
+  // (same previous-date carry-over), so it loads under the same gate.
+  const [heldOverPrev, setHeldOverPrev] = useState(0);
   // True once the carry-in for the current date has finished loading. The
   // auto-persist effect waits for this so it never writes today's ending stock
   // using the previous date's stale opening value during the fetch.
@@ -70,12 +75,17 @@ export function usePrimalEndingStockState({
     const token = ++activeOpeningStockToken.current;
     setOpeningStockLoaded(false);
     try {
-      const previous = await fetchPreviousEndingStock(nextDate);
+      const [previous, prevHeldOver] = await Promise.all([
+        fetchPreviousEndingStock(nextDate),
+        fetchPreviousHeldOver(nextDate),
+      ]);
       if (token !== activeOpeningStockToken.current) return; // stale
       setOpeningStock(previous);
+      setHeldOverPrev(prevHeldOver);
     } catch {
       if (token !== activeOpeningStockToken.current) return;
       setOpeningStock(emptyEndingStockByGroup());
+      setHeldOverPrev(0);
     } finally {
       if (token === activeOpeningStockToken.current) setOpeningStockLoaded(true);
     }
@@ -91,11 +101,12 @@ export function usePrimalEndingStockState({
       customerOrders,
       openingStock,
       customRows,
+      { fromPrevDay: heldOverPrev, toNextDay: intake.held_over },
     );
     const out = emptyEndingStockByGroup();
     for (const row of rows) out[row.group] = row.endingStock;
     return out;
-  }, [orders, intake, customerOrders, openingStock, customRows]);
+  }, [orders, intake, customerOrders, openingStock, customRows, heldOverPrev]);
 
   // Auto-persist the recalculated Ending Stock (debounced) so the carry-over
   // chain is always current. Gated on hydration + the carry-in having loaded +
@@ -150,6 +161,7 @@ export function usePrimalEndingStockState({
 
   return {
     openingStock,
+    heldOverPrev,
     loadForDate,
     cancelPendingSave,
     persistGroup,

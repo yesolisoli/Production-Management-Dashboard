@@ -1,5 +1,7 @@
 "use client";
 
+import { SUPABASE_ENABLED } from "@/lib/config";
+import { previousDateString } from "@/lib/date";
 import { createClient } from "@/lib/supabase/client";
 import {
   emptyHogCounts,
@@ -109,6 +111,25 @@ export async function fetchHogIntakeByDate(
   if (error) throw new Error(error.message);
   if (!data) return null;
   return rowToRecord(data as HogIntakeRow);
+}
+
+// The held_over of the IMMEDIATELY preceding calendar day — the hogs carried
+// into `date` and cut that day. Strict day −1: when the day before `date` has
+// no saved record, returns 0 rather than reaching further back, so a gap never
+// pulls a stale held-over count from an unrelated earlier date. (Held-over hogs
+// are live animals cut the next day; they are not carried across gaps.)
+export async function fetchPreviousHeldOver(date: string): Promise<number> {
+  if (!SUPABASE_ENABLED) return 0;
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("hog_intake_records")
+    .select("held_over")
+    .eq("intake_date", previousDateString(date))
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return 0;
+  const value = (data as { held_over: number }).held_over;
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
 // Upsert input fields only. Computed totals (total_hogs, for_cutting,

@@ -9,7 +9,11 @@ import {
   farmRecordCountForType,
 } from "../calculations";
 import { clearDraft, readDraft, writeDraft } from "../draft-storage";
-import { fetchHogIntakeByDate, upsertHogIntakeRecord } from "../supabase";
+import {
+  fetchHogIntakeByDate,
+  fetchPreviousHeldOver,
+  upsertHogIntakeRecord,
+} from "../supabase";
 import {
   emptyHogCounts,
   emptyHogIntakeRecord,
@@ -51,6 +55,10 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
     emptyHogIntakeRecord(todayString()),
   );
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
+  // Held-over hogs carried in from the previous production day — cut today, so
+  // added into the Primal Total. Fetched on every date load, independent of the
+  // current record's source (draft or DB).
+  const [prevHeldOver, setPrevHeldOver] = useState(0);
   // True when an unsaved local draft exists for the current date — i.e. the
   // on-screen record differs from what's committed to the DB. Drives the
   // debounced auto-commit below (and the "Saving…/Up to date" indicator).
@@ -83,6 +91,18 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
 
   const loadForDate = useCallback(async (nextDate: string) => {
     const token = ++activeFetchToken.current;
+
+    // Carry the previous production day's held-over hogs in, independent of how
+    // today's record resolves (draft or DB). Fired in parallel; failures fall
+    // back to 0 without blocking the record load.
+    void (async () => {
+      try {
+        const prev = await fetchPreviousHeldOver(nextDate);
+        if (token === activeFetchToken.current) setPrevHeldOver(prev);
+      } catch {
+        if (token === activeFetchToken.current) setPrevHeldOver(0);
+      }
+    })();
 
     const draft = readDraft(nextDate);
     if (draft && !isEmptyHogIntakeRecord(draft)) {
@@ -380,6 +400,7 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
     date,
     record,
     hogCounts,
+    prevHeldOver,
     status,
     dirty,
     setDate,
