@@ -2,10 +2,11 @@
 
 import { useMemo } from "react";
 import { AppHeader } from "@/components/layout/app-header";
-import { orderedByGroup } from "../calculations";
+import { deriveGroupAvailability, orderedByGroup } from "../calculations";
 import { useOrdersAllocationState } from "../hooks/use-orders-allocation-state";
 import { usePrimalDemand } from "../hooks/use-primal-demand";
 import { AllocationSheetSection } from "./allocation-sheet-section";
+import { AvailabilitySection } from "./availability-section";
 import { DemandHeaderActions } from "./demand-header-actions";
 import { SaveBar } from "./save-bar";
 
@@ -26,12 +27,24 @@ export function OrdersAllocationClient() {
     clearAll,
   } = useOrdersAllocationState();
 
-  const { snapshot } = usePrimalDemand(date);
+  const { snapshot, status } = usePrimalDemand(date);
 
   // Per-group ordered counts from Primal demand — the header strip.
   const ordered = useMemo(
     () => orderedByGroup(snapshot?.availability ?? []),
     [snapshot],
+  );
+
+  // Availability — Primal Ending Stock per group, reduced by the date's
+  // allocation instructions. Derived here so it recomputes the moment an
+  // instruction is added, edited, or removed. Never persisted.
+  const availability = useMemo(
+    () =>
+      deriveGroupAvailability(
+        snapshot?.availability ?? [],
+        draft.instructions,
+      ),
+    [snapshot, draft.instructions],
   );
 
   return (
@@ -50,6 +63,8 @@ export function OrdersAllocationClient() {
 
       <div className="bg-slate-50">
         <div className="flex flex-col gap-4 px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
+          <AvailabilitySection status={status} rows={availability} />
+
           <AllocationSheetSection
             rows={draft.instructions}
             date={date}

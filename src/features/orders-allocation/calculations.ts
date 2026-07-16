@@ -432,6 +432,69 @@ export function reconcileRoutes(
   return { assigned, target: targetPcs, remaining, status };
 }
 
+// -------------------------------------------------------------------
+// Availability — Primal Ending Stock consumed by allocation instructions.
+//
+// STARTING AVAILABILITY is the Primal Ending Stock for the group (the stock
+// remaining after today's sales orders — the source of truth stays Primal, it
+// is never recomputed or stored here). REMAINING AVAILABILITY subtracts the
+// allocation quantities entered for that group. Both sides key on the SAME
+// PrimalGroupKey — no name matching. Instructions on non-Primal areas (Jowls,
+// Fat, Heads, …) have no Ending Stock, so they are simply absent from the
+// result (an "unmapped" area shows no availability rather than a false number).
+//
+// Ending Stock is counted in PIECES and an allocation instruction carries no
+// SKU, so a case-unit quantity has no defined piece conversion at the group
+// level (there is no group-level pieces-per-case in the catalog). Case-unit
+// rows are therefore surfaced separately (pendingCaseQty / pendingCaseRows)
+// rather than guessed — they do not move Remaining Availability until they are
+// re-entered in pieces. Pure derivation — never persisted.
+// -------------------------------------------------------------------
+export type GroupAllocationAvailability = {
+  group: PrimalGroupKey;
+  label: string;
+  startingAvailability: number; // Primal Ending Stock for the group, in pieces
+  allocatedPcs: number; // Σ piece-unit instruction qty for the group
+  remaining: number; // startingAvailability − allocatedPcs (may be negative)
+  pendingCaseQty: number; // Σ case-unit instruction qty (no piece conversion)
+  pendingCaseRows: number; // how many case-unit rows are pending conversion
+  over: boolean; // allocated pieces exceed the starting availability
+};
+
+export function deriveGroupAvailability(
+  availability: GroupAvailability[],
+  instructions: AllocationInstruction[],
+): GroupAllocationAvailability[] {
+  return availability.map((row) => {
+    let allocatedPcs = 0;
+    let pendingCaseQty = 0;
+    let pendingCaseRows = 0;
+    for (const ins of instructions) {
+      if (ins.category !== row.group) continue; // same PrimalGroupKey, not name
+      const qty = Math.max(0, Math.round(ins.qty));
+      if (qty <= 0) continue; // 0 = unspecified
+      if (ins.unit === "case") {
+        pendingCaseQty += qty;
+        pendingCaseRows += 1;
+      } else {
+        allocatedPcs += qty;
+      }
+    }
+    const startingAvailability = row.endingStock;
+    const remaining = startingAvailability - allocatedPcs;
+    return {
+      group: row.group,
+      label: row.label,
+      startingAvailability,
+      allocatedPcs,
+      remaining,
+      pendingCaseQty,
+      pendingCaseRows,
+      over: remaining < 0,
+    };
+  });
+}
+
 export type InstructionsSummary = {
   count: number;
 };

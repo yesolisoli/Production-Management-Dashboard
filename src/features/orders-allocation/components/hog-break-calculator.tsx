@@ -66,8 +66,14 @@ export function HogBreakCalculator({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 p-4 text-left sm:p-5"
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-slate-50 sm:px-5"
       >
+        <ChevronDown
+          size={18}
+          className={`shrink-0 text-slate-400 transition-transform ${
+            open ? "rotate-0" : "-rotate-90"
+          }`}
+        />
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
           <Clock size={16} />
         </span>
@@ -79,12 +85,6 @@ export function HogBreakCalculator({
             Counts come from Hog Intake; tune the rates to time the break.
           </p>
         </div>
-        <ChevronDown
-          size={18}
-          className={`shrink-0 text-slate-400 transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
-        />
       </button>
 
       {open && (

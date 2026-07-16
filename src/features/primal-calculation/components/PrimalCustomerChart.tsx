@@ -61,7 +61,7 @@ export function PrimalCustomerChart({
           <Users size={16} />
         </span>
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-slate-900">
+          <h2 className="text-base font-semibold text-slate-900">
             Custom Orders
           </h2>
           <p className="text-xs text-slate-500">
@@ -83,7 +83,8 @@ export function PrimalCustomerChart({
       </button>
 
       {expanded && (
-        <div className="overflow-x-auto border-t border-slate-100">
+        <div className="border-t border-slate-100 p-4">
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-220 table-fixed border-collapse text-sm">
             <colgroup>
               <col className="w-60" />
@@ -93,10 +94,9 @@ export function PrimalCustomerChart({
             </colgroup>
             <thead>
               <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                <th
-                  className="sticky left-0 z-10 bg-slate-50 px-4 py-2.5 text-left"
-                  aria-label="Customer"
-                />
+                <th className="sticky left-0 z-10 bg-slate-50 px-4 py-2.5 text-left">
+                  Customer
+                </th>
                 {columns.map((col) => (
                   <th key={col.group} className="px-2 py-2.5 text-center">
                     {col.label}
@@ -189,6 +189,7 @@ export function PrimalCustomerChart({
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </section>
