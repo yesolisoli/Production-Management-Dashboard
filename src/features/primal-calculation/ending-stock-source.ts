@@ -89,8 +89,37 @@ export async function saveEndingStockForDate(
   }));
   if (rows.length === 0) return;
   const supabase = createClient();
+
+  // Skip no-op writes. The auto-persist re-saves the recalculated Ending Stock
+  // on every recalculation, so re-upserting an identical value would still bump
+  // `updated_at` and create a meaningless audit-log entry. Read the currently
+  // stored values first and upsert only the groups that actually changed (or
+  // have no stored row yet — `stored.get` is undefined, so those still insert).
+  const { data: existing, error: readError } = await supabase
+    .from("primal_ending_stock")
+    .select("group_name, ending_stock")
+    .eq("work_date", date)
+    .in(
+      "group_name",
+      rows.map((r) => r.group_name),
+    );
+  if (readError) throw new Error(readError.message);
+  const stored = new Map(
+    ((existing ?? []) as EndingStockRow[]).map((r) => [
+      r.group_name,
+      r.ending_stock,
+    ]),
+  );
+  const changed = rows.filter(
+    (r) => stored.get(r.group_name) !== r.ending_stock,
+  );
+  if (changed.length === 0) return;
+
   const { error } = await supabase
     .from("primal_ending_stock")
-    .upsert(rows, { onConflict: "work_date,group_name", ignoreDuplicates: false });
+    .upsert(changed, {
+      onConflict: "work_date,group_name",
+      ignoreDuplicates: false,
+    });
   if (error) throw new Error(error.message);
 }

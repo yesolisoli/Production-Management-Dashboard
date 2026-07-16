@@ -65,7 +65,7 @@ export function PrimalAvailabilityChart({
             <BarChart3 size={16} />
           </span>
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-base font-semibold text-slate-900">
               Today&apos;s Availability
             </h2>
             <p className="text-xs text-slate-500">

@@ -192,14 +192,20 @@ export function AllocationSheetSection({
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <header className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:p-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
               <ClipboardList size={16} />
             </span>
-            <h2 className="text-base font-semibold text-slate-900">
-              Floor Instructions / Standing Rules
-            </h2>
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-slate-900">
+                Floor Instructions / Standing Rules
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Floor-facing rules for cutting and packaging. These appear on
+                the daily allocation sheet.
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-500">
             <Legend dot="bg-red-500" label="Red = DO NOT" />
@@ -208,10 +214,6 @@ export function AllocationSheetSection({
             <Legend dot="bg-slate-400" label="Gray = GENERAL NOTE" />
           </div>
         </div>
-        <p className="text-xs text-slate-500">
-          Floor-facing rules for cutting and packaging. These appear on the
-          daily allocation sheet.
-        </p>
       </header>
 
       {/* Add / edit form */}
