@@ -140,6 +140,7 @@ export function PrimalCalculationPage() {
               primalTotal={primalTotalHogCount(counts, {
                 fromPrevDay: heldOverPrev,
                 toNextDay: intake.held_over,
+                deaths: intake.deaths_on_arrival,
               })}
               sow={intake.todays_cutting}
               sideOrders={intake.side_orders}

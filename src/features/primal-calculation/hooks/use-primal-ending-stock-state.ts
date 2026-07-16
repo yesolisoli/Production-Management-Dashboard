@@ -101,7 +101,11 @@ export function usePrimalEndingStockState({
       customerOrders,
       openingStock,
       customRows,
-      { fromPrevDay: heldOverPrev, toNextDay: intake.held_over },
+      {
+        fromPrevDay: heldOverPrev,
+        toNextDay: intake.held_over,
+        deaths: intake.deaths_on_arrival,
+      },
     );
     const out = emptyEndingStockByGroup();
     for (const row of rows) out[row.group] = row.endingStock;

@@ -84,19 +84,23 @@ export function ReadOnlyRow({
   // When true, positive values render with an explicit "+" prefix (negatives
   // already show "−"). Used for adjustment rows that add to a running total.
   signed = false,
+  // When true, dials the label and value down a size — for secondary rows like a
+  // collapsed section's breakdown, so they read as children of the main figures.
+  compact = false,
 }: {
   label: string;
   value: number;
   emphasis?: boolean;
   alignWithSteppers?: boolean;
   signed?: boolean;
+  compact?: boolean;
 }) {
   const display = signed && value > 0 ? `+${value}` : value;
   return (
     <div className="flex items-center justify-between gap-2">
       <span
         className={clsx(
-          "text-sm",
+          compact ? "text-xs" : "text-sm",
           emphasis ? "font-semibold text-slate-700" : "text-slate-500",
         )}
       >
@@ -113,7 +117,8 @@ export function ReadOnlyRow({
         />
         <span
           className={clsx(
-            "flex h-8 items-center justify-center text-xl font-extrabold tabular-nums text-slate-900",
+            "flex h-8 items-center justify-center tabular-nums text-slate-900",
+            compact ? "text-base font-medium" : "text-xl font-extrabold",
             alignWithSteppers ? "w-12" : "w-12 lg:w-auto",
           )}
         >

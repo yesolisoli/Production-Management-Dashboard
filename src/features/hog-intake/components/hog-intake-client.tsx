@@ -98,6 +98,7 @@ export function HogIntakeClient() {
                   rwa={hogCounts.RWA}
                   heldOverToday={record.held_over}
                   heldOverPrev={prevHeldOver}
+                  deaths={record.deaths_on_arrival}
                   total={totals.yieldTotal}
                 />
                 <HogCountGrid counts={hogCounts} onChangeCount={setHogCount} />

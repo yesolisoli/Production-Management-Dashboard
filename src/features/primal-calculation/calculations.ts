@@ -1,9 +1,9 @@
 import {
   clampNonNegativeInt,
   netYieldTotal,
-  NO_HELD_OVER,
+  NO_YIELD_ADJUSTMENT,
   PIECES_PER_HOG,
-  type HeldOverAdjustment,
+  type YieldAdjustment,
 } from "@/features/hog-intake/calculations";
 import type { HogCounts } from "@/features/hog-intake/types";
 import { specsForCategory } from "./product-specs";
@@ -45,7 +45,7 @@ export { clampNonNegativeInt };
 // -------------------------------------------------------------------
 export function primalTotalHogCount(
   counts: HogCounts,
-  heldOver: HeldOverAdjustment = NO_HELD_OVER,
+  heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
 ): number {
   // JP + RWA is exactly the yield pool, so the held-over adjustment lives in one
   // place (netYieldTotal) rather than being re-derived here.
@@ -129,7 +129,7 @@ export const PRIMAL_PIECES_PER_HOG = PIECES_PER_HOG;
 export function groupExpectedProduction(
   group: PrimalGroup,
   counts: HogCounts,
-  heldOver: HeldOverAdjustment = NO_HELD_OVER,
+  heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
 ): number {
   void group;
   return calculateExpectedProduction(
@@ -167,7 +167,7 @@ export function buildGroupAvailability(
   counts: HogCounts,
   openingStock: number,
   minReserve: number,
-  heldOver: HeldOverAdjustment = NO_HELD_OVER,
+  heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
 ): GroupAvailability {
   const expectedProduction = groupExpectedProduction(group, counts, heldOver);
   const availableStock =
@@ -224,7 +224,7 @@ export function buildAvailabilityRows(
   customRows: CustomRowsForDate = [],
   // Held-over hogs (prev day carried in / today held to next day) — shift the
   // yield pool that feeds every group's Expected Production.
-  heldOver: HeldOverAdjustment = NO_HELD_OVER,
+  heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
   minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
 ): GroupAvailability[] {
   const specialByGroup = sumCustomerOrdersByGroup(customerOrders);
@@ -262,7 +262,7 @@ export function buildCustomGroupAvailability(
   customerOrders: CustomerOrdersForDate,
   customRows: CustomRowsForDate,
   minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
-  heldOver: HeldOverAdjustment = NO_HELD_OVER,
+  heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
 ): GroupAvailability[] {
   const customByGroup = sumCustomRowsByGroup(customRows);
   return customGroups.map((g) =>

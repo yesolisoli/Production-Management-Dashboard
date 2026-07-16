@@ -72,29 +72,40 @@ export function yieldTotal(counts: HogCounts): number {
   return YIELD_HOG_TYPES.reduce((sum, key) => sum + counts[key], 0);
 }
 
-// Held-over hogs shift yield between production days: hogs held to the next day
-// (toNextDay) aren't cut today, while hogs carried in from the previous day
-// (fromPrevDay) are cut today. Net effect on today's yield: fromPrevDay − toNextDay.
-export type HeldOverAdjustment = {
+// Adjustments to today's cuttable yield pool:
+//   • held-over hogs shift yield between production days — hogs held to the next
+//     day (toNextDay) aren't cut today, while hogs carried in from the previous
+//     day (fromPrevDay) are cut today.
+//   • DOA/DOP (deaths) are hogs dead on arrival / dead on processing — never cut,
+//     so removed outright. Unlike held-over hogs they don't carry to any other
+//     day, so they only ever subtract here.
+// Net effect on today's yield: fromPrevDay − toNextDay − deaths.
+export type YieldAdjustment = {
   fromPrevDay: number;
   toNextDay: number;
+  deaths: number;
 };
 
-export const NO_HELD_OVER: HeldOverAdjustment = { fromPrevDay: 0, toNextDay: 0 };
+export const NO_YIELD_ADJUSTMENT: YieldAdjustment = {
+  fromPrevDay: 0,
+  toNextDay: 0,
+  deaths: 0,
+};
 
 // Yield hogs actually cut today: the JP + RWA pool, minus hogs held over to the
-// next day, plus hogs carried in from the previous day. Drives both the "Primal
-// Total" shown on the cards and the expected primal production on the Primal
-// Calc chart. Clamped so it never goes negative.
+// next day and minus DOA/DOP losses, plus hogs carried in from the previous day.
+// Drives both the "Primal Total" shown on the cards and the expected primal
+// production on the Primal Calc chart. Clamped so it never goes negative.
 export function netYieldTotal(
   counts: HogCounts,
-  heldOver: HeldOverAdjustment = NO_HELD_OVER,
+  adjustment: YieldAdjustment = NO_YIELD_ADJUSTMENT,
 ): number {
   return Math.max(
     0,
     yieldTotal(counts) -
-      clampNonNegativeInt(heldOver.toNextDay) +
-      clampNonNegativeInt(heldOver.fromPrevDay),
+      clampNonNegativeInt(adjustment.toNextDay) +
+      clampNonNegativeInt(adjustment.fromPrevDay) -
+      clampNonNegativeInt(adjustment.deaths),
   );
 }
 
@@ -136,6 +147,7 @@ export function deriveTotals(
     yieldTotal: netYieldTotal(counts, {
       fromPrevDay: heldOverFromPrevDay,
       toNextDay: record.held_over,
+      deaths: record.deaths_on_arrival,
     }),
     projectedForCutting: projectedForCutting(record.next_day),
     overSold: consumed > total,

@@ -116,7 +116,11 @@ export function derivePrimalViewModel(
   const counts = intake.hog_counts;
   // Net held-over shift on today's yield: yesterday's hogs cut today (added),
   // today's hogs held to tomorrow (subtracted).
-  const heldOver = { fromPrevDay: heldOverPrev, toNextDay: intake.held_over };
+  const heldOver = {
+    fromPrevDay: heldOverPrev,
+    toNextDay: intake.held_over,
+    deaths: intake.deaths_on_arrival,
+  };
 
   // Per-category order-entry rows (spec + its editable order).
   const rowsByCategory = {} as Record<PrimalCategory, CategorySkuRow[]>;
