@@ -1,5 +1,10 @@
 import { createDateDraftStore } from "@/lib/local-storage";
-import { emptyHogCounts, HOG_TYPES, type HogIntakeRecord } from "./types";
+import {
+  emptyHogCounts,
+  FARM_RECORD_TYPES,
+  HOG_TYPES,
+  type HogIntakeRecord,
+} from "./types";
 
 const DRAFT_KEY_PREFIX = "hog-intake.draft.";
 
@@ -43,7 +48,7 @@ function coerceDraft(raw: unknown, date: string): HogIntakeRecord | null {
         .map((row): HogIntakeRecord["farm_records"][number] | null => {
           if (!row || typeof row !== "object") return null;
           const f = row as Record<string, unknown>;
-          const type = HOG_TYPES.find((t) => t === f.type) ?? "";
+          const type = FARM_RECORD_TYPES.find((t) => t === f.type) ?? "";
           return {
             id: typeof f.id === "string" ? f.id : crypto.randomUUID(),
             farm: typeof f.farm === "string" ? f.farm : "",

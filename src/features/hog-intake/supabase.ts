@@ -5,10 +5,11 @@ import { previousDateString } from "@/lib/date";
 import { createClient } from "@/lib/supabase/client";
 import {
   emptyHogCounts,
+  FARM_RECORD_TYPES,
   HOG_TYPES,
   type FarmRecord,
+  type FarmRecordType,
   type HogIntakeRecord,
-  type HogType,
 } from "./types";
 
 type HogIntakeRow = {
@@ -64,8 +65,8 @@ function coerceFarmRecords(raw: unknown): FarmRecord[] {
     .map((row): FarmRecord | null => {
       if (!row || typeof row !== "object") return null;
       const r = row as Record<string, unknown>;
-      const type: HogType | "" =
-        HOG_TYPES.find((t) => t === r.type) ?? "";
+      const type: FarmRecordType | "" =
+        FARM_RECORD_TYPES.find((t) => t === r.type) ?? "";
       return {
         id: typeof r.id === "string" ? r.id : crypto.randomUUID(),
         farm: typeof r.farm === "string" ? r.farm : "",

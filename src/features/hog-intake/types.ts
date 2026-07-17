@@ -24,17 +24,26 @@ export const YIELD_HOG_TYPES = ["JP", "RWA"] as const;
 export const FARM_DERIVED_HOG_TYPES = ["JP", "RWA", "BK"] as const;
 export type FarmDerivedHogType = (typeof FARM_DERIVED_HOG_TYPES)[number];
 
+// A Farm Delivery Records label for BK stock that is cut for primal: its count
+// rolls up into JP (primal), never BK. Row-level only — not a canonical HogType
+// and never a HogCounts key.
+export const BK_JP_TYPE = "BK/JP";
+
 // Types offered in the Farm Delivery Records dropdown. JP / RWA / BK roll up
-// from the rows (FARM_DERIVED_HOG_TYPES); Sow is selectable for labeling a
-// delivery, but its count stays manual (the Sow card), so it is not summed here.
-export const FARM_RECORD_TYPES = ["JP", "RWA", "BK", "Sow"] as const;
+// from the rows (FARM_DERIVED_HOG_TYPES); BK/JP is BK cut for primal, so its
+// count folds into JP. Sow is selectable for labeling a delivery, but its count
+// stays manual (the Sow card), so it is not summed here.
+export const FARM_RECORD_TYPES = ["JP", "RWA", "BK", BK_JP_TYPE, "Sow"] as const;
+
+// A Farm Delivery Records row type: any canonical HogType plus the BK/JP label.
+export type FarmRecordType = HogType | typeof BK_JP_TYPE;
 
 export type HogCounts = Record<HogType, number>;
 
 export type FarmRecord = {
   id: string;
   farm: string;
-  type: HogType | "";
+  type: FarmRecordType | "";
   tattoo: string;
   count: number;
   // Local time the farm's load arrived, as "HH:MM". Optional — older records

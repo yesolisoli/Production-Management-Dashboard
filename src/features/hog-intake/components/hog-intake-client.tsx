@@ -36,7 +36,6 @@ export function HogIntakeClient() {
     setProcessField,
     setNextDayField,
     setTodaysCutting,
-    setIncludeBkInYield,
     addFarmRecord,
     updateFarmRecord,
     removeFarmRecord,
@@ -119,8 +118,6 @@ export function HogIntakeClient() {
             onAdd={addFarmRecord}
             onUpdate={updateFarmRecord}
             onRemove={removeFarmRecord}
-            includeBkInYield={record.include_bk_in_yield}
-            onToggleIncludeBkInYield={setIncludeBkInYield}
           />
 
           <SaveBar status={status} dirty={dirty} onReset={reset} />

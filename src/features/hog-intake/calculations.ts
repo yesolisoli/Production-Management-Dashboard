@@ -1,4 +1,5 @@
 import {
+  BK_JP_TYPE,
   FARM_DERIVED_HOG_TYPES,
   HOG_TYPES,
   YIELD_HOG_TYPES,
@@ -23,7 +24,10 @@ export function derivedCountsFromFarmRecords(
     FARM_DERIVED_HOG_TYPES.map((type) => [type, 0]),
   ) as Record<FarmDerivedHogType, number>;
   for (const row of records) {
-    if (row.type && FARM_DERIVED_SET.has(row.type)) {
+    // BK/JP is BK stock cut for primal — its count rolls up into JP, not BK.
+    if (row.type === BK_JP_TYPE) {
+      counts.JP += row.count;
+    } else if (row.type && FARM_DERIVED_SET.has(row.type)) {
       counts[row.type as FarmDerivedHogType] += row.count;
     }
   }

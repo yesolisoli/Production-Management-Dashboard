@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Check, ChevronDown, Plus, Truck, X } from "lucide-react";
+import { ChevronDown, Plus, Truck, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { BaseDropdown, DROPDOWN_WIDTH } from "@/features/assignment-board/components/base-dropdown";
 import { TimePickerInput } from "@/features/assignment-board/components/modals/time-picker-input";
@@ -9,7 +9,7 @@ import { NumberStepper } from "@/components/shared/number-stepper";
 import {
   FARM_RECORD_TYPES,
   type FarmRecord,
-  type HogType,
+  type FarmRecordType,
 } from "../types";
 
 type FarmRecordsProps = {
@@ -17,22 +17,20 @@ type FarmRecordsProps = {
   onAdd: () => void;
   onUpdate: (id: string, patch: Partial<Omit<FarmRecord, "id">>) => void;
   onRemove: (id: string) => void;
-  // Day-level opt-in: fold the BK count into the Primal Calc yield pool. Shown
-  // and toggled only from BK rows (BK is normally non-primal).
-  includeBkInYield: boolean;
-  onToggleIncludeBkInYield: (value: boolean) => void;
 };
 
 // Colored pill styling per delivery type. Unassigned rows stay neutral so they
 // read as "not yet counted toward primal".
 const TYPE_PILL: Record<
-  HogType | "",
+  FarmRecordType | "",
   { bg: string; text: string; dot: string }
 > = {
   "": { bg: "bg-slate-100", text: "text-slate-500", dot: "bg-slate-400" },
   JP: { bg: "bg-blue-100", text: "text-blue-700", dot: "bg-blue-500" },
   RWA: { bg: "bg-violet-100", text: "text-violet-700", dot: "bg-violet-500" },
   BK: { bg: "bg-amber-100", text: "text-amber-700", dot: "bg-amber-500" },
+  // BK/JP folds into primal JP — tinted toward JP's blue but kept distinct.
+  "BK/JP": { bg: "bg-sky-100", text: "text-sky-700", dot: "bg-sky-500" },
   Sow: { bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500" },
   Round: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" },
   Suckling: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" },
@@ -40,17 +38,16 @@ const TYPE_PILL: Record<
 };
 
 // Selectable delivery types for a farm row. "" reads as Unassigned.
-const TYPE_OPTIONS: (HogType | "")[] = ["", ...FARM_RECORD_TYPES];
+const TYPE_OPTIONS: (FarmRecordType | "")[] = ["", ...FARM_RECORD_TYPES];
 
-const typeLabel = (type: HogType | "") => (type === "" ? "Unassigned" : type);
+const typeLabel = (type: FarmRecordType | "") =>
+  type === "" ? "Unassigned" : type;
 
 export function FarmRecords({
   rows,
   onAdd,
   onUpdate,
   onRemove,
-  includeBkInYield,
-  onToggleIncludeBkInYield,
 }: FarmRecordsProps) {
   const isEmpty = rows.length === 0;
 
@@ -102,18 +99,10 @@ export function FarmRecords({
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <TypeSelect
-                        value={row.type}
-                        onChange={(type) => onUpdate(row.id, { type })}
-                      />
-                      {row.type === "BK" ? (
-                        <PrimalToggle
-                          on={includeBkInYield}
-                          onChange={onToggleIncludeBkInYield}
-                        />
-                      ) : null}
-                    </div>
+                    <TypeSelect
+                      value={row.type}
+                      onChange={(type) => onUpdate(row.id, { type })}
+                    />
                   </td>
                   <td className="px-3 py-2 text-center">
                     <input
@@ -245,48 +234,14 @@ function parseTimeInput(raw: string): string | null {
   return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
-// Compact opt-in switch shown only on BK rows: folds the day's BK count into
-// the Primal Calc yield pool. Bound to a single day-level flag, so every BK row
-// mirrors — and can flip — the same state.
-function PrimalToggle({
-  on,
-  onChange,
-}: {
-  on: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={() => onChange(!on)}
-      title="Count BK toward Primal Calc"
-      className={clsx(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition",
-        on
-          ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-          : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600",
-      )}
-    >
-      {on ? (
-        <Check size={11} className="shrink-0" />
-      ) : (
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
-      )}
-      {on ? "In Primal" : "Add to Primal"}
-    </button>
-  );
-}
-
 // Custom pill dropdown for a row's delivery type. Replaces the native <select>
 // so the whole pill (including the chevron) is a reliable click target.
 function TypeSelect({
   value,
   onChange,
 }: {
-  value: HogType | "";
-  onChange: (type: HogType | "") => void;
+  value: FarmRecordType | "";
+  onChange: (type: FarmRecordType | "") => void;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
