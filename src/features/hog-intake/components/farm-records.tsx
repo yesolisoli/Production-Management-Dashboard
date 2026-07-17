@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronDown, Plus, Truck, X } from "lucide-react";
+import { Check, ChevronDown, Plus, Truck, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { BaseDropdown, DROPDOWN_WIDTH } from "@/features/assignment-board/components/base-dropdown";
 import { TimePickerInput } from "@/features/assignment-board/components/modals/time-picker-input";
@@ -17,6 +17,10 @@ type FarmRecordsProps = {
   onAdd: () => void;
   onUpdate: (id: string, patch: Partial<Omit<FarmRecord, "id">>) => void;
   onRemove: (id: string) => void;
+  // Day-level opt-in: fold the BK count into the Primal Calc yield pool. Shown
+  // and toggled only from BK rows (BK is normally non-primal).
+  includeBkInYield: boolean;
+  onToggleIncludeBkInYield: (value: boolean) => void;
 };
 
 // Colored pill styling per delivery type. Unassigned rows stay neutral so they
@@ -45,6 +49,8 @@ export function FarmRecords({
   onAdd,
   onUpdate,
   onRemove,
+  includeBkInYield,
+  onToggleIncludeBkInYield,
 }: FarmRecordsProps) {
   const isEmpty = rows.length === 0;
 
@@ -64,10 +70,13 @@ export function FarmRecords({
         </h3>
       </div>
 
-      <div className="overflow-x-auto">
-      <table className="w-full min-w-xl table-fixed border-t border-slate-100 text-sm">
+      {/* Table wrapped in a rounded, bordered container to match the Today's
+          Availability table. */}
+      <div className="px-5 pb-2">
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <table className="w-full min-w-xl table-fixed border-collapse text-sm">
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             <th className="w-[32%] pl-7 pr-5 py-3">Farm</th>
             <th className="w-[15%] pl-6 pr-3 py-3">Type</th>
             <th className="w-[16%] px-3 py-3 text-center">Tattoo / Tag</th>
@@ -93,10 +102,18 @@ export function FarmRecords({
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <TypeSelect
-                      value={row.type}
-                      onChange={(type) => onUpdate(row.id, { type })}
-                    />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <TypeSelect
+                        value={row.type}
+                        onChange={(type) => onUpdate(row.id, { type })}
+                      />
+                      {row.type === "BK" ? (
+                        <PrimalToggle
+                          on={includeBkInYield}
+                          onChange={onToggleIncludeBkInYield}
+                        />
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-center">
                     <input
@@ -147,6 +164,7 @@ export function FarmRecords({
           </tbody>
         ) : null}
       </table>
+      </div>
       </div>
 
       {!isEmpty ? (
@@ -227,6 +245,40 @@ function parseTimeInput(raw: string): string | null {
   return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
+// Compact opt-in switch shown only on BK rows: folds the day's BK count into
+// the Primal Calc yield pool. Bound to a single day-level flag, so every BK row
+// mirrors — and can flip — the same state.
+function PrimalToggle({
+  on,
+  onChange,
+}: {
+  on: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      title="Count BK toward Primal Calc"
+      className={clsx(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition",
+        on
+          ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+          : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600",
+      )}
+    >
+      {on ? (
+        <Check size={11} className="shrink-0" />
+      ) : (
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
+      )}
+      {on ? "In Primal" : "Add to Primal"}
+    </button>
+  );
+}
+
 // Custom pill dropdown for a row's delivery type. Replaces the native <select>
 // so the whole pill (including the chevron) is a reliable click target.
 function TypeSelect({
@@ -264,6 +316,7 @@ function TypeSelect({
         triggerRef={triggerRef}
         minWidth={DROPDOWN_WIDTH.xsmall}
         offsetY={4}
+        flipThreshold={220}
       >
         <div className="py-1.5">
           {TYPE_OPTIONS.map((option) => {

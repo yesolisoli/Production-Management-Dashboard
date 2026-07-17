@@ -137,11 +137,15 @@ export function PrimalCalculationPage() {
           <div className="flex items-center gap-2 sm:gap-4">
             <IntakeHeaderStats
               status={intakeStatus.kind}
-              primalTotal={primalTotalHogCount(counts, {
-                fromPrevDay: heldOverPrev,
-                toNextDay: intake.held_over,
-                deaths: intake.deaths_on_arrival,
-              })}
+              primalTotal={primalTotalHogCount(
+                counts,
+                {
+                  fromPrevDay: heldOverPrev,
+                  toNextDay: intake.held_over,
+                  deaths: intake.deaths_on_arrival,
+                },
+                intake.include_bk_in_yield,
+              )}
               sow={intake.todays_cutting}
               sideOrders={intake.side_orders}
               forCutting={intakeTotals.forCutting}

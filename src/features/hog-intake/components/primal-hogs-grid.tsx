@@ -8,6 +8,9 @@ import { CardIcon, CardShell, ReadOnlyRow } from "@/components/shared/card";
 type PrimalHogsGridProps = {
   jp: number;
   rwa: number;
+  // BK is normally non-primal; when the operator opts in for the day it is
+  // folded into Primal Total and shown here as its own row. null when excluded.
+  bk: number | null;
   // Hogs held over to the NEXT day (from Today's Adjustments) — not cut today,
   // so subtracted from Primal Total. Shown only when non-zero.
   heldOverToday: number;
@@ -31,6 +34,7 @@ type PrimalHogsGridProps = {
 export function PrimalHogsGrid({
   jp,
   rwa,
+  bk,
   heldOverToday,
   heldOverPrev,
   deaths,
@@ -62,6 +66,9 @@ export function PrimalHogsGrid({
       <div className="space-y-2">
         <ReadOnlyRow label="JP" value={jp} alignWithSteppers={false} />
         <ReadOnlyRow label="RWA" value={rwa} alignWithSteppers={false} />
+        {bk !== null ? (
+          <ReadOnlyRow label="BK" value={bk} alignWithSteppers={false} />
+        ) : null}
 
         {adjustments.length > 0 ? (
           <div>

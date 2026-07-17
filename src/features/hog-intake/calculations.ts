@@ -67,9 +67,15 @@ export function forCutting(counts: HogCounts, sideOrders: number): number {
   return totalIntake(counts) - hogsConsumedBySideOrders(sideOrders);
 }
 
-// Only JP, RWA contribute. BK / Sow / Round / Suckling / Customer excluded.
-export function yieldTotal(counts: HogCounts): number {
-  return YIELD_HOG_TYPES.reduce((sum, key) => sum + counts[key], 0);
+// Only JP, RWA contribute. Sow / Round / Suckling / Customer always excluded.
+// BK is excluded by default, but folded in when includeBk is set — an opt-in
+// per-day override (record.include_bk_in_yield) for days its hogs are cut for
+// primal. Its whole count is added; the JP/RWA-based adjustments don't touch it.
+export function yieldTotal(counts: HogCounts, includeBk = false): number {
+  return (
+    YIELD_HOG_TYPES.reduce((sum, key) => sum + counts[key], 0) +
+    (includeBk ? counts.BK : 0)
+  );
 }
 
 // Adjustments to today's cuttable yield pool:
@@ -99,10 +105,11 @@ export const NO_YIELD_ADJUSTMENT: YieldAdjustment = {
 export function netYieldTotal(
   counts: HogCounts,
   adjustment: YieldAdjustment = NO_YIELD_ADJUSTMENT,
+  includeBk = false,
 ): number {
   return Math.max(
     0,
-    yieldTotal(counts) -
+    yieldTotal(counts, includeBk) -
       clampNonNegativeInt(adjustment.toNextDay) +
       clampNonNegativeInt(adjustment.fromPrevDay) -
       clampNonNegativeInt(adjustment.deaths),
@@ -144,11 +151,15 @@ export function deriveTotals(
     totalIntake: total,
     totalHogs: total,
     forCutting: total - consumed,
-    yieldTotal: netYieldTotal(counts, {
-      fromPrevDay: heldOverFromPrevDay,
-      toNextDay: record.held_over,
-      deaths: record.deaths_on_arrival,
-    }),
+    yieldTotal: netYieldTotal(
+      counts,
+      {
+        fromPrevDay: heldOverFromPrevDay,
+        toNextDay: record.held_over,
+        deaths: record.deaths_on_arrival,
+      },
+      record.include_bk_in_yield,
+    ),
     projectedForCutting: projectedForCutting(record.next_day),
     overSold: consumed > total,
   };

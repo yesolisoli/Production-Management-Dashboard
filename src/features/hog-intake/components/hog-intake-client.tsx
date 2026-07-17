@@ -36,6 +36,7 @@ export function HogIntakeClient() {
     setProcessField,
     setNextDayField,
     setTodaysCutting,
+    setIncludeBkInYield,
     addFarmRecord,
     updateFarmRecord,
     removeFarmRecord,
@@ -96,6 +97,7 @@ export function HogIntakeClient() {
                 <PrimalHogsGrid
                   jp={hogCounts.JP}
                   rwa={hogCounts.RWA}
+                  bk={record.include_bk_in_yield ? hogCounts.BK : null}
                   heldOverToday={record.held_over}
                   heldOverPrev={prevHeldOver}
                   deaths={record.deaths_on_arrival}
@@ -117,6 +119,8 @@ export function HogIntakeClient() {
             onAdd={addFarmRecord}
             onUpdate={updateFarmRecord}
             onRemove={removeFarmRecord}
+            includeBkInYield={record.include_bk_in_yield}
+            onToggleIncludeBkInYield={setIncludeBkInYield}
           />
 
           <SaveBar status={status} dirty={dirty} onReset={reset} />

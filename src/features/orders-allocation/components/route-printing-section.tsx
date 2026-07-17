@@ -159,7 +159,10 @@ export function RoutePrintingSection({
           description="Route deadlines are set Monday through Friday. Pick a weekday to see its schedule."
         />
       ) : (
-        <div className="overflow-x-auto p-4 sm:p-5">
+        <div className="p-4 sm:p-5">
+          {/* Table wrapped in a rounded, bordered container to match the Today's
+              Availability table. */}
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-248 table-fixed text-sm">
             <colgroup>
               <col className="w-9" />
@@ -167,14 +170,14 @@ export function RoutePrintingSection({
               <col className="w-32" />
               <col className="w-96" />
               <col className="w-44" />
-              <col className="w-40" />
+              <col className="w-52" />
               <col className="w-44" />
               <col className="w-44" />
               <col />
             </colgroup>
             <thead>
-              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 [&>th]:border-b [&>th]:border-slate-200 [&>th]:bg-slate-50 [&>th]:px-3 [&>th]:py-2.5">
-                <th className="rounded-l-lg" />
+              <tr className="text-center text-xs font-semibold uppercase tracking-wide text-slate-500 [&>th]:whitespace-nowrap [&>th]:border-b [&>th]:border-slate-200 [&>th]:bg-slate-50 [&>th]:px-4 [&>th]:py-2.5">
+                <th />
                 <th>Route</th>
                 <th>Deadline</th>
                 <th>Related Products</th>
@@ -226,7 +229,7 @@ export function RoutePrintingSection({
                     </div>
                   </span>
                 </th>
-                <th className="rounded-r-lg">Notes</th>
+                <th className="text-left">Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -243,7 +246,7 @@ export function RoutePrintingSection({
                   <Fragment key={row.route}>
                     <tr
                       onClick={() => hasItems && toggle(row.route)}
-                      className={`[&>td]:border-b [&>td]:border-slate-100 [&>td]:px-3 [&>td]:py-3 ${
+                      className={`[&>td]:border-b [&>td]:border-slate-100 [&>td]:px-4 [&>td]:py-3 [&>td]:text-center ${
                         hasItems
                           ? "cursor-pointer transition hover:bg-slate-50/60"
                           : ""
@@ -265,21 +268,23 @@ export function RoutePrintingSection({
                       {/* Stop propagation so editing the deadline doesn't
                           toggle the row's expansion. */}
                       <td onClick={(e) => e.stopPropagation()}>
-                        <TimeInput
-                          value={row.deadline}
-                          onChange={(v) =>
-                            onSetRouteDeadline(
-                              String(row.route),
-                              fromTimeInputValue(v),
-                            )
-                          }
-                          ariaLabel={`Route ${row.route} print deadline`}
-                          className="h-9 w-32"
-                        />
+                        <div className="flex justify-center">
+                          <TimeInput
+                            value={row.deadline}
+                            onChange={(v) =>
+                              onSetRouteDeadline(
+                                String(row.route),
+                                fromTimeInputValue(v),
+                              )
+                            }
+                            ariaLabel={`Route ${row.route} print deadline`}
+                            className="h-9 w-32 text-center"
+                          />
+                        </div>
                       </td>
                       <td className="text-slate-600">
                         {hasItems ? (
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col items-center gap-0.5">
                             {preview.map((it) => (
                               <span
                                 key={it.sku}
@@ -308,7 +313,7 @@ export function RoutePrintingSection({
                       </td>
                       <td className="tabular-nums">
                         {row.productionFinish ? (
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col items-center gap-0.5">
                             <span className="font-medium text-slate-700">
                               {shortClock(row.productionFinish)}
                             </span>
@@ -344,17 +349,19 @@ export function RoutePrintingSection({
                       {/* Stop propagation so editing the time / note doesn't
                           toggle the row's expansion. */}
                       <td onClick={(e) => e.stopPropagation()}>
-                        <TimeInput
-                          value={prints[String(row.route)] ?? ""}
-                          onChange={(v) =>
-                            onSetRoutePrint(
-                              String(row.route),
-                              fromTimeInputValue(v),
-                            )
-                          }
-                          ariaLabel={`Route ${row.route} time printed`}
-                          className="h-9 w-32"
-                        />
+                        <div className="flex justify-center">
+                          <TimeInput
+                            value={prints[String(row.route)] ?? ""}
+                            onChange={(v) =>
+                              onSetRoutePrint(
+                                String(row.route),
+                                fromTimeInputValue(v),
+                              )
+                            }
+                            ariaLabel={`Route ${row.route} time printed`}
+                            className="h-9 w-32 text-center"
+                          />
+                        </div>
                       </td>
                       <td>
                         <span
@@ -376,7 +383,7 @@ export function RoutePrintingSection({
                           }
                           placeholder="Add note…"
                           aria-label={`Route ${row.route} note`}
-                          className="h-9 w-full min-w-40 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                          className="h-9 w-full min-w-40 rounded-lg border border-slate-200 bg-white px-2.5 text-left text-xs text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                         />
                       </td>
                     </tr>
@@ -465,6 +472,7 @@ export function RoutePrintingSection({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </section>

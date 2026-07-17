@@ -64,6 +64,11 @@ export type HogIntakeRecord = {
   // (hog_intake_records.todays_cutting) and shown as the Sow figure in the
   // Primal Calculation banner.
   todays_cutting: number;
+  // Optional per-day override: when true, the day's BK count is folded into the
+  // Primal Calc yield pool alongside JP / RWA. BK is normally excluded (see
+  // YIELD_HOG_TYPES); some days its hogs are cut for primal, so operators opt in
+  // per day from the Farm Delivery Records BK row. Defaults to false.
+  include_bk_in_yield: boolean;
   notes: string;
   farm_records: FarmRecord[];
   next_day: NextDay;
@@ -92,6 +97,7 @@ export function emptyHogIntakeRecord(date: string): HogIntakeRecord {
     deaths_on_arrival: 0,
     boars_count: 0,
     todays_cutting: 0,
+    include_bk_in_yield: false,
     notes: "",
     farm_records: [],
     next_day: { hog_count: 0, side_orders: 0, cooler_overstock: 0 },
@@ -109,6 +115,7 @@ export function isEmptyHogIntakeRecord(record: HogIntakeRecord): boolean {
     record.deaths_on_arrival === 0 &&
     record.boars_count === 0 &&
     record.todays_cutting === 0 &&
+    record.include_bk_in_yield === false &&
     record.notes.trim() === "" &&
     record.farm_records.length === 0 &&
     record.next_day.hog_count === 0 &&

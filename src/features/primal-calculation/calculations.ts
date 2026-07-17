@@ -46,10 +46,12 @@ export { clampNonNegativeInt };
 export function primalTotalHogCount(
   counts: HogCounts,
   heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
+  // Fold BK into the yield pool for the day (intake's include_bk_in_yield).
+  includeBk = false,
 ): number {
   // JP + RWA is exactly the yield pool, so the held-over adjustment lives in one
   // place (netYieldTotal) rather than being re-derived here.
-  return netYieldTotal(counts, heldOver);
+  return netYieldTotal(counts, heldOver, includeBk);
 }
 
 // Shared production primitive: expected pieces = base hog count ×
@@ -130,10 +132,12 @@ export function groupExpectedProduction(
   group: PrimalGroup,
   counts: HogCounts,
   heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
+  // When set, the day's BK count joins JP + RWA in the production pool.
+  includeBk = false,
 ): number {
   void group;
   return calculateExpectedProduction(
-    netYieldTotal(counts, heldOver),
+    netYieldTotal(counts, heldOver, includeBk),
     PRIMAL_PIECES_PER_HOG,
   );
 }
@@ -168,8 +172,14 @@ export function buildGroupAvailability(
   openingStock: number,
   minReserve: number,
   heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
+  includeBk = false,
 ): GroupAvailability {
-  const expectedProduction = groupExpectedProduction(group, counts, heldOver);
+  const expectedProduction = groupExpectedProduction(
+    group,
+    counts,
+    heldOver,
+    includeBk,
+  );
   const availableStock =
     expectedProduction + openingStock - specialCustomerOrders;
   const endingStock = availableStock - salesOrders;
@@ -226,6 +236,8 @@ export function buildAvailabilityRows(
   // yield pool that feeds every group's Expected Production.
   heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
   minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
+  // Fold BK into every group's Expected Production pool for the day.
+  includeBk = false,
 ): GroupAvailability[] {
   const specialByGroup = sumCustomerOrdersByGroup(customerOrders);
   const customByGroup = sumCustomRowsByGroup(customRows);
@@ -245,6 +257,7 @@ export function buildAvailabilityRows(
       openingStock[group.key],
       minReserve,
       heldOver,
+      includeBk,
     );
   });
 }
@@ -263,6 +276,7 @@ export function buildCustomGroupAvailability(
   customRows: CustomRowsForDate,
   minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
   heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
+  includeBk = false,
 ): GroupAvailability[] {
   const customByGroup = sumCustomRowsByGroup(customRows);
   return customGroups.map((g) =>
@@ -274,6 +288,7 @@ export function buildCustomGroupAvailability(
       0,
       minReserve,
       heldOver,
+      includeBk,
     ),
   );
 }

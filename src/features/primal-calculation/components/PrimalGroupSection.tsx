@@ -148,8 +148,10 @@ export function PrimalGroupSection({
 
       {expanded && (
         <div className="border-t border-slate-100">
-          {/* Table */}
-          <div className="overflow-x-auto">
+          {/* Table — wrapped in a rounded, bordered container with padding to
+              match the Today's Availability table. */}
+          <div className="p-4">
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
             {/* min-width must exceed the sum of the fixed columns (~44rem) plus
                 a usable Item column, otherwise table-fixed shrinks every column
                 proportionally and the flexible Item text collapses to one word
@@ -242,6 +244,7 @@ export function PrimalGroupSection({
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* Save / Clear — hidden for auto-persisting custom sections. */}

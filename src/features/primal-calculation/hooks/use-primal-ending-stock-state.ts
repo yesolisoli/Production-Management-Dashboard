@@ -9,7 +9,10 @@ import {
 } from "react";
 import { fetchPreviousHeldOver } from "@/features/hog-intake/supabase";
 import type { HogIntakeRecord } from "@/features/hog-intake/types";
-import { buildAvailabilityRows } from "../calculations";
+import {
+  buildAvailabilityRows,
+  DEFAULT_MIN_COOLER_RESERVE,
+} from "../calculations";
 import { SAVE_DEBOUNCE_MS } from "../constants";
 import {
   fetchPreviousEndingStock,
@@ -106,6 +109,8 @@ export function usePrimalEndingStockState({
         toNextDay: intake.held_over,
         deaths: intake.deaths_on_arrival,
       },
+      DEFAULT_MIN_COOLER_RESERVE,
+      intake.include_bk_in_yield,
     );
     const out = emptyEndingStockByGroup();
     for (const row of rows) out[row.group] = row.endingStock;

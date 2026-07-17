@@ -157,6 +157,8 @@ export function derivePrimalViewModel(
     openingStock,
     customRows,
     heldOver,
+    minReserve,
+    intake.include_bk_in_yield,
   );
 
   // Operator-added availability groups — derived the same way as catalog rows
@@ -171,6 +173,7 @@ export function derivePrimalViewModel(
     customRows,
     minReserve,
     heldOver,
+    intake.include_bk_in_yield,
   );
 
   // Calculated Ending Stock per catalog group (pieces) — shown read-only in

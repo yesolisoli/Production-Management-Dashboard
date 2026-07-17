@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   CUT_ROW_ID,
   WEEKLY_PLAN_DAYS,
@@ -19,6 +19,12 @@ type EditableNextDayField = "side_orders" | "cooler_overstock";
 // the Sow card's "Available This Week". The persisted rows live in
 // use-weekly-hog-schedule (single source of truth) and arrive via props.
 const COLLAPSED_KEY = "hog-intake.weekly-schedule.collapsed";
+// Separate collapse for the Sow/Custom "Hogs planned" rows nested in the grid.
+const PLANNED_COLLAPSED_KEY = "hog-intake.weekly-schedule.planned-collapsed";
+
+// The Sow & custom plan rows (all share this description) collapse together as a
+// nested group, keeping the primary Cut/Kill rows always visible.
+const PLANNED_DESCRIPTION = "Hogs planned";
 
 // The Weekly Hog Plan only carries Mon–Fri. Given the selected intake date,
 // return the plan day for the following business day (Fri/Sat/Sun → Mon).
@@ -71,6 +77,8 @@ export function WeeklyHogSchedule({
   onNextDayChange,
 }: WeeklyHogScheduleProps) {
   const [collapsed, setCollapsed] = useState(true);
+  // Nested collapse for the Sow & custom "Hogs planned" rows.
+  const [plannedCollapsed, setPlannedCollapsed] = useState(true);
   // Which cell is currently focused, keyed as `${rowIndex}-${day}`. A focused
   // cell whose value is 0 renders blank so users can type without clearing it.
   const [focusedCell, setFocusedCell] = useState<string | null>(null);
@@ -97,6 +105,9 @@ export function WeeklyHogSchedule({
       // render-driven sync, so the cascading-render concern doesn't apply.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (storedCollapsed !== null) setCollapsed(storedCollapsed === "true");
+      const storedPlanned = window.localStorage.getItem(PLANNED_COLLAPSED_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (storedPlanned !== null) setPlannedCollapsed(storedPlanned === "true");
     } catch {
       // ignore parse / access errors — fall back to defaults
     }
@@ -108,6 +119,18 @@ export function WeeklyHogSchedule({
       const next = !prev;
       try {
         window.localStorage.setItem(COLLAPSED_KEY, String(next));
+      } catch {
+        // ignore quota / access errors
+      }
+      return next;
+    });
+  }
+
+  function togglePlanned() {
+    setPlannedCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(PLANNED_COLLAPSED_KEY, String(next));
       } catch {
         // ignore quota / access errors
       }
@@ -167,12 +190,51 @@ export function WeeklyHogSchedule({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => (
-              <tr
-                key={row.label}
-                className={i > 0 ? "border-t border-slate-100" : undefined}
-              >
-                <th className="whitespace-nowrap px-4 py-2.5 text-left">
+            {rows.map((row, i) => {
+              const planned = row.description === PLANNED_DESCRIPTION;
+              const firstPlanned =
+                rows.findIndex((r) => r.description === PLANNED_DESCRIPTION) ===
+                i;
+              // Group toggle sits just above the first planned row and is always
+              // shown so the collapsed group can be re-opened.
+              const toggle = firstPlanned ? (
+                <tr key="planned-toggle" className="border-t border-slate-100">
+                  <td
+                    colSpan={1 + WEEKLY_PLAN_DAYS.length}
+                    className="px-2 py-1"
+                  >
+                    <button
+                      type="button"
+                      onClick={togglePlanned}
+                      aria-expanded={!plannedCollapsed}
+                      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-50"
+                    >
+                      <svg
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                        className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${plannedCollapsed ? "-rotate-90" : ""}`}
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      Sow &amp; custom plans
+                    </button>
+                  </td>
+                </tr>
+              ) : null;
+
+              // Planned rows fold away with the group; the toggle stays.
+              const rowEl =
+                planned && plannedCollapsed ? null : (
+                  <tr
+                    key={row.label}
+                    className={i > 0 ? "border-t border-slate-100" : undefined}
+                  >
+                    <th className="whitespace-nowrap px-4 py-2.5 text-left">
                   <span className="block font-semibold text-slate-700">
                     {row.label}
                   </span>
@@ -214,8 +276,16 @@ export function WeeklyHogSchedule({
                     </td>
                   );
                 })}
-              </tr>
-            ))}
+                  </tr>
+                );
+
+              return (
+                <Fragment key={row.id}>
+                  {toggle}
+                  {rowEl}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

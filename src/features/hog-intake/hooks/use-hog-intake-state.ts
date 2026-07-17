@@ -330,6 +330,10 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
     }));
   }, []);
 
+  const setIncludeBkInYield = useCallback((value: boolean) => {
+    setRecord((prev) => ({ ...prev, include_bk_in_yield: value }));
+  }, []);
+
   const setNotes = useCallback((notes: string) => {
     setRecord((prev) => ({ ...prev, notes }));
   }, []);
@@ -408,6 +412,7 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
     clearAllHogCounts,
     setProcessField,
     setTodaysCutting,
+    setIncludeBkInYield,
     setNotes,
     setNextDayField,
     addFarmRecord,

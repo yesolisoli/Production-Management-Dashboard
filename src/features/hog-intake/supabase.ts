@@ -19,6 +19,7 @@ type HogIntakeRow = {
   deaths_on_arrival: number;
   boars_count: number;
   todays_cutting: number;
+  include_bk_in_yield: boolean | null;
   notes: string | null;
   farm_records: unknown;
   next_day: unknown;
@@ -88,6 +89,7 @@ function rowToRecord(row: HogIntakeRow): HogIntakeRecord {
     deaths_on_arrival: row.deaths_on_arrival,
     boars_count: row.boars_count,
     todays_cutting: row.todays_cutting,
+    include_bk_in_yield: row.include_bk_in_yield === true,
     notes: row.notes ?? "",
     farm_records: coerceFarmRecords(row.farm_records),
     next_day: coerceNextDay(row.next_day),
@@ -103,7 +105,7 @@ export async function fetchHogIntakeByDate(
   const { data, error } = await supabase
     .from("hog_intake_records")
     .select(
-      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, todays_cutting, notes, farm_records, next_day, updated_at, updated_by",
+      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, todays_cutting, include_bk_in_yield, notes, farm_records, next_day, updated_at, updated_by",
     )
     .eq("intake_date", date)
     .maybeSingle();
@@ -149,6 +151,7 @@ export async function upsertHogIntakeRecord(
     deaths_on_arrival: record.deaths_on_arrival,
     boars_count: record.boars_count,
     todays_cutting: record.todays_cutting,
+    include_bk_in_yield: record.include_bk_in_yield,
     notes: record.notes,
     farm_records: record.farm_records,
     next_day: record.next_day,
@@ -159,7 +162,7 @@ export async function upsertHogIntakeRecord(
     .from("hog_intake_records")
     .upsert(payload, { onConflict: "intake_date", ignoreDuplicates: false })
     .select(
-      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, todays_cutting, notes, farm_records, next_day, updated_at, updated_by",
+      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, todays_cutting, include_bk_in_yield, notes, farm_records, next_day, updated_at, updated_by",
     )
     .single();
 
