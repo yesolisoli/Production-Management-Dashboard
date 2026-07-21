@@ -8,6 +8,7 @@ import {
 } from "@/features/hog-intake/types";
 import { loadHogIntakeForDate } from "../intake-source";
 import { type PrimalGroup, type PrimalGroupKey } from "../types";
+import { usePrimalAllocationsState } from "./use-primal-allocations-state";
 import { usePrimalCustomerOrdersState } from "./use-primal-customer-orders-state";
 import { usePrimalCustomGroupsState } from "./use-primal-custom-groups-state";
 import { usePrimalEndingStockState } from "./use-primal-ending-stock-state";
@@ -90,6 +91,15 @@ export function usePrimalCalculationState() {
   } = usePrimalCustomGroupsState({ date });
 
   const {
+    allocations,
+    incomingAllocations,
+    loadForDate: loadAllocations,
+    addAllocation,
+    updateAllocation,
+    removeAllocation,
+  } = usePrimalAllocationsState({ date });
+
+  const {
     openingStock,
     heldOverPrev,
     loadForDate: loadOpeningStock,
@@ -104,6 +114,8 @@ export function usePrimalCalculationState() {
     orders,
     customerOrders,
     customRows,
+    allocations,
+    incomingAllocations,
   });
 
   // ----------------------------- Intake ------------------------------
@@ -139,6 +151,7 @@ export function usePrimalCalculationState() {
       void loadOrders(initial);
       loadCustomerOrders(initial);
       loadCustomEntities(initial);
+      void loadAllocations(initial);
       void loadOpeningStock(initial);
       await loadIntakeForDate(initial);
       if (!cancelled) hasHydrated.current = true;
@@ -160,6 +173,7 @@ export function usePrimalCalculationState() {
       void loadOrders(nextDate);
       loadCustomerOrders(nextDate);
       loadCustomEntities(nextDate);
+      void loadAllocations(nextDate);
       void loadOpeningStock(nextDate);
       void loadIntakeForDate(nextDate);
     },
@@ -168,6 +182,7 @@ export function usePrimalCalculationState() {
       loadOrders,
       loadCustomerOrders,
       loadCustomEntities,
+      loadAllocations,
       loadOpeningStock,
       cancelPendingSave,
     ],
@@ -238,6 +253,8 @@ export function usePrimalCalculationState() {
     customCustomers,
     customGroups,
     customRows,
+    allocations,
+    incomingAllocations,
     openingStock,
     heldOverPrev,
     saveState,
@@ -258,6 +275,9 @@ export function usePrimalCalculationState() {
     updateCustomRowSpec,
     setCustomRowField,
     removeCustomRow,
+    addAllocation,
+    updateAllocation,
+    removeAllocation,
   };
 }
 

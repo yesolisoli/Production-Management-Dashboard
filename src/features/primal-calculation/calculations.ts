@@ -11,6 +11,7 @@ import {
   emptyProductOrder,
   groupForCategory,
   PRIMAL_GROUPS,
+  type AllocationsForDate,
   type AvailabilityStatus,
   type AvailabilityTotals,
   type CustomerAvailabilityColumn,
@@ -173,6 +174,12 @@ export function buildGroupAvailability(
   minReserve: number,
   heldOver: YieldAdjustment = NO_YIELD_ADJUSTMENT,
   includeBk = false,
+  // Pieces reserved for a LATER date via allocations — carved out of Available
+  // Stock (and therefore Ending Stock) so they aren't re-sold.
+  allocated = 0,
+  // Pieces arriving from allocations that TARGET this date — added back into
+  // Available Stock (completing the carry-over from their work date).
+  remainingProducts = 0,
 ): GroupAvailability {
   const expectedProduction = groupExpectedProduction(
     group,
@@ -181,7 +188,11 @@ export function buildGroupAvailability(
     includeBk,
   );
   const availableStock =
-    expectedProduction + openingStock - specialCustomerOrders;
+    expectedProduction +
+    openingStock +
+    remainingProducts -
+    specialCustomerOrders -
+    allocated;
   const endingStock = availableStock - salesOrders;
   return {
     group: group.key as PrimalGroupKey,
@@ -190,12 +201,53 @@ export function buildGroupAvailability(
     expectedProduction,
     openingStock,
     specialCustomerOrders,
+    allocated,
+    remainingProducts,
     availableStock,
     salesOrders,
     endingStock,
     shortage: Math.max(-endingStock, 0),
     status: calculateAvailabilityStatus(endingStock, minReserve),
   };
+}
+
+// Sum operator-entered allocations (pieces) into their production group.
+// Only catalog group keys carry allocations — an allocation always targets a
+// fixed primal group with carry-over stock.
+export function sumAllocationsByGroup(
+  allocations: AllocationsForDate,
+): Record<PrimalGroupKey, number> {
+  const totals = {} as Record<PrimalGroupKey, number>;
+  for (const group of PRIMAL_GROUPS) totals[group.key] = 0;
+  for (const alloc of allocations) {
+    if (alloc.group in totals) {
+      totals[alloc.group] += clampNonNegativeInt(alloc.qtyPcs);
+    }
+  }
+  return totals;
+}
+
+// Sum the allocations arriving on `viewedDate` (their target date) per group —
+// the date's "Remaining Products". Merges the incoming set fetched by target
+// date with any locally-edited rows targeting the same date, deduped by id so a
+// still-being-typed allocation reflects live (local wins) without being counted
+// twice against its persisted copy.
+export function sumRemainingByGroup(
+  incoming: AllocationsForDate,
+  local: AllocationsForDate,
+  viewedDate: string,
+): Record<PrimalGroupKey, number> {
+  const byId = new Map<string, AllocationsForDate[number]>();
+  for (const a of incoming) if (a.targetDate === viewedDate) byId.set(a.id, a);
+  for (const a of local) if (a.targetDate === viewedDate) byId.set(a.id, a);
+  const totals = {} as Record<PrimalGroupKey, number>;
+  for (const group of PRIMAL_GROUPS) totals[group.key] = 0;
+  for (const alloc of byId.values()) {
+    if (alloc.group in totals) {
+      totals[alloc.group] += clampNonNegativeInt(alloc.qtyPcs);
+    }
+  }
+  return totals;
 }
 
 // The production group a custom row belongs to: its explicit groupKey (set for
@@ -238,9 +290,23 @@ export function buildAvailabilityRows(
   minReserve: number = DEFAULT_MIN_COOLER_RESERVE,
   // Fold BK into every group's Expected Production pool for the day.
   includeBk = false,
+  // Allocations entered ON this date — subtracted per group from Available
+  // Stock. Defaults to none so existing callers are unaffected.
+  allocations: AllocationsForDate = [],
+  // Allocations TARGETING this date — added back per group as Remaining
+  // Products. Together with `viewedDate` (used to merge unsaved local rows that
+  // target this date) they complete the carry-over.
+  incomingAllocations: AllocationsForDate = [],
+  viewedDate = "",
 ): GroupAvailability[] {
   const specialByGroup = sumCustomerOrdersByGroup(customerOrders);
   const customByGroup = sumCustomRowsByGroup(customRows);
+  const allocatedByGroup = sumAllocationsByGroup(allocations);
+  const remainingByGroup = sumRemainingByGroup(
+    incomingAllocations,
+    allocations,
+    viewedDate,
+  );
   return PRIMAL_GROUPS.map((group) => {
     // Today's order pieces are pooled across every category in the group, so
     // a shared cut (Ribs) subtracts both types' orders from its one pool.
@@ -258,6 +324,8 @@ export function buildAvailabilityRows(
       minReserve,
       heldOver,
       includeBk,
+      allocatedByGroup[group.key],
+      remainingByGroup[group.key],
     );
   });
 }
@@ -335,8 +403,14 @@ export function buildCustomerAvailability(
   return availabilityRows.map((row) => ({
     group: row.group,
     label: row.label,
-    // Totals Available (gross) = expected production + opening stock.
-    availableStock: row.expectedProduction + row.openingStock,
+    // Totals Available (gross) = expected production + opening stock + incoming
+    // Remaining Products, less any stock reserved out via allocations (which
+    // isn't available to customers either).
+    availableStock:
+      row.expectedProduction +
+      row.openingStock +
+      row.remainingProducts -
+      row.allocated,
     ordered: row.specialCustomerOrders,
     remaining: row.availableStock, // gross − special customer orders
   }));
@@ -351,6 +425,8 @@ export function sumAvailability(
       openingStock: acc.openingStock + row.openingStock,
       specialCustomerOrders:
         acc.specialCustomerOrders + row.specialCustomerOrders,
+      allocated: acc.allocated + row.allocated,
+      remainingProducts: acc.remainingProducts + row.remainingProducts,
       availableStock: acc.availableStock + row.availableStock,
       salesOrders: acc.salesOrders + row.salesOrders,
       endingStock: acc.endingStock + row.endingStock,
@@ -360,6 +436,8 @@ export function sumAvailability(
       expectedProduction: 0,
       openingStock: 0,
       specialCustomerOrders: 0,
+      allocated: 0,
+      remainingProducts: 0,
       availableStock: 0,
       salesOrders: 0,
       endingStock: 0,

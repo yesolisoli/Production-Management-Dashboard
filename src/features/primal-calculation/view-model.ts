@@ -29,6 +29,7 @@ import {
   groupForCategory,
   PRIMAL_CATEGORIES,
   PRIMAL_GROUPS,
+  type AllocationsForDate,
   type AvailabilityStatus,
   type CustomerAvailabilityColumn,
   type CustomerOrdersForDate,
@@ -76,6 +77,13 @@ export type PrimalViewModelInput = {
   customerOrders: CustomerOrdersForDate;
   customGroups: CustomGroupsForDate;
   customRows: CustomRowsForDate;
+  // Stock reservations entered ON the viewed date (subtracted) and reservations
+  // TARGETING it (added as Remaining Products). Optional — consumers that don't
+  // model allocations (e.g. the Orders & Allocation demand snapshot) omit them.
+  // `viewedDate` lets unsaved local rows targeting this date merge live.
+  allocations?: AllocationsForDate;
+  incomingAllocations?: AllocationsForDate;
+  viewedDate?: string;
   openingStock: EndingStockByGroup;
   // Hogs held over from the previous production day → cut today. Added into the
   // yield pool. Carried in by the ending-stock hook (same previous-date source).
@@ -108,6 +116,9 @@ export function derivePrimalViewModel(
     customerOrders,
     customGroups,
     customRows,
+    allocations = [],
+    incomingAllocations = [],
+    viewedDate = "",
     openingStock,
     heldOverPrev = 0,
     minReserve = DEFAULT_MIN_COOLER_RESERVE,
@@ -159,6 +170,9 @@ export function derivePrimalViewModel(
     heldOver,
     minReserve,
     intake.include_bk_in_yield,
+    allocations,
+    incomingAllocations,
+    viewedDate,
   );
 
   // Operator-added availability groups — derived the same way as catalog rows

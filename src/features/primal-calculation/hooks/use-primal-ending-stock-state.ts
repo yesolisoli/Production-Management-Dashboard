@@ -20,6 +20,7 @@ import {
 } from "../ending-stock-source";
 import {
   emptyEndingStockByGroup,
+  type AllocationsForDate,
   type CustomerOrdersForDate,
   type CustomRowsForDate,
   type EndingStockByGroup,
@@ -37,6 +38,11 @@ type UsePrimalEndingStockStateArgs = {
   orders: ProductOrdersForDate;
   customerOrders: CustomerOrdersForDate;
   customRows: CustomRowsForDate;
+  // Stock reservations entered ON the date (subtracted) and TARGETING it (added
+  // as Remaining Products) — both feed the persisted Ending Stock, and thus the
+  // next day's carry-over.
+  allocations: AllocationsForDate;
+  incomingAllocations: AllocationsForDate;
 };
 
 // The day-to-day Ending Stock carry-over chain. Owns the Opening Stock carried
@@ -51,6 +57,8 @@ export function usePrimalEndingStockState({
   orders,
   customerOrders,
   customRows,
+  allocations,
+  incomingAllocations,
 }: UsePrimalEndingStockStateArgs) {
   // Opening stock carried in per group — the previous saved date's ending
   // stock, fetched from Supabase on every date change.
@@ -111,11 +119,24 @@ export function usePrimalEndingStockState({
       },
       DEFAULT_MIN_COOLER_RESERVE,
       intake.include_bk_in_yield,
+      allocations,
+      incomingAllocations,
+      date,
     );
     const out = emptyEndingStockByGroup();
     for (const row of rows) out[row.group] = row.endingStock;
     return out;
-  }, [orders, intake, customerOrders, openingStock, customRows, heldOverPrev]);
+  }, [
+    orders,
+    intake,
+    customerOrders,
+    openingStock,
+    customRows,
+    heldOverPrev,
+    allocations,
+    incomingAllocations,
+    date,
+  ]);
 
   // Auto-persist the recalculated Ending Stock (debounced) so the carry-over
   // chain is always current. Gated on hydration + the carry-in having loaded +

@@ -17,6 +17,7 @@ import {
 } from "../calculations";
 import { usePrimalCalculationState } from "../hooks/use-primal-calculation-state";
 import { derivePrimalViewModel } from "../view-model";
+import { PrimalAllocationChart } from "./PrimalAllocationChart";
 import { PrimalAvailabilityChart } from "./PrimalAvailabilityChart";
 import { PrimalCsvImportModal } from "./PrimalCsvImportModal";
 import { PrimalCustomerChart } from "./PrimalCustomerChart";
@@ -39,6 +40,8 @@ export function PrimalCalculationPage() {
     customCustomers,
     customGroups,
     customRows,
+    allocations,
+    incomingAllocations,
     openingStock,
     heldOverPrev,
     setCustomerOrder,
@@ -52,6 +55,9 @@ export function PrimalCalculationPage() {
     updateCustomRowSpec,
     setCustomRowField,
     removeCustomRow,
+    addAllocation,
+    updateAllocation,
+    removeAllocation,
   } = usePrimalCalculationState();
 
   // Butts open by default (matches the reference); others collapsed.
@@ -111,6 +117,9 @@ export function PrimalCalculationPage() {
         customerOrders,
         customGroups,
         customRows,
+        allocations,
+        incomingAllocations,
+        viewedDate: date,
         openingStock,
         heldOverPrev,
       }),
@@ -120,6 +129,9 @@ export function PrimalCalculationPage() {
       customerOrders,
       customGroups,
       customRows,
+      allocations,
+      incomingAllocations,
+      date,
       openingStock,
       heldOverPrev,
     ],
@@ -187,6 +199,14 @@ export function PrimalCalculationPage() {
             onAddGroup={addCustomGroup}
             onRenameGroup={renameCustomGroup}
             onRemoveGroup={removeCustomGroup}
+          />
+
+          <PrimalAllocationChart
+            allocations={allocations}
+            rows={availabilityRows}
+            onAdd={addAllocation}
+            onUpdate={updateAllocation}
+            onRemove={removeAllocation}
           />
 
           <PrimalCustomerChart
