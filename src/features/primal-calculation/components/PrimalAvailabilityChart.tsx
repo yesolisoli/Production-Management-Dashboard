@@ -107,9 +107,9 @@ export function PrimalAvailabilityChart({
               <th className="w-28 px-4 py-2.5">Primal</th>
               <th className="w-32 px-2 py-2.5 text-right">Expected Production</th>
               <th className="w-32 px-2 py-2.5 text-right">Opening Stock</th>
+              <th className="w-32 px-2 py-2.5 text-right">Allocated</th>
               <th className="w-32 px-2 py-2.5 text-right">Remaining Products</th>
               <th className="w-32 px-2 py-2.5 text-right">Custom Orders</th>
-              <th className="w-32 px-2 py-2.5 text-right">Allocated</th>
               <th className="w-32 px-2 py-2.5 text-right">Available Stock</th>
               <th className="w-32 px-2 py-2.5 text-right">Sales Orders</th>
               <th className="w-32 px-2 py-2.5 text-right">Shortage</th>
@@ -176,6 +176,14 @@ function AvailabilityRow({ row }: { row: GroupAvailability }) {
       <td
         className={clsx(
           "px-2 py-2.5",
+          row.allocated > 0 ? "font-semibold text-amber-600" : "text-slate-400",
+        )}
+      >
+        {row.allocated.toLocaleString()}
+      </td>
+      <td
+        className={clsx(
+          "px-2 py-2.5",
           row.remainingProducts > 0
             ? "font-semibold text-sky-600"
             : "text-slate-400",
@@ -185,14 +193,6 @@ function AvailabilityRow({ row }: { row: GroupAvailability }) {
       </td>
       <td className="px-2 py-2.5 text-slate-600">
         {row.specialCustomerOrders.toLocaleString()}
-      </td>
-      <td
-        className={clsx(
-          "px-2 py-2.5",
-          row.allocated > 0 ? "font-semibold text-amber-600" : "text-slate-400",
-        )}
-      >
-        {row.allocated.toLocaleString()}
       </td>
       <td
         className={clsx(
@@ -264,6 +264,14 @@ function CustomAvailabilityRow({
       <td
         className={clsx(
           "px-2 py-2.5",
+          row.allocated > 0 ? "font-semibold text-amber-600" : "text-slate-400",
+        )}
+      >
+        {row.allocated.toLocaleString()}
+      </td>
+      <td
+        className={clsx(
+          "px-2 py-2.5",
           row.remainingProducts > 0
             ? "font-semibold text-sky-600"
             : "text-slate-400",
@@ -273,14 +281,6 @@ function CustomAvailabilityRow({
       </td>
       <td className="px-2 py-2.5 text-slate-600">
         {row.specialCustomerOrders.toLocaleString()}
-      </td>
-      <td
-        className={clsx(
-          "px-2 py-2.5",
-          row.allocated > 0 ? "font-semibold text-amber-600" : "text-slate-400",
-        )}
-      >
-        {row.allocated.toLocaleString()}
       </td>
       <td
         className={clsx(

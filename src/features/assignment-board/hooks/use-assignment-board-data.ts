@@ -38,6 +38,7 @@ import {
   writeRealStationAssignment,
 } from "../supabase";
 import { useStatusConfigs } from "./use-status-configs";
+import { useEmployeeStatusRealtime } from "./use-status-realtime";
 import { SUPABASE_ENABLED } from "@/lib/config";
 
 export function useAssignmentBoardData() {
@@ -258,6 +259,16 @@ export function useAssignmentBoardData() {
     }
     pendingRestoresRef.current.set(key, context);
   };
+
+  // Statuses-only refetch for external triggers (realtime events, tab focus).
+  // Routed through the write gate so an event echoing our own in-flight write
+  // cannot clobber optimistic local state.
+  const refetchStatuses = () => {
+    if (!SUPABASE_ENABLED) return;
+    gatedRestore("statuses", "external refresh");
+  };
+
+  useEmployeeStatusRealtime(refetchStatuses);
 
   const enqueueEmployeeWrite = (employeeId: string, task: () => Promise<void>): Promise<void> => {
     const previous = employeeWriteChainsRef.current.get(employeeId) ?? Promise.resolve();
@@ -1197,6 +1208,7 @@ export function useAssignmentBoardData() {
     saveError,
     clearSaveError,
     refetchSnapshot,
+    refetchStatuses,
     disabledIds,
     defaultShiftTemplate,
     handleDeleteShift,
