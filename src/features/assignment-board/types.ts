@@ -50,6 +50,8 @@ export type WorkArea = {
   name: string;
   color_hex: string | null;
   display_order: number;
+  /** Admin-edited target headcount; null/undefined means use the default target. */
+  target_override?: number | null;
   mode_views?: WorkAreaModeView[];
 };
 

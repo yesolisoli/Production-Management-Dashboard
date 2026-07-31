@@ -268,7 +268,12 @@ export function useAssignmentBoardData() {
     gatedRestore("statuses", "external refresh");
   };
 
-  useEmployeeStatusRealtime(refetchStatuses);
+  const refetchWorkAreas = () => {
+    if (!SUPABASE_ENABLED) return;
+    gatedRestore("workAreas", "external refresh");
+  };
+
+  useEmployeeStatusRealtime(refetchStatuses, refetchWorkAreas);
 
   const enqueueEmployeeWrite = (employeeId: string, task: () => Promise<void>): Promise<void> => {
     const previous = employeeWriteChainsRef.current.get(employeeId) ?? Promise.resolve();
@@ -944,6 +949,17 @@ export function useAssignmentBoardData() {
     })();
   };
 
+  const handleSetTargetOverride = (workAreaId: string, targetOverride: number | null) => {
+    setWorkAreas((prev) =>
+      prev.map((wa) => (wa.id === workAreaId ? { ...wa, target_override: targetOverride } : wa)),
+    );
+
+    void updateWorkAreaRecord({ id: workAreaId, targetOverride }).catch((error) => {
+      reportSaveError("Failed to update target headcount", error);
+      void restoreWorkAreasFromDb("handleSetTargetOverride");
+    });
+  };
+
   const handleAddWorkArea = (name: string, color: string, modeViews: WorkAreaModeView[]): string => {
     const newId = `wa_${crypto.randomUUID()}`;
     const newWa: WorkArea = {
@@ -1216,6 +1232,7 @@ export function useAssignmentBoardData() {
     handleAddShift,
     handleDeleteWorkArea,
     handleUpdateWorkArea,
+    handleSetTargetOverride,
     handleAddWorkArea,
     handleReorderStation,
     handleDeleteStation,
