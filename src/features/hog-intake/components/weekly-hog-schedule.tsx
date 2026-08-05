@@ -106,7 +106,6 @@ export function WeeklyHogSchedule({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (storedCollapsed !== null) setCollapsed(storedCollapsed === "true");
       const storedPlanned = window.localStorage.getItem(PLANNED_COLLAPSED_KEY);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (storedPlanned !== null) setPlannedCollapsed(storedPlanned === "true");
     } catch {
       // ignore parse / access errors — fall back to defaults

@@ -815,7 +815,7 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
             </div>
             <div>
               <p className="font-semibold text-slate-800">
-                Group <span className="text-amber-700">"{groupDeleteWarning}"</span> still has stations.
+                Group <span className="text-amber-700">&quot;{groupDeleteWarning}&quot;</span> still has stations.
               </p>
               <p className="mt-1 text-sm text-slate-500">
                 Remove all stations in this group before deleting it.
@@ -917,7 +917,7 @@ export function AssignmentGrid({ employees: employeesProp, statuses, disabledEmp
                 </div>
                 <div>
                   <p className="font-semibold text-slate-800">
-                    Delete <span className="text-red-600">"{confirmDeleteWorkArea.name}"</span>?
+                    Delete <span className="text-red-600">&quot;{confirmDeleteWorkArea.name}&quot;</span>?
                   </p>
                   <p className="mt-1 text-sm text-slate-500">This cannot be undone.</p>
                 </div>

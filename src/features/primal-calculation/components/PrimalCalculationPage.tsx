@@ -80,9 +80,13 @@ export function PrimalCalculationPage() {
 
   // Surface Save / Save All outcomes as a toast. The per-group footer shows its
   // own inline "Saved" check, but Save All (and every save failure) had no
-  // user-facing feedback before — so a committed write or a DB error is now
-  // always announced here.
-  useEffect(() => {
+  // user-facing feedback before — so a committed write or a DB error is
+  // announced here. Uses the render-time previous-value comparison pattern
+  // (react.dev "storing information from previous renders") so the toast is
+  // queued exactly once per saveState transition without an effect.
+  const [announcedSaveState, setAnnouncedSaveState] = useState(saveState);
+  if (saveState !== announcedSaveState) {
+    setAnnouncedSaveState(saveState);
     if (saveState.kind === "saved") {
       setToast({
         message:
@@ -97,7 +101,7 @@ export function PrimalCalculationPage() {
         kind: "error",
       });
     }
-  }, [saveState]);
+  }
 
   // All derived data is assembled by the pure view model; this component only
   // memoizes the single call and renders the result. See ../view-model.ts.

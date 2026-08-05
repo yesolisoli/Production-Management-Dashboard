@@ -1,8 +1,21 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+
+// Hydration gate for the portal: false during SSR/first paint, true on the
+// client — expressed as an external store so no mount effect is needed.
+const emptySubscribe = () => () => {};
+const useMounted = () =>
+  useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 
 export function TimePickerInput({ value, onChange, placeholder = "--:--", triggerClassName, valueClassName, placeholderClassName, renderValue, editable, formatDisplay, parseInput }: {
   value: string;
@@ -20,7 +33,7 @@ export function TimePickerInput({ value, onChange, placeholder = "--:--", trigge
   parseInput?: (raw: string) => string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -32,10 +45,14 @@ export function TimePickerInput({ value, onChange, placeholder = "--:--", trigge
   const display = formatDisplay ?? ((v: string) => v);
 
   const [selH, selM] = value ? value.split(":") : ["", ""];
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-  const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
 
-  useEffect(() => setMounted(true), []);
+  // Latest selection for the scroll-on-open effect below, so it can keep its
+  // "only when opening" timing without re-running (and re-scrolling) when the
+  // user picks a value while the popover is open.
+  const selRef = useRef<[string, string]>([selH, selM]);
+  useEffect(() => {
+    selRef.current = [selH, selM];
+  }, [selH, selM]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -66,8 +83,9 @@ export function TimePickerInput({ value, onChange, placeholder = "--:--", trigge
 
   useEffect(() => {
     if (!open) return;
-    const hIdx = hours.indexOf(selH);
-    const mIdx = minutes.indexOf(selM);
+    const [h, m] = selRef.current;
+    const hIdx = HOURS.indexOf(h);
+    const mIdx = MINUTES.indexOf(m);
     if (hIdx >= 0) hourRef.current?.children[hIdx]?.scrollIntoView({ block: "center" });
     if (mIdx >= 0) minRef.current?.children[mIdx]?.scrollIntoView({ block: "center" });
   }, [open]);
@@ -121,7 +139,7 @@ export function TimePickerInput({ value, onChange, placeholder = "--:--", trigge
           className="z-50 flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
         >
           <div ref={hourRef} className="h-48 flex-1 overflow-y-auto border-r border-slate-100 scroll-smooth">
-            {hours.map((h) => (
+            {HOURS.map((h) => (
               <button key={h} type="button"
                 onClick={() => select(h, selM || "00")}
                 className={`w-full py-2 text-center text-sm font-medium transition-colors ${selH === h ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
@@ -129,7 +147,7 @@ export function TimePickerInput({ value, onChange, placeholder = "--:--", trigge
             ))}
           </div>
           <div ref={minRef} className="h-48 flex-1 overflow-y-auto scroll-smooth">
-            {minutes.map((m) => (
+            {MINUTES.map((m) => (
               <button key={m} type="button"
                 onClick={() => select(selH || "00", m)}
                 className={`w-full py-2 text-center text-sm font-medium transition-colors ${selM === m ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}

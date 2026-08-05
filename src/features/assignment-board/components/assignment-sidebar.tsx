@@ -22,8 +22,6 @@ export function AssignmentSidebar({
   workAreas,
   selectedWorkAreaId,
   statusConfigs,
-  onAdd,
-  onRemove,
   onUpdate,
   onSetQualifiedWorkAreas,
   onStatusChange,
@@ -31,7 +29,6 @@ export function AssignmentSidebar({
   onUnassignAll,
   onUnassignFromStation,
   onSetTargetOverride,
-  getEmployeeEffectiveDepartmentIds,
   onOpenRoster,
   onManageStatuses,
 }: {
@@ -42,8 +39,6 @@ export function AssignmentSidebar({
   workAreas: WorkArea[];
   selectedWorkAreaId?: string;
   statusConfigs: StatusConfig[];
-  onAdd: (emp: Employee) => void;
-  onRemove: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Omit<Employee, "qualifiedDepartmentIds">>) => void;
   onSetQualifiedWorkAreas: (id: string, workAreaIds: string[]) => void;
   onStatusChange: (id: string, status: EmployeeStatus) => void;
@@ -51,7 +46,6 @@ export function AssignmentSidebar({
   onUnassignAll: (empId: string, resetStatus?: boolean) => void;
   onUnassignFromStation: (empId: string, stationId: string) => void;
   onSetTargetOverride: (workAreaId: string, value: number | null) => void;
-  getEmployeeEffectiveDepartmentIds: (emp: import("../types").Employee) => string[];
   onOpenRoster: (search: string) => void;
   onManageStatuses: () => void;
 }) {
@@ -74,7 +68,6 @@ export function AssignmentSidebar({
   const VACATION_CODE = "vacation";
   const LIGHT_DUTY_CODE = "injured";
 
-  let presentCount = 0;
   let lightDutyCount = 0;
   let absentCount = 0;
   let vacationCount = 0;
@@ -84,9 +77,8 @@ export function AssignmentSidebar({
       vacationCount += 1;
     } else if (unavailableCodes.has(s)) {
       absentCount += 1;
-    } else {
-      presentCount += 1;
-      if (s === LIGHT_DUTY_CODE) lightDutyCount += 1;
+    } else if (s === LIGHT_DUTY_CODE) {
+      lightDutyCount += 1;
     }
   }
   const unavailableTotal = absentCount + vacationCount;

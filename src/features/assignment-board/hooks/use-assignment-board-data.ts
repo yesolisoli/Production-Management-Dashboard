@@ -83,10 +83,9 @@ export function useAssignmentBoardData() {
   const pendingEmployeeInsertionsRef = useRef<Map<string, Promise<void>>>(new Map());
 
   useEffect(() => {
-    if (!SUPABASE_ENABLED) {
-      setIsHydrating(false);
-      return;
-    }
+    // isHydrating already starts false when Supabase is disabled (see its
+    // useState initializer), so there is nothing to reset here.
+    if (!SUPABASE_ENABLED) return;
 
     let isCancelled = false;
 

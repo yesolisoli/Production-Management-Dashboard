@@ -15,6 +15,17 @@ import { buildEmployeeTemplateCsv, downloadCsv } from "../../csv-import";
 
 type EmployeeStatus = string;
 
+type SortKey = "name" | "code" | "dept" | "status" | "level" | "gender";
+
+// Module-scope so the header cells don't remount on every modal render.
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: "asc" | "desc" }) {
+  return (
+    <span className="ml-1 text-slate-400">
+      {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+    </span>
+  );
+}
+
 export function RosterManageModal({
   employees,
   statuses,
@@ -77,7 +88,7 @@ export function RosterManageModal({
   const [editingName, setEditingName] = useState("");
   const [confirmRemoveEmp, setConfirmRemoveEmp] = useState<Employee | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [sortKey, setSortKey] = useState<"name" | "code" | "dept" | "status" | "level" | "gender">("dept");
+  const [sortKey, setSortKey] = useState<SortKey>("dept");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [pinnedNewIds, setPinnedNewIds] = useState<Set<string>>(new Set());
   const [csvImportOpen, setCsvImportOpen] = useState(false);
@@ -87,15 +98,10 @@ export function RosterManageModal({
     stations: Station[];
   } | null>(null);
 
-  const handleSort = (key: typeof sortKey) => {
+  const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(key); setSortDir("asc"); }
   };
-  const SortIcon = ({ col }: { col: typeof sortKey }) => (
-    <span className="ml-1 text-slate-400">
-      {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
-    </span>
-  );
 
   const getStatus = (id: string): EmployeeStatus => statuses[id] ?? STATUS_CODE_AVAILABLE;
 
@@ -275,7 +281,7 @@ export function RosterManageModal({
                 <th key={col} className="border-b border-slate-700 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">
                   <button onClick={() => handleSort(col)} className="flex items-center uppercase hover:text-white">
                     {col === "name" ? "Name" : col === "code" ? "Code" : "Home Dept"}
-                    <SortIcon col={col} />
+                    <SortIcon col={col} sortKey={sortKey} sortDir={sortDir} />
                   </button>
                 </th>
               ))}
@@ -283,17 +289,17 @@ export function RosterManageModal({
               <th className="border-b border-slate-700 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">Station</th>
               <th className="border-b border-slate-700 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">
                 <button onClick={() => handleSort("gender")} className="flex items-center uppercase hover:text-white">
-                  Gender <SortIcon col="gender" />
+                  Gender <SortIcon col="gender" sortKey={sortKey} sortDir={sortDir} />
                 </button>
               </th>
               <th className="border-b border-slate-700 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">
                 <button onClick={() => handleSort("level")} className="flex items-center uppercase hover:text-white">
-                  Level <SortIcon col="level" />
+                  Level <SortIcon col="level" sortKey={sortKey} sortDir={sortDir} />
                 </button>
               </th>
               <th className="border-b border-slate-700 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-200">
                 <button onClick={() => handleSort("status")} className="flex items-center uppercase hover:text-white">
-                  Status <SortIcon col="status" />
+                  Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} />
                 </button>
               </th>
               <th className="border-b border-slate-700 px-4 py-2.5" />

@@ -44,7 +44,9 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   // Keep the latest onClose without re-running the mount-only effects.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   // Escape closes the modal — but only the topmost one, and only when no nested
   // floating popover is open (that popover handles its own Escape instead).
