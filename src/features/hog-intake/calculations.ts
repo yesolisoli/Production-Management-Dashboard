@@ -1,4 +1,5 @@
 import {
+  BK_JP_TYPE,
   FARM_DERIVED_HOG_TYPES,
   HOG_TYPES,
   YIELD_HOG_TYPES,
@@ -23,7 +24,10 @@ export function derivedCountsFromFarmRecords(
     FARM_DERIVED_HOG_TYPES.map((type) => [type, 0]),
   ) as Record<FarmDerivedHogType, number>;
   for (const row of records) {
-    if (row.type && FARM_DERIVED_SET.has(row.type)) {
+    // BK/JP is BK stock cut for primal — its count rolls up into JP, not BK.
+    if (row.type === BK_JP_TYPE) {
+      counts.JP += row.count;
+    } else if (row.type && FARM_DERIVED_SET.has(row.type)) {
       counts[row.type as FarmDerivedHogType] += row.count;
     }
   }
@@ -67,9 +71,53 @@ export function forCutting(counts: HogCounts, sideOrders: number): number {
   return totalIntake(counts) - hogsConsumedBySideOrders(sideOrders);
 }
 
-// Only JP, RWA contribute. BK / Sow / Round / Suckling / Customer excluded.
-export function yieldTotal(counts: HogCounts): number {
-  return YIELD_HOG_TYPES.reduce((sum, key) => sum + counts[key], 0);
+// Only JP, RWA contribute. Sow / Round / Suckling / Customer always excluded.
+// BK is excluded by default, but folded in when includeBk is set — an opt-in
+// per-day override (record.include_bk_in_yield) for days its hogs are cut for
+// primal. Its whole count is added; the JP/RWA-based adjustments don't touch it.
+export function yieldTotal(counts: HogCounts, includeBk = false): number {
+  return (
+    YIELD_HOG_TYPES.reduce((sum, key) => sum + counts[key], 0) +
+    (includeBk ? counts.BK : 0)
+  );
+}
+
+// Adjustments to today's cuttable yield pool:
+//   • held-over hogs shift yield between production days — hogs held to the next
+//     day (toNextDay) aren't cut today, while hogs carried in from the previous
+//     day (fromPrevDay) are cut today.
+//   • DOA/DOP (deaths) are hogs dead on arrival / dead on processing — never cut,
+//     so removed outright. Unlike held-over hogs they don't carry to any other
+//     day, so they only ever subtract here.
+// Net effect on today's yield: fromPrevDay − toNextDay − deaths.
+export type YieldAdjustment = {
+  fromPrevDay: number;
+  toNextDay: number;
+  deaths: number;
+};
+
+export const NO_YIELD_ADJUSTMENT: YieldAdjustment = {
+  fromPrevDay: 0,
+  toNextDay: 0,
+  deaths: 0,
+};
+
+// Yield hogs actually cut today: the JP + RWA pool, minus hogs held over to the
+// next day and minus DOA/DOP losses, plus hogs carried in from the previous day.
+// Drives both the "Primal Total" shown on the cards and the expected primal
+// production on the Primal Calc chart. Clamped so it never goes negative.
+export function netYieldTotal(
+  counts: HogCounts,
+  adjustment: YieldAdjustment = NO_YIELD_ADJUSTMENT,
+  includeBk = false,
+): number {
+  return Math.max(
+    0,
+    yieldTotal(counts, includeBk) -
+      clampNonNegativeInt(adjustment.toNextDay) +
+      clampNonNegativeInt(adjustment.fromPrevDay) -
+      clampNonNegativeInt(adjustment.deaths),
+  );
 }
 
 export function projectedForCutting(nextDay: NextDay): number {
@@ -94,7 +142,12 @@ export type HogIntakeTotals = {
   overSold: boolean; // hogs consumed by side orders exceed total intake
 };
 
-export function deriveTotals(record: HogIntakeRecord): HogIntakeTotals {
+export function deriveTotals(
+  record: HogIntakeRecord,
+  // Hogs held over from the previous production day → cut today. Added into the
+  // yield pool. Defaults to 0 for callers that don't carry the prior day in.
+  heldOverFromPrevDay = 0,
+): HogIntakeTotals {
   const counts = record.hog_counts;
   const total = totalIntake(counts);
   const consumed = hogsConsumedBySideOrders(record.side_orders);
@@ -102,7 +155,15 @@ export function deriveTotals(record: HogIntakeRecord): HogIntakeTotals {
     totalIntake: total,
     totalHogs: total,
     forCutting: total - consumed,
-    yieldTotal: yieldTotal(counts),
+    yieldTotal: netYieldTotal(
+      counts,
+      {
+        fromPrevDay: heldOverFromPrevDay,
+        toNextDay: record.held_over,
+        deaths: record.deaths_on_arrival,
+      },
+      record.include_bk_in_yield,
+    ),
     projectedForCutting: projectedForCutting(record.next_day),
     overSold: consumed > total,
   };

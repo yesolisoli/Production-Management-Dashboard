@@ -435,6 +435,18 @@ export function ProductionSheetSection({
   // for any SKU not yet placed). Everything downstream reads from this.
   const orderedRows = orderProductionRows(rows, order);
 
+  // Instruction (After Hog Break) rows carry no catalog SKU. Give each a stable
+  // sequential handle — AHB-1, AHB-2… — by its order in the full sheet, so these
+  // lines can be referenced and read as clearly synthetic (not a real SKU). Keyed
+  // by row SKU; numbering follows the whole sheet, so it survives room/product
+  // filtering (a given instruction always shows the same number).
+  const instructionSeq = new Map<string, number>();
+  for (const row of orderedRows) {
+    if (row.sku.startsWith(INSTRUCTION_ROW_SKU_PREFIX)) {
+      instructionSeq.set(row.sku, instructionSeq.size + 1);
+    }
+  }
+
   // A row's operational meta, falling back to defaults until the operator edits.
   // The fallback honours the row's defaultPhase (instruction-derived rows open in
   // After Hog Break), so an unedited row sits in — and a first edit saves into —
@@ -810,12 +822,14 @@ export function ProductionSheetSection({
             </div>
           )}
 
-          <div>
+          {/* Table wrapped in a rounded, bordered container to match the Today's
+              Availability table. */}
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
             {/* Fixed column widths so the row keeps the exact same layout in read
                 and edit mode — editing a line never shifts a column's position. */}
             <table className="w-full table-fixed text-sm">
               <colgroup>
-                <col className="w-20" />
+                <col className="w-24" />
                 <col />
                 <col className="w-20" />
                 <col className="w-20" />
@@ -830,7 +844,7 @@ export function ProductionSheetSection({
               </colgroup>
               <thead>
                 <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 [&>th]:border-b [&>th]:border-slate-200 [&>th]:bg-slate-50 [&>th]:py-2.5">
-                  <th className="rounded-l-lg px-2">SKU</th>
+                  <th className="px-2 pl-6">SKU</th>
                   <th className="px-2">Product Name</th>
                   <th className="px-2 text-right">Qty C/S</th>
                   <th className="px-2 text-right">Qty Pcs</th>
@@ -841,7 +855,7 @@ export function ProductionSheetSection({
                   <th className="px-2">Finish</th>
                   <th className="px-2 text-center">Buffer</th>
                   <th className="px-2 text-center">Carry Fwd</th>
-                  <th className="rounded-r-lg px-2">Delivery Route</th>
+                  <th className="px-2">Delivery Route</th>
                 </tr>
               </thead>
               <tbody>
@@ -853,7 +867,7 @@ export function ProductionSheetSection({
                   // — they come from Primal, not the operator.
                   const identityCells = (
                     <>
-                      <td className="relative px-2 py-3 pl-6 font-semibold tabular-nums text-slate-700">
+                      <td className="relative px-2 py-3 pl-6 font-normal tabular-nums text-slate-900">
                         {/* Drag handle — reveals on row hover, overlaid in the
                             left padding so the SKU keeps its position. */}
                         <button
@@ -873,7 +887,7 @@ export function ProductionSheetSection({
                           <GripVertical size={14} />
                         </button>
                         {row.sku.startsWith(INSTRUCTION_ROW_SKU_PREFIX)
-                          ? emptyCell
+                          ? `AHB-${instructionSeq.get(row.sku)}`
                           : row.sku}
                       </td>
                       <td className="px-2 py-3">

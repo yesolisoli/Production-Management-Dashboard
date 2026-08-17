@@ -11,6 +11,7 @@ type WorkAreaRow = {
   name: string;
   color_hex: string | null;
   display_order: number;
+  target_override: number | null;
 };
 
 type WorkAreaModeViewRow = {
@@ -163,7 +164,7 @@ async function fetchWorkAreasSnapshot(): Promise<WorkArea[]> {
   const [workAreasResult, modeViewsResult] = await Promise.all([
     supabase
       .from("work_areas")
-      .select("id, name, color_hex, display_order")
+      .select("id, name, color_hex, display_order, target_override")
       .order("display_order", { ascending: true }),
     supabase
       .from("work_area_mode_views")
@@ -202,6 +203,7 @@ function buildWorkAreas(
     name: row.name,
     color_hex: row.color_hex,
     display_order: row.display_order,
+    target_override: row.target_override,
     ...(modeViewsByWorkArea.get(row.id)?.length ? { mode_views: modeViewsByWorkArea.get(row.id) } : {}),
   }));
 }
@@ -477,11 +479,14 @@ export async function updateWorkAreaRecord(params: {
   name?: string;
   colorHex?: string;
   displayOrder?: number;
+  /** NULL clears the override so the default target applies again. */
+  targetOverride?: number | null;
 }): Promise<void> {
   const updates: Record<string, unknown> = {};
   if (params.name !== undefined) updates.name = params.name;
   if (params.colorHex !== undefined) updates.color_hex = params.colorHex;
   if (params.displayOrder !== undefined) updates.display_order = params.displayOrder;
+  if (params.targetOverride !== undefined) updates.target_override = params.targetOverride;
 
   const supabase = createClient();
   const { error } = await supabase
@@ -988,7 +993,7 @@ export async function fetchAssignmentBoardSnapshot(): Promise<AssignmentBoardSna
     ] = await Promise.all([
       supabase
         .from("work_areas")
-        .select("id, name, color_hex, display_order")
+        .select("id, name, color_hex, display_order, target_override")
         .order("display_order", { ascending: true }),
       supabase
         .from("work_area_mode_views")

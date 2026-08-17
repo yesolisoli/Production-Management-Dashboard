@@ -32,11 +32,16 @@ export function useSnapshotCapture(params: {
   const { enabled, snapshot, workAreaShifts } = params;
 
   const snapshotRef = useRef(snapshot);
-  snapshotRef.current = snapshot;
   const shiftsRef = useRef(workAreaShifts);
-  shiftsRef.current = workAreaShifts;
   const attemptedForDateRef = useRef<string | null>(null);
   const inFlightRef = useRef(false);
+
+  // Latest-value refs, synced after commit; tick() only reads them from
+  // timer callbacks, which always run after this effect.
+  useEffect(() => {
+    snapshotRef.current = snapshot;
+    shiftsRef.current = workAreaShifts;
+  }, [snapshot, workAreaShifts]);
 
   useEffect(() => {
     if (!enabled) return;

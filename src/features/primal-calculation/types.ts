@@ -136,6 +136,27 @@ export function emptyEndingStockByGroup(): EndingStockByGroup {
 }
 
 // -------------------------------------------------------------------
+// Allocations — operator-entered reservations of a production group's
+// stock (pieces) for a target date. RAW input, persisted per work date in
+// Supabase (primal_allocations). The Availability Chart sums them per
+// group and subtracts the total from Available Stock — so reserved stock
+// is carved out of what's sellable and, via Ending Stock, out of the
+// next day's carry-over pool.
+//
+// `id` is the stable client-generated key (crypto.randomUUID). The row is
+// deducted from the date it was entered on (its work_date); `targetDate`
+// records where the reserved stock is destined.
+// -------------------------------------------------------------------
+export type PrimalAllocation = {
+  id: string;
+  group: PrimalGroupKey;
+  qtyPcs: number;
+  targetDate: string; // YYYY-MM-DD
+  label: string; // optional destination / note (may be empty)
+};
+export type AllocationsForDate = PrimalAllocation[];
+
+// -------------------------------------------------------------------
 // Availability — combines expected production with opening stock and
 // compares against customer orders. Like everything else here this is a
 // DERIVED view: never persisted, always recomputed from intake counts +
@@ -151,7 +172,9 @@ export type GroupAvailability = {
   expectedProduction: number; // expected pieces from today's hog intake (per group, once)
   openingStock: number; // stock carried in from the previous day (yesterday's ending stock)
   specialCustomerOrders: number; // orders from the Customer Availability chart (above)
-  availableStock: number; // expProd + openingStock − specialCustomerOrders
+  allocated: number; // pieces reserved via allocations LEAVING for a later date
+  remainingProducts: number; // pieces arriving from allocations that TARGET this date
+  availableStock: number; // expProd + openingStock + remainingProducts − specialCustomerOrders − allocated
   salesOrders: number; // today's order pieces from the per-SKU sections (below)
   endingStock: number; // availableStock − salesOrders (may be negative)
   shortage: number; // demand that exceeds availability
@@ -162,6 +185,8 @@ export type AvailabilityTotals = {
   expectedProduction: number;
   openingStock: number;
   specialCustomerOrders: number;
+  allocated: number;
+  remainingProducts: number;
   availableStock: number;
   salesOrders: number;
   endingStock: number;

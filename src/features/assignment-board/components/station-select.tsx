@@ -60,7 +60,11 @@ export function StationSelect({ employeeId, qualifiedDepartmentIds, assignments,
                   return (
                     <button
                       key={s.id}
-                      onClick={() => { assigned ? onUnassign(s.id) : onAssign(s.id); setOpen(false); }}
+                      onClick={() => {
+                        if (assigned) onUnassign(s.id);
+                        else onAssign(s.id);
+                        setOpen(false);
+                      }}
                       className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium hover:bg-slate-50"
                       style={{ color: assigned ? waColor : "#64748b" }}
                     >

@@ -28,6 +28,7 @@ export function HogIntakeClient() {
     date,
     record,
     hogCounts,
+    prevHeldOver,
     status,
     dirty,
     setDate,
@@ -52,8 +53,8 @@ export function HogIntakeClient() {
   // hog_counts are derived from Farm Delivery Records, so totals flow from the
   // derived counts rather than the record's stored (input-only) field.
   const totals = useMemo(
-    () => deriveTotals({ ...record, hog_counts: hogCounts }),
-    [record, hogCounts],
+    () => deriveTotals({ ...record, hog_counts: hogCounts }, prevHeldOver),
+    [record, hogCounts, prevHeldOver],
   );
 
   return (
@@ -95,6 +96,10 @@ export function HogIntakeClient() {
                 <PrimalHogsGrid
                   jp={hogCounts.JP}
                   rwa={hogCounts.RWA}
+                  bk={record.include_bk_in_yield ? hogCounts.BK : null}
+                  heldOverToday={record.held_over}
+                  heldOverPrev={prevHeldOver}
+                  deaths={record.deaths_on_arrival}
                   total={totals.yieldTotal}
                 />
                 <HogCountGrid counts={hogCounts} onChangeCount={setHogCount} />

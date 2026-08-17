@@ -12,9 +12,9 @@ import type { Employee } from "@/features/assignment-board/types";
  * Add or adjust entries here as ops defines targets per department:
  *   wa_meat: 25,
  *
- * This map is the current manual config source. It will be replaced by
- * an admin-editable, DB-backed lookup (e.g. a `target_headcount` column
- * on `work_areas`) without changing any callers.
+ * This map is the default target source. Admin edits are stored in the
+ * DB-backed `work_areas.target_override` column, which takes precedence
+ * over these values in `resolveWorkAreaTarget`.
  */
 export const WORK_AREA_TARGET_OVERRIDES: Record<string, number> = {
   // Seed-data targets chosen so the Daily Lineup demo surfaces every
@@ -31,23 +31,18 @@ export const WORK_AREA_TARGET_OVERRIDES: Record<string, number> = {
  * Resolve the operational staffing target for a work area.
  *
  * Precedence:
- *  1. Runtime override (admin-edited via the Assignment Board target modal,
- *     persisted in localStorage and surfaced through `useTargetOverrides`).
+ *  1. DB-backed override (admin-edited via the Assignment Board target modal,
+ *     stored in `work_areas.target_override`; null means no override).
  *  2. Static value in WORK_AREA_TARGET_OVERRIDES.
  *  3. Fallback: count of active employees whose homeDepartmentId matches
  *     this work area. Safety net only — not the real definition of "target."
- *
- * Future replacement path: swap this body for a lookup against an admin-
- * editable column (e.g. `wa.targetHeadcount`). Callers and return shape
- * stay the same.
  */
 export function resolveWorkAreaTarget(
   workAreaId: string,
   employees: Employee[],
-  runtimeOverrides?: Record<string, number>,
+  targetOverride?: number | null,
 ): number {
-  const runtime = runtimeOverrides?.[workAreaId];
-  if (runtime !== undefined) return runtime;
+  if (targetOverride != null) return targetOverride;
   const configured = WORK_AREA_TARGET_OVERRIDES[workAreaId];
   if (configured !== undefined) return configured;
   return employees.filter(

@@ -21,7 +21,6 @@ type ComputeContext = {
   statusConfigs: StatusConfig[];
   assignments: StationAssignment[];
   stations: Station[];
-  targetOverrides?: Record<string, number>;
 };
 
 export function computeAllStats(ctx: ComputeContext): WorkAreaStats[] {
@@ -68,7 +67,7 @@ export function computeAllStats(ctx: ComputeContext): WorkAreaStats[] {
   }
 
   return ctx.workAreas.map((wa) => {
-    const required = resolveWorkAreaTarget(wa.id, ctx.employees, ctx.targetOverrides);
+    const required = resolveWorkAreaTarget(wa.id, ctx.employees, wa.target_override);
     const counts = countsByWa.get(wa.id) ?? { absent: 0, vacation: 0, lightDuty: 0 };
     const assigned = assignedByWa.get(wa.id)?.size ?? 0;
     return {

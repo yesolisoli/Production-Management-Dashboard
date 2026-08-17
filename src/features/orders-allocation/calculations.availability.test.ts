@@ -24,6 +24,8 @@ function group(
     expectedProduction: 0,
     openingStock: 0,
     specialCustomerOrders: 0,
+    allocated: 0,
+    remainingProducts: 0,
     availableStock: endingStock,
     salesOrders: 0,
     endingStock,

@@ -17,6 +17,7 @@ import {
 } from "../calculations";
 import { usePrimalCalculationState } from "../hooks/use-primal-calculation-state";
 import { derivePrimalViewModel } from "../view-model";
+import { PrimalAllocationChart } from "./PrimalAllocationChart";
 import { PrimalAvailabilityChart } from "./PrimalAvailabilityChart";
 import { PrimalCsvImportModal } from "./PrimalCsvImportModal";
 import { PrimalCustomerChart } from "./PrimalCustomerChart";
@@ -39,7 +40,10 @@ export function PrimalCalculationPage() {
     customCustomers,
     customGroups,
     customRows,
+    allocations,
+    incomingAllocations,
     openingStock,
+    heldOverPrev,
     setCustomerOrder,
     addCustomCustomer,
     renameCustomCustomer,
@@ -51,6 +55,9 @@ export function PrimalCalculationPage() {
     updateCustomRowSpec,
     setCustomRowField,
     removeCustomRow,
+    addAllocation,
+    updateAllocation,
+    removeAllocation,
   } = usePrimalCalculationState();
 
   // Butts open by default (matches the reference); others collapsed.
@@ -73,9 +80,13 @@ export function PrimalCalculationPage() {
 
   // Surface Save / Save All outcomes as a toast. The per-group footer shows its
   // own inline "Saved" check, but Save All (and every save failure) had no
-  // user-facing feedback before — so a committed write or a DB error is now
-  // always announced here.
-  useEffect(() => {
+  // user-facing feedback before — so a committed write or a DB error is
+  // announced here. Uses the render-time previous-value comparison pattern
+  // (react.dev "storing information from previous renders") so the toast is
+  // queued exactly once per saveState transition without an effect.
+  const [announcedSaveState, setAnnouncedSaveState] = useState(saveState);
+  if (saveState !== announcedSaveState) {
+    setAnnouncedSaveState(saveState);
     if (saveState.kind === "saved") {
       setToast({
         message:
@@ -90,7 +101,7 @@ export function PrimalCalculationPage() {
         kind: "error",
       });
     }
-  }, [saveState]);
+  }
 
   // All derived data is assembled by the pure view model; this component only
   // memoizes the single call and renders the result. See ../view-model.ts.
@@ -110,9 +121,24 @@ export function PrimalCalculationPage() {
         customerOrders,
         customGroups,
         customRows,
+        allocations,
+        incomingAllocations,
+        viewedDate: date,
         openingStock,
+        heldOverPrev,
       }),
-    [intake, orders, customerOrders, customGroups, customRows, openingStock],
+    [
+      intake,
+      orders,
+      customerOrders,
+      customGroups,
+      customRows,
+      allocations,
+      incomingAllocations,
+      date,
+      openingStock,
+      heldOverPrev,
+    ],
   );
 
   const handleToggle = (groupKey: string) =>
@@ -127,7 +153,15 @@ export function PrimalCalculationPage() {
           <div className="flex items-center gap-2 sm:gap-4">
             <IntakeHeaderStats
               status={intakeStatus.kind}
-              primalTotal={primalTotalHogCount(counts)}
+              primalTotal={primalTotalHogCount(
+                counts,
+                {
+                  fromPrevDay: heldOverPrev,
+                  toNextDay: intake.held_over,
+                  deaths: intake.deaths_on_arrival,
+                },
+                intake.include_bk_in_yield,
+              )}
               sow={intake.todays_cutting}
               sideOrders={intake.side_orders}
               forCutting={intakeTotals.forCutting}
@@ -169,6 +203,14 @@ export function PrimalCalculationPage() {
             onAddGroup={addCustomGroup}
             onRenameGroup={renameCustomGroup}
             onRemoveGroup={removeCustomGroup}
+          />
+
+          <PrimalAllocationChart
+            allocations={allocations}
+            rows={availabilityRows}
+            onAdd={addAllocation}
+            onUpdate={updateAllocation}
+            onRemove={removeAllocation}
           />
 
           <PrimalCustomerChart

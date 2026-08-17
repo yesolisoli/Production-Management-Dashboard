@@ -38,6 +38,7 @@ import {
   writeRealStationAssignment,
 } from "../supabase";
 import { useStatusConfigs } from "./use-status-configs";
+import { useEmployeeStatusRealtime } from "./use-status-realtime";
 import { SUPABASE_ENABLED } from "@/lib/config";
 
 export function useAssignmentBoardData() {
@@ -82,10 +83,9 @@ export function useAssignmentBoardData() {
   const pendingEmployeeInsertionsRef = useRef<Map<string, Promise<void>>>(new Map());
 
   useEffect(() => {
-    if (!SUPABASE_ENABLED) {
-      setIsHydrating(false);
-      return;
-    }
+    // isHydrating already starts false when Supabase is disabled (see its
+    // useState initializer), so there is nothing to reset here.
+    if (!SUPABASE_ENABLED) return;
 
     let isCancelled = false;
 
@@ -258,6 +258,21 @@ export function useAssignmentBoardData() {
     }
     pendingRestoresRef.current.set(key, context);
   };
+
+  // Statuses-only refetch for external triggers (realtime events, tab focus).
+  // Routed through the write gate so an event echoing our own in-flight write
+  // cannot clobber optimistic local state.
+  const refetchStatuses = () => {
+    if (!SUPABASE_ENABLED) return;
+    gatedRestore("statuses", "external refresh");
+  };
+
+  const refetchWorkAreas = () => {
+    if (!SUPABASE_ENABLED) return;
+    gatedRestore("workAreas", "external refresh");
+  };
+
+  useEmployeeStatusRealtime(refetchStatuses, refetchWorkAreas);
 
   const enqueueEmployeeWrite = (employeeId: string, task: () => Promise<void>): Promise<void> => {
     const previous = employeeWriteChainsRef.current.get(employeeId) ?? Promise.resolve();
@@ -933,6 +948,17 @@ export function useAssignmentBoardData() {
     })();
   };
 
+  const handleSetTargetOverride = (workAreaId: string, targetOverride: number | null) => {
+    setWorkAreas((prev) =>
+      prev.map((wa) => (wa.id === workAreaId ? { ...wa, target_override: targetOverride } : wa)),
+    );
+
+    void updateWorkAreaRecord({ id: workAreaId, targetOverride }).catch((error) => {
+      reportSaveError("Failed to update target headcount", error);
+      void restoreWorkAreasFromDb("handleSetTargetOverride");
+    });
+  };
+
   const handleAddWorkArea = (name: string, color: string, modeViews: WorkAreaModeView[]): string => {
     const newId = `wa_${crypto.randomUUID()}`;
     const newWa: WorkArea = {
@@ -1197,6 +1223,7 @@ export function useAssignmentBoardData() {
     saveError,
     clearSaveError,
     refetchSnapshot,
+    refetchStatuses,
     disabledIds,
     defaultShiftTemplate,
     handleDeleteShift,
@@ -1204,6 +1231,7 @@ export function useAssignmentBoardData() {
     handleAddShift,
     handleDeleteWorkArea,
     handleUpdateWorkArea,
+    handleSetTargetOverride,
     handleAddWorkArea,
     handleReorderStation,
     handleDeleteStation,

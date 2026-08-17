@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SUPABASE_ENABLED } from "@/lib/config";
 import { useAssignmentBoardData } from "../hooks/use-assignment-board-data";
@@ -50,6 +50,17 @@ export function TVDisplayPageClient({
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [syncStatus, setSyncStatus] = useState<TVSyncStatus>("idle");
 
+  // The moment hydration completes counts as the first successful sync;
+  // derive it instead of stamping state from the polling effect. Poll
+  // ticks overwrite both values with real state afterwards.
+  const hydratedAt = useMemo(
+    () => (!isHydrating && !loadError ? new Date() : null),
+    [isHydrating, loadError],
+  );
+  const effectiveLastSyncedAt = lastSyncedAt ?? hydratedAt;
+  const effectiveSyncStatus: TVSyncStatus =
+    syncStatus === "idle" && hydratedAt ? "ok" : syncStatus;
+
   const refetchRef = useRef(refetchSnapshot);
   useEffect(() => {
     refetchRef.current = refetchSnapshot;
@@ -79,9 +90,6 @@ export function TVDisplayPageClient({
         inFlightRef.current = false;
       }
     };
-
-    setLastSyncedAt(new Date());
-    setSyncStatus("ok");
 
     const interval = window.setInterval(tick, POLL_INTERVAL_MS);
 
@@ -187,8 +195,8 @@ export function TVDisplayPageClient({
       announcement={announcement}
       onClose={() => router.push("/assignment-board")}
       canAccessAssignmentBoard={canAccessAssignmentBoard}
-      syncStatus={syncStatus}
-      lastSyncedAt={lastSyncedAt}
+      syncStatus={effectiveSyncStatus}
+      lastSyncedAt={effectiveLastSyncedAt}
     />
   );
 }

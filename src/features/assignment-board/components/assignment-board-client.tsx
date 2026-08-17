@@ -38,6 +38,7 @@ export function AssignmentBoardClient() {
     handleAddShift,
     handleDeleteWorkArea,
     handleUpdateWorkArea,
+    handleSetTargetOverride,
     handleAddWorkArea,
     handleReorderStation,
     handleDeleteStation,
@@ -198,15 +199,13 @@ export function AssignmentBoardClient() {
             workAreas={workAreas}
             selectedWorkAreaId={selectedWorkAreaId}
             statusConfigs={statusConfigs}
-            onAdd={handleAdd}
-            onRemove={handleRemoveEmployee}
             onUpdate={handleUpdate}
             onSetQualifiedWorkAreas={handleSetQualifiedWorkAreas}
             onStatusChange={handleStatusChange}
             onAssignToStation={handleQuickAssign}
             onUnassignAll={handleUnassignAll}
             onUnassignFromStation={handleUnassignFromStation}
-            getEmployeeEffectiveDepartmentIds={getEmployeeEffectiveDepartmentIds}
+            onSetTargetOverride={handleSetTargetOverride}
             onOpenRoster={(search) => { setRosterSearch(search); setRosterOpen(true); }}
             onManageStatuses={() => setShowManageStatuses(true)}
           />

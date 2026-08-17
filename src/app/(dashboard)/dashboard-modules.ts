@@ -4,7 +4,6 @@ import {
   CalendarRange,
   Calculator,
   ClipboardList,
-  LayoutGrid,
   Monitor,
   Package,
   Settings,

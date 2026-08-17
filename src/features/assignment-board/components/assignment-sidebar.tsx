@@ -7,7 +7,6 @@ import type { Employee, Station, StationAssignment, WorkArea } from "../types";
 import { StatCard } from "./stat-card";
 import { StatusSelect, getUnavailableStatusCodes, STATUS_CODE_AVAILABLE } from "./status-select";
 import { resolveWorkAreaTarget } from "@/features/daily-lineup/config/targets";
-import { useTargetOverrides } from "@/features/daily-lineup/hooks/use-target-overrides";
 import { classifyStatus, STATUS_META } from "@/features/daily-lineup/utils/classify-status";
 import { TargetModal } from "./modals/target-modal";
 import type { StatusConfig } from "./status-select";
@@ -23,15 +22,13 @@ export function AssignmentSidebar({
   workAreas,
   selectedWorkAreaId,
   statusConfigs,
-  onAdd,
-  onRemove,
   onUpdate,
   onSetQualifiedWorkAreas,
   onStatusChange,
   onAssignToStation,
   onUnassignAll,
   onUnassignFromStation,
-  getEmployeeEffectiveDepartmentIds,
+  onSetTargetOverride,
   onOpenRoster,
   onManageStatuses,
 }: {
@@ -42,21 +39,19 @@ export function AssignmentSidebar({
   workAreas: WorkArea[];
   selectedWorkAreaId?: string;
   statusConfigs: StatusConfig[];
-  onAdd: (emp: Employee) => void;
-  onRemove: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Omit<Employee, "qualifiedDepartmentIds">>) => void;
   onSetQualifiedWorkAreas: (id: string, workAreaIds: string[]) => void;
   onStatusChange: (id: string, status: EmployeeStatus) => void;
   onAssignToStation: (empId: string, stationId: string) => void;
   onUnassignAll: (empId: string, resetStatus?: boolean) => void;
   onUnassignFromStation: (empId: string, stationId: string) => void;
-  getEmployeeEffectiveDepartmentIds: (emp: import("../types").Employee) => string[];
+  onSetTargetOverride: (workAreaId: string, value: number | null) => void;
   onOpenRoster: (search: string) => void;
   onManageStatuses: () => void;
 }) {
   const [assignModalEmp, setAssignModalEmp] = useState<Employee | null>(null);
   const [targetModalOpen, setTargetModalOpen] = useState(false);
-  const { overrides: targetOverrides, setOverride: setTargetOverride } = useTargetOverrides();
+  const selectedWorkArea = workAreas.find((w) => w.id === selectedWorkAreaId);
 
   const getStatus = (id: string): EmployeeStatus => statuses[id] ?? STATUS_CODE_AVAILABLE;
 
@@ -73,7 +68,6 @@ export function AssignmentSidebar({
   const VACATION_CODE = "vacation";
   const LIGHT_DUTY_CODE = "injured";
 
-  let presentCount = 0;
   let lightDutyCount = 0;
   let absentCount = 0;
   let vacationCount = 0;
@@ -83,13 +77,12 @@ export function AssignmentSidebar({
       vacationCount += 1;
     } else if (unavailableCodes.has(s)) {
       absentCount += 1;
-    } else {
-      presentCount += 1;
-      if (s === LIGHT_DUTY_CODE) lightDutyCount += 1;
+    } else if (s === LIGHT_DUTY_CODE) {
+      lightDutyCount += 1;
     }
   }
   const unavailableTotal = absentCount + vacationCount;
-  const targetCount = resolveWorkAreaTarget(selectedWorkAreaId ?? "", employees, targetOverrides);
+  const targetCount = resolveWorkAreaTarget(selectedWorkAreaId ?? "", employees, selectedWorkArea?.target_override);
   // Total Staff = distinct active employees with at least one station
   // assignment in the selected WA (loan-ins included). Over Target compares
   // against this so both tiles share one definition.
@@ -464,15 +457,15 @@ export function AssignmentSidebar({
 
       {targetModalOpen && selectedWorkAreaId && (
         <TargetModal
-          workAreaName={workAreas.find((w) => w.id === selectedWorkAreaId)?.name ?? "—"}
+          workAreaName={selectedWorkArea?.name ?? "—"}
           currentTarget={targetCount}
-          hasOverride={targetOverrides[selectedWorkAreaId] !== undefined}
+          hasOverride={selectedWorkArea?.target_override != null}
           onSave={(value) => {
-            setTargetOverride(selectedWorkAreaId, value);
+            onSetTargetOverride(selectedWorkAreaId, value);
             setTargetModalOpen(false);
           }}
           onReset={() => {
-            setTargetOverride(selectedWorkAreaId, null);
+            onSetTargetOverride(selectedWorkAreaId, null);
             setTargetModalOpen(false);
           }}
           onClose={() => setTargetModalOpen(false)}

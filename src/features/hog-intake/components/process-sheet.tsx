@@ -13,7 +13,7 @@ type ProcessSheetProps = {
 
 const FIELDS: { key: ProcessField; label: string }[] = [
   { key: "held_over", label: "Held Over" },
-  { key: "deaths_on_arrival", label: "Deaths on Arrival" },
+  { key: "deaths_on_arrival", label: "DOA/DOP" },
   { key: "boars_count", label: "Boars Count" },
 ];
 

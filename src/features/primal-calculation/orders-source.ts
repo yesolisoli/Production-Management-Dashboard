@@ -105,9 +105,37 @@ export async function saveOrdersForDate(
   const rows = ordersToRows(date, orders, userId);
   if (rows.length === 0) return;
   const supabase = createClient();
+
+  // Skip no-op writes. A Save re-upserts every SKU in its subset even when the
+  // values are unchanged, and each identical upsert would still bump
+  // `updated_at` and create a meaningless audit-log entry. Read the currently
+  // stored values first and upsert only the SKUs that actually changed (or have
+  // no stored row yet — `stored.get` is undefined, so those still insert).
+  const { data: existing, error: readError } = await supabase
+    .from("primal_orders")
+    .select("sku, today_cases, today_pcs")
+    .eq("work_date", date)
+    .in(
+      "sku",
+      rows.map((r) => r.sku),
+    );
+  if (readError) throw new Error(readError.message);
+  const stored = new Map(
+    ((existing ?? []) as OrderRow[]).map((r) => [r.sku, r]),
+  );
+  const changed = rows.filter((r) => {
+    const prev = stored.get(r.sku);
+    return (
+      prev === undefined ||
+      prev.today_cases !== r.today_cases ||
+      prev.today_pcs !== r.today_pcs
+    );
+  });
+  if (changed.length === 0) return;
+
   const { error } = await supabase
     .from("primal_orders")
-    .upsert(rows, { onConflict: "work_date,sku", ignoreDuplicates: false });
+    .upsert(changed, { onConflict: "work_date,sku", ignoreDuplicates: false });
   if (error) throw new Error(error.message);
 }
 
