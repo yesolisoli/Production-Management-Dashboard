@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Beef,
   Calculator,
+  Gauge,
   Package,
   CalendarRange,
   ScrollText,
@@ -42,6 +43,7 @@ type NavItem = {
 
 const items: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, routeKey: "home" },
+  { href: "/operations", label: "Operations", icon: Gauge, routeKey: "operations" },
   { href: "/daily-lineup", label: "Daily Lineup", icon: ClipboardList, routeKey: "daily-lineup" },
   { href: "/hog-intake", label: "Hog Intake", icon: Beef, routeKey: "hog-intake" },
   { href: "/primal-calc", label: "Primal Calc", icon: Calculator, routeKey: "primal-calc" },

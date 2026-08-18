@@ -12,6 +12,7 @@ export const DEFAULT_ROLE: Role = "pending";
 
 export type RouteKey =
   | "home"
+  | "operations"
   | "assignment-board"
   | "daily-lineup"
   | "hog-intake"
@@ -26,13 +27,14 @@ export type RouteKey =
 // Access matrix.
 //   admin                  — everything (only role with audit-log)
 //   supervisor             — home, assignment-board, settings, history, tv-display
-//   production_planner     — home + planning modules + settings + history + tv-display
-//                            (no assignment-board)
+//   production_planner     — home + operations + planning modules + settings
+//                            + history + tv-display (no assignment-board)
 //   basic                  — home, settings, history, tv-display
 //   pending                — home, settings (no history, no tv-display)
 const ROLE_ROUTES: Record<Role, ReadonlyArray<RouteKey>> = {
   admin: [
     "home",
+    "operations",
     "assignment-board",
     "daily-lineup",
     "hog-intake",
@@ -54,6 +56,7 @@ const ROLE_ROUTES: Record<Role, ReadonlyArray<RouteKey>> = {
   ],
   production_planner: [
     "home",
+    "operations",
     "hog-intake",
     "primal-calc",
     "orders-allocation",
@@ -87,6 +90,7 @@ export function defaultPathForRole(role: Role): string {
 
 const PATH_TO_ROUTE_KEY: ReadonlyArray<{ pattern: RegExp; key: RouteKey }> = [
   { pattern: /^\/$/, key: "home" },
+  { pattern: /^\/operations(?:\/|$)/, key: "operations" },
   { pattern: /^\/assignment-board(?:\/|$)/, key: "assignment-board" },
   { pattern: /^\/daily-lineup(?:\/|$)/, key: "daily-lineup" },
   { pattern: /^\/hog-intake(?:\/|$)/, key: "hog-intake" },

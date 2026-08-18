@@ -9,6 +9,7 @@ import {
   HOG_TYPES,
   type FarmRecord,
   type FarmRecordType,
+  type HogCounts,
   type HogIntakeRecord,
 } from "./types";
 
@@ -109,6 +110,65 @@ export async function fetchHogIntakeByDate(
       "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, todays_cutting, include_bk_in_yield, notes, farm_records, next_day, updated_at, updated_by",
     )
     .eq("intake_date", date)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return rowToRecord(data as HogIntakeRow);
+}
+
+// Trimmed row for trend displays: just the inputs needed to recompute
+// totalHogs / forCutting (see calculations.ts), not the full record.
+export type RecentIntakeDay = {
+  date: string;
+  hog_counts: HogCounts;
+  side_orders: number;
+};
+
+// The most recent saved records up to AND INCLUDING `endDate`, oldest first,
+// capped at `limit`. Only recorded dates are returned — gaps (weekends, days
+// with no intake entry) are simply absent, never filled with zeros.
+export async function fetchRecentIntakeThrough(
+  endDate: string,
+  limit: number,
+): Promise<RecentIntakeDay[]> {
+  if (!SUPABASE_ENABLED) return [];
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("hog_intake_records")
+    .select("intake_date, hog_counts, side_orders")
+    .lte("intake_date", endDate)
+    .order("intake_date", { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(error.message);
+  return (data ?? [])
+    .map((row) => ({
+      date: row.intake_date as string,
+      hog_counts: coerceCounts(row.hog_counts),
+      side_orders:
+        typeof row.side_orders === "number" ? row.side_orders : 0,
+    }))
+    .reverse();
+}
+
+// The most recent saved record strictly BEFORE `date` — the previous working
+// day's intake. Unlike fetchPreviousHeldOver this skips gaps (weekends,
+// holidays) by taking the latest prior date rather than calendar −1, matching
+// the ending-stock lookup in primal-calculation/ending-stock-source.ts.
+export async function fetchLatestIntakeBefore(
+  date: string,
+): Promise<HogIntakeRecord | null> {
+  if (!SUPABASE_ENABLED) return null;
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("hog_intake_records")
+    .select(
+      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, boars_count, todays_cutting, include_bk_in_yield, notes, farm_records, next_day, updated_at, updated_by",
+    )
+    .lt("intake_date", date)
+    .order("intake_date", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (error) throw new Error(error.message);

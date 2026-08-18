@@ -1125,6 +1125,23 @@ export async function listAssignmentBoardSnapshots(): Promise<SnapshotRecord[]> 
   return (data ?? []) as SnapshotRecord[];
 }
 
+// The most recent snapshot strictly BEFORE `workDate` — the previous working
+// day the board was captured. Snapshots are captured best-effort (once per day
+// while a tab is open after shift end), so callers must tolerate null.
+export async function loadLatestSnapshotBefore(workDate: string): Promise<SnapshotRecord | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("assignment_board_snapshots")
+    .select("id, work_date, captured_at, snapshot")
+    .lt("work_date", workDate)
+    .order("work_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return data as SnapshotRecord;
+}
+
 export async function loadAssignmentBoardSnapshot(workDate: string): Promise<SnapshotRecord | null> {
   const supabase = createClient();
   const { data, error } = await supabase
