@@ -3,7 +3,11 @@
 import clsx from "clsx";
 import { LayoutGrid } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
-import type { LineupSummary, WorkAreaStats } from "@/features/daily-lineup/types";
+import {
+  buildTiles,
+  ICON_TONES,
+} from "@/features/daily-lineup/components/summary-tiles";
+import type { WorkAreaStats } from "@/features/daily-lineup/types";
 import { STATUS_META } from "@/features/daily-lineup/utils/classify-status";
 import type { StaffingOverview } from "../hooks/use-operations-overview";
 
@@ -11,19 +15,6 @@ function differenceLabel(overTarget: number): string {
   if (overTarget === 0) return "at target";
   if (overTarget > 0) return `+${overTarget} surplus`;
   return `${-overTarget} below target`;
-}
-
-type Metric = { label: string; value: number };
-
-// Same rollups Daily Lineup's summary tiles show: unavailable is
-// absent + vacation, short includes critical, on track includes full crew.
-function buildMetrics(summary: LineupSummary): Metric[] {
-  return [
-    { label: "Unavailable", value: summary.totalAbsent + summary.onVacation },
-    { label: "Short Depts", value: summary.deptsShort + summary.deptsCritical },
-    { label: "Over Depts", value: summary.deptsOver },
-    { label: "On Track Depts", value: summary.deptsOnTrack + summary.deptsFullCrew },
-  ];
 }
 
 function DepartmentRow({ dept }: { dept: WorkAreaStats }) {
@@ -85,20 +76,39 @@ export function DepartmentOverview({ staffing }: { staffing: StaffingOverview })
 
       {status === "ready" && summary && (
         <>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {buildMetrics(summary).map((metric) => (
-              <div
-                key={metric.label}
-                className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2"
-              >
-                <p className="text-lg font-bold tabular-nums text-slate-900">
-                  {metric.value}
-                </p>
-                <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {metric.label}
-                </p>
-              </div>
-            ))}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+            {buildTiles(summary).map((tile) => {
+              const tone = ICON_TONES[tile.tone];
+              const Icon = tile.icon;
+              return (
+                <div
+                  key={tile.label}
+                  className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      {tile.label}
+                    </p>
+                    <span
+                      className={clsx(
+                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-md",
+                        tone.chipBg,
+                      )}
+                    >
+                      <Icon size={12} className={tone.chipFg} strokeWidth={2} />
+                    </span>
+                  </div>
+                  <div className="mt-0.5 flex items-baseline justify-between gap-2">
+                    <span className="text-lg font-bold tabular-nums text-slate-900">
+                      {tile.value}
+                    </span>
+                    <span className="truncate text-[11px] text-slate-500">
+                      {tile.caption}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {departments.length === 0 ? (

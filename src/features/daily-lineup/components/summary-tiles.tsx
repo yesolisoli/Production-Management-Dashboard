@@ -11,7 +11,7 @@ import type { LineupSummary } from "../types";
 
 type Tone = "emerald" | "rose" | "amber" | "violet" | "blue";
 
-type Tile = {
+export type Tile = {
   label: string;
   value: string | number;
   caption: string;
@@ -19,7 +19,7 @@ type Tile = {
   icon: LucideIcon;
 };
 
-const ICON_TONES: Record<Tone, { chipBg: string; chipFg: string }> = {
+export const ICON_TONES: Record<Tone, { chipBg: string; chipFg: string }> = {
   emerald: { chipBg: "bg-emerald-50", chipFg: "text-emerald-500" },
   rose: { chipBg: "bg-rose-50", chipFg: "text-rose-500" },
   amber: { chipBg: "bg-amber-50", chipFg: "text-amber-500" },
@@ -27,7 +27,7 @@ const ICON_TONES: Record<Tone, { chipBg: string; chipFg: string }> = {
   blue: { chipBg: "bg-blue-50", chipFg: "text-blue-500" },
 };
 
-function buildTiles(summary: LineupSummary): Tile[] {
+export function buildTiles(summary: LineupSummary): Tile[] {
   const shortTotal = summary.deptsShort + summary.deptsCritical;
   const shortCaption =
     summary.deptsCritical > 0

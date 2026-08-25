@@ -7,7 +7,9 @@ import { deriveTotals } from "@/features/hog-intake/calculations";
 import {
   fetchHogIntakeByDate,
   fetchLatestIntakeBefore,
+  fetchPreviousHeldOver,
 } from "@/features/hog-intake/supabase";
+import type { HogIntakeRecord } from "@/features/hog-intake/types";
 import {
   fetchAssignmentBoardSnapshot,
   loadAssignmentBoardSnapshot,
@@ -29,6 +31,12 @@ export type IntakeOverview = {
   status: OverviewStatus;
   totalHogs: number;
   forCutting: number;
+  // The hog-intake card's "Primal Total": yield hogs cut today (JP + RWA,
+  // plus BK when opted in), net of held-over carry and deaths.
+  primalTotal: number;
+  // The raw record behind the totals, so other sections (Primal Usage) can
+  // reuse this same fetch. Null unless status is "ready".
+  record: HogIntakeRecord | null;
   // Most recent saved intake before the selected date (previous working day).
   previous: { date: string; totalHogs: number; forCutting: number } | null;
 };
@@ -51,6 +59,8 @@ const LOADING_INTAKE: IntakeOverview = {
   status: "loading",
   totalHogs: 0,
   forCutting: 0,
+  primalTotal: 0,
+  record: null,
   previous: null,
 };
 
@@ -99,9 +109,12 @@ export function useOperationsOverview() {
 
     void (async () => {
       try {
-        const [record, prevRecord] = await Promise.all([
+        const [record, prevRecord, heldOverPrev] = await Promise.all([
           fetchHogIntakeByDate(forDate),
           fetchLatestIntakeBefore(forDate),
+          // Hogs held over from the previous day, cut on this date — needed so
+          // primalTotal matches the intake card's adjusted Primal Total.
+          fetchPreviousHeldOver(forDate),
         ]);
         if (my !== token.current) return;
         const previous = prevRecord
@@ -115,14 +128,23 @@ export function useOperationsOverview() {
             })()
           : null;
         if (!record) {
-          setIntake({ status: "missing", totalHogs: 0, forCutting: 0, previous });
+          setIntake({
+            status: "missing",
+            totalHogs: 0,
+            forCutting: 0,
+            primalTotal: 0,
+            record: null,
+            previous,
+          });
           return;
         }
-        const totals = deriveTotals(record);
+        const totals = deriveTotals(record, heldOverPrev);
         setIntake({
           status: "ready",
           totalHogs: totals.totalHogs,
           forCutting: totals.forCutting,
+          primalTotal: totals.yieldTotal,
+          record,
           previous,
         });
       } catch {

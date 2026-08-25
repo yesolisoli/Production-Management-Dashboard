@@ -1,18 +1,26 @@
 "use client";
 
-import { Beef, Calendar, Scissors, UserCheck, Users } from "lucide-react";
+import { Beef, Calendar, Gauge, Scissors, UserCheck, Users } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { todayString } from "@/lib/date";
-import { formatDateLabel, personLabel } from "../format";
+import { formatDateLabel } from "../format";
 import {
   useOperationsOverview,
   type IntakeOverview,
   type StaffingOverview,
 } from "../hooks/use-operations-overview";
+import { useDailyComparison } from "../hooks/use-daily-comparison";
+import { usePrimalUsage } from "../hooks/use-primal-usage";
+import { useProductionStatus } from "../hooks/use-production-status";
 import { useRecentHogActivity } from "../hooks/use-recent-hog-activity";
+import { DailyComparison } from "./daily-comparison";
 import { DepartmentOverview } from "./department-overview";
+import { HogTypeBreakdown } from "./hog-type-breakdown";
 import { OverviewCard } from "./overview-card";
+import { PrimalUsage } from "./primal-usage";
+import { ProductionStatus } from "./production-status";
 import { RecentHogActivity } from "./recent-hog-activity";
+import { TrendSummary } from "./trend-summary";
 
 // "5 more than Aug 14" / "Same as Aug 14". Names the actual compared date
 // because the previous working day is not always literally yesterday.
@@ -52,7 +60,6 @@ function HogCard({ title, icon, intake, pick }: HogCardProps) {
       chipTone="slate"
       loading={intake.status === "loading"}
       value={hasValue ? String(pick(intake)) : "—"}
-      unit={hasValue ? "head" : undefined}
       caption={caption}
     />
   );
@@ -79,7 +86,6 @@ function WorkersCard({ staffing }: { staffing: StaffingOverview }) {
       chipTone="slate"
       loading={staffing.status === "loading"}
       value={hasValue ? String(staffing.available) : "—"}
-      unit={hasValue ? "people" : undefined}
       caption={caption}
     />
   );
@@ -127,7 +133,7 @@ function StaffingCard({ staffing }: { staffing: StaffingOverview }) {
         chipTone="amber"
         value={String(-diff)}
         valueTone="warn"
-        unit={`${personLabel(-diff)} short`}
+        unit="short"
         caption={caption}
       />
     );
@@ -138,7 +144,29 @@ function StaffingCard({ staffing }: { staffing: StaffingOverview }) {
       icon={UserCheck}
       chipTone="slate"
       value={String(diff)}
-      unit={`${personLabel(diff)} over`}
+      unit="over"
+      caption={caption}
+    />
+  );
+}
+
+// The hog-intake card's "Primal Total": hogs included in Primal Calc for the
+// day (JP + RWA net of held-over/death adjustments) — the same figure the
+// Primal Hogs card shows on the intake page.
+function PrimalCard({ intake }: { intake: IntakeOverview }) {
+  const caption =
+    intake.status === "error"
+      ? "Couldn't load data"
+      : intake.status === "missing"
+        ? "No intake recorded for this day"
+        : "Included in Primal Calc";
+  return (
+    <OverviewCard
+      title="Primal Total"
+      icon={Gauge}
+      chipTone="slate"
+      loading={intake.status === "loading"}
+      value={intake.status === "ready" ? String(intake.primalTotal) : "—"}
       caption={caption}
     />
   );
@@ -147,6 +175,9 @@ function StaffingCard({ staffing }: { staffing: StaffingOverview }) {
 export function OperationsDashboardClient() {
   const { date, setDate, intake, staffing } = useOperationsOverview();
   const recent = useRecentHogActivity(date);
+  const primalUsage = usePrimalUsage(date, intake.status, intake.record);
+  const comparison = useDailyComparison(date, recent.history, recent.status, staffing);
+  const productionStatus = useProductionStatus(date);
   const isToday = date === todayString();
 
   return (
@@ -176,7 +207,7 @@ export function OperationsDashboardClient() {
               : `Overview — ${formatDateLabel(date)}`}
           </h2>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <HogCard
               title="Total Hogs"
               icon={Beef}
@@ -189,17 +220,38 @@ export function OperationsDashboardClient() {
               intake={intake}
               pick={(values) => values.forCutting}
             />
+            <PrimalCard intake={intake} />
             <WorkersCard staffing={staffing} />
             <StaffingCard staffing={staffing} />
           </div>
 
-          <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]">
             <RecentHogActivity
               date={date}
               days={recent.days}
               status={recent.status}
             />
+            <HogTypeBreakdown
+              date={date}
+              days={recent.days}
+              status={recent.status}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]">
             <DepartmentOverview staffing={staffing} />
+            <PrimalUsage overview={primalUsage} />
+          </div>
+
+          <ProductionStatus
+            isToday={isToday}
+            production={productionStatus.production}
+            routes={productionStatus.routes}
+          />
+
+          <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(300px,3fr)]">
+            <DailyComparison date={date} overview={comparison} />
+            <TrendSummary history={recent.history} status={recent.status} />
           </div>
         </div>
       </div>

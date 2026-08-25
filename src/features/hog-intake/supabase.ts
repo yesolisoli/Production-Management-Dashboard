@@ -117,13 +117,24 @@ export async function fetchHogIntakeByDate(
   return rowToRecord(data as HogIntakeRow);
 }
 
-// Trimmed row for trend displays: just the inputs needed to recompute
-// totalHogs / forCutting (see calculations.ts), not the full record.
+// Trimmed row for trend displays: the inputs needed to recompute
+// totalHogs / forCutting plus the yield-adjustment fields (held_over,
+// deaths_on_arrival, include_bk_in_yield) that historical primal-usage
+// reconstruction needs — still far from the full record.
 export type RecentIntakeDay = {
   date: string;
   hog_counts: HogCounts;
   side_orders: number;
+  held_over: number;
+  deaths_on_arrival: number;
+  include_bk_in_yield: boolean;
 };
+
+function coerceNonNegativeNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : 0;
+}
 
 // The most recent saved records up to AND INCLUDING `endDate`, oldest first,
 // capped at `limit`. Only recorded dates are returned — gaps (weekends, days
@@ -136,7 +147,9 @@ export async function fetchRecentIntakeThrough(
   const supabase = createClient();
   const { data, error } = await supabase
     .from("hog_intake_records")
-    .select("intake_date, hog_counts, side_orders")
+    .select(
+      "intake_date, hog_counts, side_orders, held_over, deaths_on_arrival, include_bk_in_yield",
+    )
     .lte("intake_date", endDate)
     .order("intake_date", { ascending: false })
     .limit(limit);
@@ -146,8 +159,10 @@ export async function fetchRecentIntakeThrough(
     .map((row) => ({
       date: row.intake_date as string,
       hog_counts: coerceCounts(row.hog_counts),
-      side_orders:
-        typeof row.side_orders === "number" ? row.side_orders : 0,
+      side_orders: coerceNonNegativeNumber(row.side_orders),
+      held_over: coerceNonNegativeNumber(row.held_over),
+      deaths_on_arrival: coerceNonNegativeNumber(row.deaths_on_arrival),
+      include_bk_in_yield: row.include_bk_in_yield === true,
     }))
     .reverse();
 }

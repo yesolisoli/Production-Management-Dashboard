@@ -679,6 +679,18 @@ export type RouteStatusRow = {
   note: string | null;
 };
 
+// Same meta fallback the sheet uses: an unedited row opens in its default phase
+// so its finish lands in the same phase chain the sheet renders.
+function metaForRow(
+  meta: Record<string, ProductionMeta>,
+): (row: ProductionRow) => ProductionMeta {
+  return (row) =>
+    meta[row.sku] ?? {
+      ...defaultProductionMeta(),
+      phase: row.defaultPhase ?? DEFAULT_CUT_PHASE,
+    };
+}
+
 // Merge the per-phase production schedules into one sku → RowSchedule map. The
 // sheet chains START/FINISH per phase (hog break, then after), so we derive each
 // phase separately and merge — matching exactly the finishes the sheet renders.
@@ -723,13 +735,7 @@ export function deriveRouteStatuses({
   notes: Record<string, string>;
   deadlines: Record<string, string>;
 }): RouteStatusRow[] {
-  // Same meta fallback the sheet uses: an unedited row opens in its default phase
-  // so its finish lands in the same phase chain the sheet renders.
-  const metaFor = (row: ProductionRow): ProductionMeta =>
-    meta[row.sku] ?? {
-      ...defaultProductionMeta(),
-      phase: row.defaultPhase ?? DEFAULT_CUT_PHASE,
-    };
+  const metaFor = metaForRow(meta);
 
   const orderedRows = orderProductionRows(rows, order);
   const schedule = scheduleBySku(orderedRows, metaFor, roomDeadlines);
@@ -807,4 +813,133 @@ export function deriveRouteStatuses({
       note: printRow.note,
     };
   });
+}
+
+// -------------------------------------------------------------------
+// Operations-dashboard status summaries.
+//
+// Compact rollups of the production sheet and the route printing schedule,
+// derived from the SAME inputs the planner renders (scheduleBySku /
+// buildRoutePrinting) so the dashboard numbers always agree with the source
+// page. Pure — nothing here is stored.
+// -------------------------------------------------------------------
+
+// Per-line rollup of the production sheet. The sheet tracks no completion —
+// what a line truthfully has is a derivable schedule and the room-deadline
+// check, so the buckets are:
+//   scheduled    — FINISH derives and stays within the room deadline
+//   overDeadline — FINISH derives but runs past the room deadline (the sheet's
+//                  red ⚠ exceeds flag)
+//   needsSetup   — no derivable FINISH yet (START / SEC/PC not entered)
+// The three are mutually exclusive and sum to `total`.
+export type ProductionStatusSummary = {
+  total: number;
+  scheduled: number;
+  overDeadline: number;
+  needsSetup: number;
+};
+
+export function buildProductionStatusSummary({
+  rows,
+  meta,
+  order,
+  roomDeadlines,
+}: {
+  rows: ProductionRow[];
+  meta: Record<string, ProductionMeta>;
+  order: string[];
+  roomDeadlines: Partial<Record<ProductionRoom, string>>;
+}): ProductionStatusSummary {
+  const metaFor = metaForRow(meta);
+  const orderedRows = orderProductionRows(rows, order);
+  const schedule = scheduleBySku(orderedRows, metaFor, roomDeadlines);
+  const summary: ProductionStatusSummary = {
+    total: orderedRows.length,
+    scheduled: 0,
+    overDeadline: 0,
+    needsSetup: 0,
+  };
+  for (const row of orderedRows) {
+    const sched = schedule.get(row.sku);
+    if (!sched || sched.finishSec === null) summary.needsSetup += 1;
+    else if (sched.exceedsDeadline) summary.overDeadline += 1;
+    else summary.scheduled += 1;
+  }
+  return summary;
+}
+
+// Where the selected operational date sits relative to the viewer's today.
+// Decides how "deadline has passed" reads for an unprinted route: on a past
+// date every deadline has passed, on a future date none has; only today
+// compares against the clock.
+export type OperationalDayPosition = "past" | "today" | "future";
+
+// Rollup of the route printing schedule. `printed` follows the EXISTING print
+// statuses (on_time + late); the unprinted routes split by whether their
+// deadline has already passed (overdue) or is still ahead (remaining), so
+// printed + remaining + overdue = total with no double counting.
+export type RoutePrintingStatusSummary = {
+  total: number;
+  printed: number; // printed on time or late
+  printedLate: number; // of `printed`, after the deadline (reference)
+  remaining: number; // not printed, deadline still ahead
+  overdue: number; // not printed, deadline already passed
+  // Earliest upcoming deadline among unprinted routes (today: vs the clock;
+  // future date: the day's earliest). Null on past dates or when nothing is
+  // still ahead.
+  nextDeadline: { route: number; deadline: string } | null;
+};
+
+export function buildRoutePrintingStatusSummary({
+  date,
+  prints,
+  deadlines,
+  position,
+  nowMinutes,
+}: {
+  date: string;
+  prints: Record<string, string>;
+  deadlines: Record<string, string>;
+  position: OperationalDayPosition;
+  nowMinutes?: number; // minutes since local midnight; read when position is "today"
+}): RoutePrintingStatusSummary {
+  const { rows, summary } = buildRoutePrinting(date, prints, {}, deadlines);
+  // The clock compare walks the shift timeline (toShiftOrder), matching every
+  // other deadline comparison here, so a small-hours view still reads the
+  // morning deadlines as passed rather than ahead.
+  const nowShift =
+    position === "today" && nowMinutes !== undefined
+      ? toShiftOrder(nowMinutes * 60)
+      : null;
+
+  let overdue = 0;
+  let next: { route: number; deadline: string; shift: number } | null = null;
+  for (const row of rows) {
+    if (row.status !== "not_printed") continue;
+    const deadlineMin = toMinutes(row.deadline);
+    // Defensive: deadlines come from the weekday table or a parseable
+    // override. One that doesn't parse can't be placed in time — it stays in
+    // `remaining` and never becomes overdue or the next deadline.
+    if (deadlineMin === null) continue;
+    const shift = toShiftOrder(deadlineMin * 60);
+    const passed =
+      position === "past" || (nowShift !== null && shift <= nowShift);
+    if (passed) {
+      overdue += 1;
+    } else if (next === null || shift < next.shift) {
+      // Unreachable on a past date (every parseable deadline reads as passed),
+      // so `next` only ever holds a genuinely upcoming deadline.
+      next = { route: row.route, deadline: row.deadline, shift };
+    }
+  }
+
+  const printed = summary.onTime + summary.late;
+  return {
+    total: rows.length,
+    printed,
+    printedLate: summary.late,
+    remaining: summary.notPrinted - overdue,
+    overdue,
+    nextDeadline: next ? { route: next.route, deadline: next.deadline } : null,
+  };
 }

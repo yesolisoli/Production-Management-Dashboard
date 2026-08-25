@@ -1142,6 +1142,22 @@ export async function loadLatestSnapshotBefore(workDate: string): Promise<Snapsh
   return data as SnapshotRecord;
 }
 
+// Snapshots for a specific set of work dates in one query. Dates with no
+// captured snapshot are simply absent from the result — callers must treat
+// them as unknown, never as an empty board.
+export async function loadAssignmentBoardSnapshotsForDates(
+  workDates: string[],
+): Promise<SnapshotRecord[]> {
+  if (workDates.length === 0) return [];
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("assignment_board_snapshots")
+    .select("id, work_date, captured_at, snapshot")
+    .in("work_date", workDates);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as SnapshotRecord[];
+}
+
 export async function loadAssignmentBoardSnapshot(workDate: string): Promise<SnapshotRecord | null> {
   const supabase = createClient();
   const { data, error } = await supabase

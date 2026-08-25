@@ -44,10 +44,22 @@ export type SaveStatus =
 // commit must happen on its own.
 type UseHogIntakeStateArgs = {
   // Weekly planned-sow total (JP + ADACA + Custom Sows, Mon–Fri) from the
-  // Weekly Hog Plan. Combined with farm-delivered sows to derive Sow
-  // "Available This Week".
+  // Weekly Hog Plan. Seeds Sow "Available This Week" for NEW records only —
+  // once a record is saved, its Sow is frozen and later plan edits no longer
+  // touch it (the plan is planning data, not a live input to saved intakes).
   sowPlanTotal: number;
 };
+
+// The plan-derived portion of a saved record's Sow count. Saved Sow = plan
+// seed + farm-delivered sows at save time, so subtracting the record's own
+// farm sows recovers the seed that was in effect when it was saved.
+function frozenSowBase(record: HogIntakeRecord): number {
+  return Math.max(
+    0,
+    record.hog_counts.Sow -
+      farmRecordCountForType(record.farm_records, "Sow"),
+  );
+}
 
 export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
   const [date, setDateState] = useState<string>(todayString);
@@ -59,6 +71,10 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
   // added into the Primal Total. Fetched on every date load, independent of the
   // current record's source (draft or DB).
   const [prevHeldOver, setPrevHeldOver] = useState(0);
+  // Plan-derived Sow portion frozen per record. Null = no saved baseline yet
+  // (new record), so Sow tracks the live Weekly Hog Plan until the first save;
+  // a number = the record's own saved seed, immune to later plan edits.
+  const [sowBase, setSowBase] = useState<number | null>(null);
   // True when an unsaved local draft exists for the current date — i.e. the
   // on-screen record differs from what's committed to the DB. Drives the
   // debounced auto-commit below (and the "Saving…/Up to date" indicator).
@@ -109,6 +125,7 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
       // A non-empty draft represents unsaved input — it always wins.
       suppressNextWrite.current = true;
       setRecord(draft);
+      setSowBase(frozenSowBase(draft));
       setDirty(true);
       setStatus({ kind: "idle" });
       return;
@@ -124,22 +141,26 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
       if (remote) {
         suppressNextWrite.current = true;
         setRecord(remote);
+        // Freeze this record's Sow to its saved value — later Weekly Hog Plan
+        // edits must not shift an already-saved intake.
+        setSowBase(frozenSowBase(remote));
         setDirty(false);
         setStatus({ kind: "idle" });
         return;
       }
       // No record yet for this date: start from an empty record. Sow
-      // "Available This Week" is no longer carried forward day-to-day — it is
-      // derived from the Weekly Hog Plan's sow rows plus farm-delivered sows
-      // (see hogCounts below), so there is nothing to seed here.
+      // "Available This Week" has no saved baseline yet, so it follows the
+      // live Weekly Hog Plan (sowBase null) until the first save freezes it.
       suppressNextWrite.current = true;
       setRecord(emptyHogIntakeRecord(nextDate));
+      setSowBase(null);
       setDirty(false);
       setStatus({ kind: "idle" });
     } catch (err) {
       if (token !== activeFetchToken.current) return;
       suppressNextWrite.current = true;
       setRecord(emptyHogIntakeRecord(nextDate));
+      setSowBase(null);
       setDirty(false);
       setStatus({
         kind: "error",
@@ -192,16 +213,19 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
   // Derived counts override the record's stored (input-only) values:
   //   • JP / RWA / BK roll up from Farm Delivery Records — deliveries are their
   //     single entry point.
-  //   • Sow "Available This Week" = the Weekly Hog Plan's sow rows (JP / ADACA /
-  //     Custom Sows, summed Mon–Fri) plus any farm deliveries typed "Sow".
+  //   • Sow "Available This Week" = the record's frozen plan seed (sowBase) —
+  //     or the live Weekly Hog Plan total while the record is still unsaved —
+  //     plus any farm deliveries typed "Sow".
   // Round / Suckling / Customer stay manual, passing through from hog_counts.
   const hogCounts = useMemo<HogCounts>(
     () => ({
       ...record.hog_counts,
       ...derivedCountsFromFarmRecords(record.farm_records),
-      Sow: sowPlanTotal + farmRecordCountForType(record.farm_records, "Sow"),
+      Sow:
+        (sowBase ?? sowPlanTotal) +
+        farmRecordCountForType(record.farm_records, "Sow"),
     }),
-    [record.hog_counts, record.farm_records, sowPlanTotal],
+    [record.hog_counts, record.farm_records, sowBase, sowPlanTotal],
   );
 
   // Keep the refs pointed at the latest render values for the auto-save below
@@ -236,6 +260,9 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
         if (dateRef.current !== saved.date) return; // operator left this date
         suppressNextWrite.current = true;
         setRecord(saved);
+        // First save of a new record: its Sow seed is now persisted, so
+        // freeze it — future Weekly Hog Plan edits must not move it.
+        setSowBase(frozenSowBase(saved));
         setDirty(false);
         setStatus({ kind: "saved", at: Date.now() });
       } catch (err) {
@@ -395,6 +422,8 @@ export function useHogIntakeState({ sowPlanTotal }: UseHogIntakeStateArgs) {
   const reset = useCallback(() => {
     suppressNextWrite.current = true;
     setRecord(emptyHogIntakeRecord(date));
+    // Cleared record = new record again: Sow reverts to the live plan seed.
+    setSowBase(null);
     clearDraft(date);
     setDirty(false);
     setStatus({ kind: "idle" });
