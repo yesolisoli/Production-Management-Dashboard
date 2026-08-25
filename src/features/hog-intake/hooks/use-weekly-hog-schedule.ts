@@ -32,6 +32,40 @@ const STORAGE_KEY = "hog-intake.weekly-schedule";
 // Row whose Cut count seeds the Next Day Hog Count (see weekly-hog-schedule.tsx).
 export const CUT_ROW_ID: WeeklyPlanRowId = "cut-markets";
 
+// The plan only carries Mon–Fri, so the next plan day strictly after `dateStr`
+// skips the weekend (Fri/Sat/Sun → Mon). Returns both the calendar date
+// (YYYY-MM-DD, built from local components so the weekday never shifts across
+// a timezone boundary) and the plan column it maps to. Shared by the Weekly
+// Hog Plan grid and the Operations dashboard's Next Day Projection card.
+export function nextPlanDate(
+  dateStr: string,
+): { date: string; day: WeeklyPlanDay } | null {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const date = new Date(y, m - 1, d);
+  if (Number.isNaN(date.getTime())) return null;
+  do {
+    date.setDate(date.getDate() + 1);
+  } while (date.getDay() === 0 || date.getDay() === 6);
+  const ny = date.getFullYear();
+  const nm = String(date.getMonth() + 1).padStart(2, "0");
+  const nd = String(date.getDate()).padStart(2, "0");
+  return {
+    date: `${ny}-${nm}-${nd}`,
+    day: WEEKLY_PLAN_DAYS[date.getDay() - 1],
+  };
+}
+
+// Planned "Cut - Markets" count for a plan day — the figure that seeds the
+// Next Day Hog Count. Null when the cut row is absent from the rows.
+export function plannedCutCount(
+  rows: ScheduleRow[],
+  day: WeeklyPlanDay,
+): number | null {
+  const cutRow = rows.find((row) => row.id === CUT_ROW_ID);
+  return cutRow ? cutRow.values[day] : null;
+}
+
 // Plan rows whose weekly totals roll up into Sow "Available This Week".
 const SOW_PLAN_IDS: readonly WeeklyPlanRowId[] = [
   "jp-sows",

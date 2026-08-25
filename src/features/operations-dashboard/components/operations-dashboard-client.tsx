@@ -4,23 +4,22 @@ import { Beef, Calendar, Gauge, Scissors, UserCheck, Users } from "lucide-react"
 import { AppHeader } from "@/components/layout/app-header";
 import { todayString } from "@/lib/date";
 import { formatDateLabel } from "../format";
+import { useNextDayProjection } from "../hooks/use-next-day-projection";
 import {
   useOperationsOverview,
   type IntakeOverview,
   type StaffingOverview,
 } from "../hooks/use-operations-overview";
-import { useDailyComparison } from "../hooks/use-daily-comparison";
 import { usePrimalUsage } from "../hooks/use-primal-usage";
 import { useProductionStatus } from "../hooks/use-production-status";
 import { useRecentHogActivity } from "../hooks/use-recent-hog-activity";
-import { DailyComparison } from "./daily-comparison";
 import { DepartmentOverview } from "./department-overview";
 import { HogTypeBreakdown } from "./hog-type-breakdown";
+import { NextDayProjection } from "./next-day-projection";
 import { OverviewCard } from "./overview-card";
 import { PrimalUsage } from "./primal-usage";
 import { ProductionStatus } from "./production-status";
 import { RecentHogActivity } from "./recent-hog-activity";
-import { TrendSummary } from "./trend-summary";
 
 // "5 more than Aug 14" / "Same as Aug 14". Names the actual compared date
 // because the previous working day is not always literally yesterday.
@@ -174,9 +173,9 @@ function PrimalCard({ intake }: { intake: IntakeOverview }) {
 
 export function OperationsDashboardClient() {
   const { date, setDate, intake, staffing } = useOperationsOverview();
+  const nextDayProjection = useNextDayProjection(date, intake.record);
   const recent = useRecentHogActivity(date);
   const primalUsage = usePrimalUsage(date, intake.status, intake.record);
-  const comparison = useDailyComparison(date, recent.history, recent.status, staffing);
   const productionStatus = useProductionStatus(date);
   const isToday = date === todayString();
 
@@ -243,15 +242,17 @@ export function OperationsDashboardClient() {
             <PrimalUsage overview={primalUsage} />
           </div>
 
-          <ProductionStatus
-            isToday={isToday}
-            production={productionStatus.production}
-            routes={productionStatus.routes}
-          />
-
-          <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(300px,3fr)]">
-            <DailyComparison date={date} overview={comparison} />
-            <TrendSummary history={recent.history} status={recent.status} />
+          <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]">
+            <ProductionStatus
+              isToday={isToday}
+              production={productionStatus.production}
+              routes={productionStatus.routes}
+            />
+            <NextDayProjection
+              date={date}
+              loading={intake.status === "loading"}
+              projection={nextDayProjection}
+            />
           </div>
         </div>
       </div>

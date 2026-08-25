@@ -11,3 +11,13 @@ export function formatDateLabel(date: string): string {
     day: "numeric",
   });
 }
+
+// "Wednesday, Aug 26" — weekday-qualified variant of formatDateLabel.
+export function formatDayDateLabel(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+}

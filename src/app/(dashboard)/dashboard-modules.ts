@@ -25,7 +25,7 @@ export type DashboardModule = {
 
 export const dashboardModules: DashboardModule[] = [
   {
-    href: "/daily-lineup",
+    href: "/assignment-board",
     title: "Daily Lineup",
     description: "Today's staffing status across all work areas.",
     icon: ClipboardList,
@@ -33,7 +33,7 @@ export const dashboardModules: DashboardModule[] = [
     iconColor: "text-blue-600",
     cardClassName: "bg-blue-100/60 ring-blue-200/80",
     wide: false,
-    routeKey: "daily-lineup",
+    routeKey: "assignment-board",
   },
   {
     href: "/hog-intake",

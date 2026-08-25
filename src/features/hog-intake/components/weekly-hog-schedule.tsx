@@ -3,8 +3,9 @@
 import { CalendarDays } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
-  CUT_ROW_ID,
   WEEKLY_PLAN_DAYS,
+  nextPlanDate,
+  plannedCutCount,
   type ScheduleRow,
   type WeeklyPlanDay,
 } from "../hooks/use-weekly-hog-schedule";
@@ -26,18 +27,6 @@ const PLANNED_COLLAPSED_KEY = "hog-intake.weekly-schedule.planned-collapsed";
 // nested group, keeping the primary Cut/Kill rows always visible.
 const PLANNED_DESCRIPTION = "Hogs planned";
 
-// The Weekly Hog Plan only carries Mon–Fri. Given the selected intake date,
-// return the plan day for the following business day (Fri/Sat/Sun → Mon).
-const NEXT_PLAN_DAY: Record<number, WeeklyPlanDay> = {
-  0: "Mon", // Sun → Mon
-  1: "Tue", // Mon → Tue
-  2: "Wed", // Tue → Wed
-  3: "Thu", // Wed → Thu
-  4: "Fri", // Thu → Fri
-  5: "Mon", // Fri → Mon
-  6: "Mon", // Sat → Mon
-};
-
 // How many leading weekday columns are "before today" and therefore locked,
 // keyed by today's getDay() (0=Sun … 6=Sat). Mon locks none; Fri locks Mon–Thu;
 // Sat locks the whole week; Sun (week not yet started) locks none.
@@ -50,15 +39,6 @@ const LOCKED_BEFORE_BY_DOW: Record<number, number> = {
   5: 4, // Fri → Mon–Thu locked
   6: 5, // Sat → all locked
 };
-
-function nextPlanDay(dateStr: string): WeeklyPlanDay | null {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  if (!y || !m || !d) return null;
-  // Construct in local time so the weekday isn't shifted by the UTC offset.
-  const date = new Date(y, m - 1, d);
-  if (Number.isNaN(date.getTime())) return null;
-  return NEXT_PLAN_DAY[date.getDay()] ?? null;
-}
 
 type WeeklyHogScheduleProps = {
   date: string; // selected intake date, YYYY-MM-DD
@@ -90,10 +70,9 @@ export function WeeklyHogSchedule({
   // Next Day Hog Count = the Cut - Markets plan for the day after the selected
   // intake date. Derived, never stored — re-computed from the plan + date.
   const nextDayHogCount = useMemo(() => {
-    const day = nextPlanDay(date);
-    if (!day) return 0;
-    const cutRow = rows.find((row) => row.id === CUT_ROW_ID);
-    return cutRow?.values[day] ?? 0;
+    const next = nextPlanDate(date);
+    if (!next) return 0;
+    return plannedCutCount(rows, next.day) ?? 0;
   }, [rows, date]);
 
   // Restore the collapsed preference after mount (avoids SSR mismatch).

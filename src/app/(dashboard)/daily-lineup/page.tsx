@@ -1,22 +1,8 @@
-import { AppHeader } from "@/components/layout/app-header";
-import { DailyLineupDashboard } from "@/features/daily-lineup/components/daily-lineup-dashboard";
-import { requireRouteAccess } from "@/lib/route-guard";
-import { DailyLineupHeaderActions } from "./header-actions";
+import { redirect } from "next/navigation";
 
-export default async function DailyLineupPage() {
-  await requireRouteAccess("daily-lineup");
-
-  return (
-    <div className="flex h-full min-h-full flex-col">
-      <AppHeader
-        eyebrow="Dashboard"
-        title="Daily Lineup"
-        actions={<DailyLineupHeaderActions />}
-      />
-
-      <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-6">
-        <DailyLineupDashboard />
-      </div>
-    </div>
-  );
+// The read-only Daily Lineup overview is hidden — the menu goes straight
+// to the admin assignment board. Keep the route so old links still land
+// somewhere sensible.
+export default function DailyLineupPage() {
+  redirect("/assignment-board");
 }
