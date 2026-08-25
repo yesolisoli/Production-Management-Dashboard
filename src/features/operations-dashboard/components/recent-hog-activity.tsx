@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LineChart } from "lucide-react";
+import { LineChart, TrendingUp } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { todayString } from "@/lib/date";
 import { formatDateLabel } from "../format";
@@ -160,6 +160,7 @@ function ActivityChart({ days }: { days: RecentActivityDay[] }) {
             y2={y(tick)}
             stroke="#e2e8f0"
             strokeWidth={1}
+            strokeDasharray="3 3"
           />
           <text
             x={MARGIN.left - 8}
@@ -173,6 +174,23 @@ function ActivityChart({ days }: { days: RecentActivityDay[] }) {
           </text>
         </g>
       ))}
+
+      <line
+        x1={MARGIN.left}
+        x2={MARGIN.left}
+        y1={MARGIN.top}
+        y2={H - MARGIN.bottom}
+        stroke="#cbd5e1"
+        strokeWidth={1}
+      />
+      <line
+        x1={MARGIN.left}
+        x2={W - MARGIN.right}
+        y1={H - MARGIN.bottom}
+        y2={H - MARGIN.bottom}
+        stroke="#cbd5e1"
+        strokeWidth={1}
+      />
 
       {days.map(
         (day, i) =>
@@ -244,9 +262,9 @@ function ActivityChart({ days }: { days: RecentActivityDay[] }) {
         x={x(lastIndex) + 10}
         y={hogsLabelY}
         dominantBaseline="middle"
-        fontSize={13}
-        fontWeight={600}
-        fill="#334155"
+        fontSize={14}
+        fontWeight={700}
+        fill={HOGS_IN_COLOR}
       >
         {last.totalHogs}
       </text>
@@ -254,9 +272,9 @@ function ActivityChart({ days }: { days: RecentActivityDay[] }) {
         x={x(lastIndex) + 10}
         y={cutLabelY}
         dominantBaseline="middle"
-        fontSize={13}
-        fontWeight={600}
-        fill="#334155"
+        fontSize={14}
+        fontWeight={700}
+        fill={FOR_CUTTING_COLOR}
       >
         {last.forCutting}
       </text>
@@ -341,6 +359,73 @@ function LegendKey({
   );
 }
 
+// Headline number for the latest recorded day, with a marker matching the
+// series' line style so the card ties back to the chart.
+function HeadlineStat({
+  label,
+  value,
+  color,
+  dashed = false,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  dashed?: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-2">
+      <p className="flex items-center gap-2 text-sm font-medium text-slate-600">
+        {dashed ? (
+          <svg width="18" height="6" aria-hidden="true">
+            <line
+              x1="1"
+              y1="3"
+              x2="17"
+              y2="3"
+              stroke={color}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeDasharray="4 3"
+            />
+          </svg>
+        ) : (
+          <span
+            aria-hidden="true"
+            className="h-2.5 w-2.5 rounded-full"
+            style={{ backgroundColor: color }}
+          />
+        )}
+        {label}
+      </p>
+      <p
+        className="mt-0.5 text-2xl font-bold tabular-nums"
+        style={{ color }}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function DifferenceStat({
+  value,
+  label,
+  color,
+}: {
+  value: number;
+  label: string;
+  color: string;
+}) {
+  return (
+    <p className="flex items-baseline gap-1.5 text-sm font-medium text-slate-600">
+      <span className="text-xl font-bold tabular-nums" style={{ color }}>
+        {value > 0 ? `+${value}` : value}
+      </span>
+      {label}
+    </p>
+  );
+}
+
 // Data comes in as props — the client calls useRecentHogActivity once and
 // shares the result with the Needs Attention rules.
 export function RecentHogActivity({
@@ -352,21 +437,49 @@ export function RecentHogActivity({
   days: RecentActivityDay[];
   status: OverviewStatus;
 }) {
+  const first = days[0];
+  const last = days[days.length - 1];
+  const isToday =
+    last !== undefined && last.date === date && date === todayString();
+  const latestLabel =
+    last === undefined
+      ? ""
+      : isToday
+        ? "Today"
+        : formatDateLabel(last.date);
+
   return (
     <section className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-            <LineChart size={15} strokeWidth={2} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+            <LineChart size={19} strokeWidth={2} />
           </span>
-          <h3 className="text-sm font-semibold text-slate-600">
-            Recent Hog Activity
-          </h3>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">
+              Recent Hog Activity
+            </h3>
+            {status === "ready" && days.length > 0 && (
+              <p className="text-sm text-slate-500">
+                Last {days.length} recorded{" "}
+                {days.length === 1 ? "day" : "days"}
+              </p>
+            )}
+          </div>
         </div>
-        {status === "ready" && days.length >= 2 && (
-          <div className="flex items-center gap-4">
-            <LegendKey color={HOGS_IN_COLOR} label="Hogs In" />
-            <LegendKey color={FOR_CUTTING_COLOR} label="For Cutting" dashed />
+        {status === "ready" && last !== undefined && (
+          <div className="flex flex-wrap gap-3">
+            <HeadlineStat
+              label={`Hogs In (${latestLabel})`}
+              value={last.totalHogs}
+              color={HOGS_IN_COLOR}
+            />
+            <HeadlineStat
+              label={`For Cutting (${latestLabel})`}
+              value={last.forCutting}
+              color={FOR_CUTTING_COLOR}
+              dashed
+            />
           </div>
         )}
       </div>
@@ -388,25 +501,7 @@ export function RecentHogActivity({
       )}
 
       {status === "ready" && days.length === 1 && (
-        <div className="mt-4 flex flex-col gap-3">
-          <div className="flex flex-wrap gap-8">
-            <div>
-              <p className="text-sm font-medium text-slate-500">
-                Hogs In · {formatDateLabel(days[0].date)}
-              </p>
-              <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900">
-                {days[0].totalHogs}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500">
-                For Cutting · {formatDateLabel(days[0].date)}
-              </p>
-              <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900">
-                {days[0].forCutting}
-              </p>
-            </div>
-          </div>
+        <div className="mt-4 flex flex-1 items-center">
           <p className="text-sm text-slate-500">
             Not enough history to show a trend yet.
           </p>
@@ -415,12 +510,43 @@ export function RecentHogActivity({
 
       {status === "ready" && days.length >= 2 && (
         <>
-          <div className="mt-1 flex-1">
+          <div className="mt-2 flex items-center justify-center gap-6">
+            <LegendKey color={HOGS_IN_COLOR} label="Hogs In" />
+            <LegendKey color={FOR_CUTTING_COLOR} label="For Cutting" dashed />
+          </div>
+          <div className="flex-1">
             <ActivityChart days={days} />
           </div>
-          <p className="mt-2 border-t border-slate-100 pt-2.5 text-sm font-medium text-slate-600">
-            {buildTakeaway(days, date)}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl bg-slate-50 px-4 py-3">
+            <div className="flex min-w-0 flex-1 basis-64 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                <TrendingUp size={18} strokeWidth={2} />
+              </span>
+              <div>
+                <p className="text-sm font-bold text-slate-900">Key Insight</p>
+                <p className="text-sm text-slate-600">
+                  {buildTakeaway(days, date)}
+                </p>
+              </div>
+            </div>
+            <div className="border-l border-slate-200 pl-6">
+              <p className="text-sm font-medium text-slate-500">
+                {days.length}-Day Difference (Total)
+              </p>
+              <div className="mt-1 flex items-center gap-5">
+                <DifferenceStat
+                  value={last.totalHogs - first.totalHogs}
+                  label="Hogs"
+                  color={HOGS_IN_COLOR}
+                />
+                <DifferenceStat
+                  value={last.forCutting - first.forCutting}
+                  label="For Cutting"
+                  color={FOR_CUTTING_COLOR}
+                />
+              </div>
+            </div>
+          </div>
         </>
       )}
     </section>

@@ -64,17 +64,12 @@ export function buildHogTypeBreakdown(
   return rows;
 }
 
-// The single takeaway under the card: the category with the largest absolute
+// The single takeaway of the card: the category with the largest absolute
 // head-count change vs the previous recorded day (first in display order wins
-// a tie). `previousDateLabel` is the formatted date of that record, or null
-// when no earlier record exists.
-export function buildTopChangeSentence(
+// a tie). Null when no comparison exists or nothing changed.
+export function findTopChange(
   rows: HogTypeBreakdownRow[],
-  previousDateLabel: string | null,
-): string {
-  if (previousDateLabel === null) {
-    return "No previous intake record to compare.";
-  }
+): HogTypeBreakdownRow | null {
   let top: HogTypeBreakdownRow | null = null;
   for (const row of rows) {
     if (row.diff === null || row.diff === 0) continue;
@@ -82,9 +77,5 @@ export function buildTopChangeSentence(
       top = row;
     }
   }
-  if (top === null || top.diff === null) {
-    return `No major type changes from ${previousDateLabel}.`;
-  }
-  const signed = top.diff > 0 ? `+${top.diff}` : `${top.diff}`;
-  return `Top Change: ${top.label} ${signed} head vs ${previousDateLabel}`;
+  return top;
 }

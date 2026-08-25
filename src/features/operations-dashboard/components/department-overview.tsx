@@ -17,10 +17,39 @@ function differenceLabel(overTarget: number): string {
   return `${-overTarget} below target`;
 }
 
+// Shared by the header row and each department row so the columns line up.
+// (Each row is its own grid, so the fixed-ish minimums on the middle columns
+// are what keep the header captions over the right values.)
+const ROW_GRID_SM =
+  "sm:grid-cols-[minmax(0,1.4fr)_minmax(4rem,auto)_minmax(5.5rem,auto)_minmax(0,1fr)]";
+
+// Column captions for the department list. Hidden on mobile, where the row
+// collapses to a 2×2 layout the captions wouldn't line up with.
+function DepartmentListHeader() {
+  return (
+    <div
+      className={clsx(
+        "mt-2 hidden gap-x-3 border-b border-slate-100 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 sm:grid",
+        ROW_GRID_SM,
+      )}
+    >
+      <p>Department</p>
+      <p>Staff</p>
+      <p>Status</p>
+      <p>vs Target</p>
+    </div>
+  );
+}
+
 function DepartmentRow({ dept }: { dept: WorkAreaStats }) {
   const meta = STATUS_META[dept.status];
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 py-2 sm:grid-cols-[minmax(0,1.4fr)_auto_minmax(5.5rem,auto)_minmax(0,1fr)]">
+    <li
+      className={clsx(
+        "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 py-2",
+        ROW_GRID_SM,
+      )}
+    >
       <p className="truncate text-sm font-medium text-slate-800">
         {dept.workAreaName}
       </p>
@@ -117,11 +146,14 @@ export function DepartmentOverview({ staffing }: { staffing: StaffingOverview })
               title="No departments configured yet"
             />
           ) : (
-            <ul className="mt-2 divide-y divide-slate-100">
-              {departments.map((dept) => (
-                <DepartmentRow key={dept.workAreaId} dept={dept} />
-              ))}
-            </ul>
+            <>
+              <DepartmentListHeader />
+              <ul className="mt-2 divide-y divide-slate-100 sm:mt-0">
+                {departments.map((dept) => (
+                  <DepartmentRow key={dept.workAreaId} dept={dept} />
+                ))}
+              </ul>
+            </>
           )}
         </>
       )}

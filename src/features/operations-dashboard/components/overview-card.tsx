@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 
 type ChipTone = "blue" | "violet" | "sky" | "emerald" | "amber" | "slate";
@@ -32,6 +33,8 @@ type OverviewCardProps = {
   unit?: string;
   // Secondary line under the value — comparison text or a "no data" note.
   caption?: string;
+  // When set, the whole card links to the page the figure comes from.
+  href?: string;
 };
 
 export function OverviewCard({
@@ -43,9 +46,10 @@ export function OverviewCard({
   valueTone = "default",
   unit,
   caption,
+  href,
 }: OverviewCardProps) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+  const content = (
+    <>
       <div className="flex items-center gap-2">
         <span
           className={clsx(
@@ -81,6 +85,25 @@ export function OverviewCard({
       <p className="mt-2 min-h-5 text-sm text-slate-500">
         {loading ? "" : caption}
       </p>
-    </div>
+    </>
   );
+
+  const cardClassName =
+    "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={clsx(
+          cardClassName,
+          "block transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md",
+        )}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className={cardClassName}>{content}</div>;
 }

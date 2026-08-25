@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Beef, Calendar, Gauge, Scissors, UserCheck, Users } from "lucide-react";
 import { AppHeader } from "@/components/layout/app-header";
 import { todayString } from "@/lib/date";
@@ -35,14 +36,35 @@ function comparisonCaption(
   return `${-diff} fewer than ${label}`;
 }
 
+// Wraps a dashboard panel so clicking anywhere on it opens the page the data
+// comes from. `grid` (not `block`) so the inner section stretches to the full
+// row height the surrounding grid assigns.
+function PanelLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="grid h-full rounded-2xl transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+    >
+      {children}
+    </Link>
+  );
+}
+
 type HogCardProps = {
   title: string;
   icon: typeof Beef;
+  chipTone: React.ComponentProps<typeof OverviewCard>["chipTone"];
   intake: IntakeOverview;
   pick: (values: { totalHogs: number; forCutting: number }) => number;
 };
 
-function HogCard({ title, icon, intake, pick }: HogCardProps) {
+function HogCard({ title, icon, chipTone, intake, pick }: HogCardProps) {
   const hasValue = intake.status === "ready";
   const caption =
     intake.status === "error"
@@ -56,10 +78,11 @@ function HogCard({ title, icon, intake, pick }: HogCardProps) {
     <OverviewCard
       title={title}
       icon={icon}
-      chipTone="slate"
+      chipTone={chipTone}
       loading={intake.status === "loading"}
       value={hasValue ? String(pick(intake)) : "—"}
       caption={caption}
+      href="/hog-intake"
     />
   );
 }
@@ -82,10 +105,11 @@ function WorkersCard({ staffing }: { staffing: StaffingOverview }) {
     <OverviewCard
       title="People Available"
       icon={Users}
-      chipTone="slate"
+      chipTone="emerald"
       loading={staffing.status === "loading"}
       value={hasValue ? String(staffing.available) : "—"}
       caption={caption}
+      href="/assignment-board"
     />
   );
 }
@@ -104,6 +128,7 @@ function StaffingCard({ staffing }: { staffing: StaffingOverview }) {
             ? "Couldn't load data"
             : "No lineup saved for this day"
         }
+        href="/assignment-board"
       />
     );
   }
@@ -121,6 +146,7 @@ function StaffingCard({ staffing }: { staffing: StaffingOverview }) {
         value="On target"
         valueTone="good"
         caption={caption}
+        href="/assignment-board"
       />
     );
   }
@@ -134,6 +160,7 @@ function StaffingCard({ staffing }: { staffing: StaffingOverview }) {
         valueTone="warn"
         unit="short"
         caption={caption}
+        href="/assignment-board"
       />
     );
   }
@@ -145,6 +172,7 @@ function StaffingCard({ staffing }: { staffing: StaffingOverview }) {
       value={String(diff)}
       unit="over"
       caption={caption}
+      href="/assignment-board"
     />
   );
 }
@@ -163,10 +191,11 @@ function PrimalCard({ intake }: { intake: IntakeOverview }) {
     <OverviewCard
       title="Primal Total"
       icon={Gauge}
-      chipTone="slate"
+      chipTone="sky"
       loading={intake.status === "loading"}
       value={intake.status === "ready" ? String(intake.primalTotal) : "—"}
       caption={caption}
+      href="/hog-intake"
     />
   );
 }
@@ -210,12 +239,14 @@ export function OperationsDashboardClient() {
             <HogCard
               title="Total Hogs"
               icon={Beef}
+              chipTone="blue"
               intake={intake}
               pick={(values) => values.totalHogs}
             />
             <HogCard
               title="For Cutting Today"
               icon={Scissors}
+              chipTone="violet"
               intake={intake}
               pick={(values) => values.forCutting}
             />
@@ -225,34 +256,46 @@ export function OperationsDashboardClient() {
           </div>
 
           <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]">
-            <RecentHogActivity
-              date={date}
-              days={recent.days}
-              status={recent.status}
-            />
-            <HogTypeBreakdown
-              date={date}
-              days={recent.days}
-              status={recent.status}
-            />
+            <PanelLink href="/hog-intake">
+              <RecentHogActivity
+                date={date}
+                days={recent.days}
+                status={recent.status}
+              />
+            </PanelLink>
+            <PanelLink href="/hog-intake">
+              <HogTypeBreakdown
+                date={date}
+                days={recent.days}
+                status={recent.status}
+              />
+            </PanelLink>
           </div>
 
           <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]">
-            <DepartmentOverview staffing={staffing} />
-            <PrimalUsage overview={primalUsage} />
+            <PanelLink href="/assignment-board">
+              <DepartmentOverview staffing={staffing} />
+            </PanelLink>
+            <PanelLink href="/primal-calc">
+              <PrimalUsage overview={primalUsage} />
+            </PanelLink>
           </div>
 
           <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]">
-            <ProductionStatus
-              isToday={isToday}
-              production={productionStatus.production}
-              routes={productionStatus.routes}
-            />
-            <NextDayProjection
-              date={date}
-              loading={intake.status === "loading"}
-              projection={nextDayProjection}
-            />
+            <PanelLink href="/production-planner">
+              <ProductionStatus
+                isToday={isToday}
+                production={productionStatus.production}
+                routes={productionStatus.routes}
+              />
+            </PanelLink>
+            <PanelLink href="/hog-intake">
+              <NextDayProjection
+                date={date}
+                loading={intake.status === "loading"}
+                projection={nextDayProjection}
+              />
+            </PanelLink>
           </div>
         </div>
       </div>
